@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         JWS Data Exporter
-// @namespace    http://tampermonkey.net/
+// @namespace    https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js
 // @version      1.2
 // @description  导出查询结果为CSV或Excel文件
 // @author       rongjie.Yuan
 // @match        https://jws.jiduprod.com/*
-// @downloadURL  https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS%20Data%20Exporter-1.2.user.js
-// @updateURL    https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS%20Data%20Exporter-1.2.user.js
+// @downloadURL  https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js
+// @updateURL    https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js
 // @grant        none
 // ==/UserScript==
 
