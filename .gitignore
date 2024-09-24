@@ -1,0 +1,12 @@
+.idea*
+*.bak
+
+.DS_Store
+
+**/.DS_Store
+*.png
+*.jpg
+**/__pycache__
+
+*.xls
+*.xlsx
