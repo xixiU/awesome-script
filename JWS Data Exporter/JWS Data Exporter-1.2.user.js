@@ -5,8 +5,8 @@
 // @description  导出查询结果为CSV或Excel文件
 // @author       rongjie.Yuan
 // @match        https://jws.jiduprod.com/*
-// @downloadURL https://update.greasyfork.org/scripts/470359/Twitter%20Block%20Porn.user.js
-// @updateURL https://update.greasyfork.org/scripts/470359/Twitter%20Block%20Porn.meta.js
+// @downloadURL  https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS%20Data%20Exporter-1.2.user.js
+// @updateURL    https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS%20Data%20Exporter-1.2.user.js
 // @grant        none
 // ==/UserScript==
 
