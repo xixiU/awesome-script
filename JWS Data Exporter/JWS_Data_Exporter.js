@@ -54,6 +54,7 @@
         .map(th => th.getAttribute('title') || th.innerText);
         allData.push(headers.join(','));
         function collectDataAndGoToNextPage() {
+            updateProgress(currentPage, totalPages);
             const dataArea = document.querySelector('div.r-table-content table');
             if (!dataArea) {
                 hideLoading();//处理完后隐藏Loading提示
@@ -68,7 +69,6 @@
 
             if (currentPage < totalPages) {
                 currentPage++;
-                updateProgress(currentPage, totalPages);
                 goToPage(currentPage, collectDataAndGoToNextPage);
             } else {
                 hideLoading(); // 所有页处理完后隐藏Loading提示
@@ -99,35 +99,6 @@
         const pageItems = paginationElement ? paginationElement.querySelectorAll('.r-pagination-item') : null;
         const totalPages = pageItems ? parseInt(pageItems[pageItems.length - 1].title, 10) : 1;
         return totalPages;
-    }
-
-    function fetchAllPagesData(totalPages) {
-        let allData = [];
-
-        const fetchPageData = (page) => {
-            return new Promise((resolve) => {
-                goToPage(page, () => {
-                    const csvContent = [];
-                    const dataArea = document.querySelector('div.r-table-content table');
-                    const rows = dataArea.querySelectorAll('tbody tr.r-table-row.r-table-row-level-0');
-                    rows.forEach(row => {
-                        const cells = Array.from(row.querySelectorAll('td')).map(td => td.getAttribute('title') || td.innerText);
-                        csvContent.push(cells.join(','));
-                    });
-                    resolve(csvContent);
-                });
-            });
-        };
-
-        const getAllPagesData = async () => {
-            for (let page = 1; page <= totalPages; page++) {
-                const pageData = await fetchPageData(page);
-                allData = allData.concat(pageData);
-            }
-            exportAllData(allData);
-        };
-
-        getAllPagesData();
     }
 
     // 显示Loading提示框
@@ -214,14 +185,6 @@
                 }, 2000); // 等待页面刷新完成
             }
         }
-    }
-
-    function exportAllData(allData) {
-        const dataArea = document.querySelector('div.r-table-content table');
-        const headers = Array.from(dataArea.querySelector('thead.r-table-thead').querySelectorAll('th'))
-        .map(th => th.getAttribute('title') || th.innerText);
-        const csvContent = [headers.join(','), ...allData];
-        showFormatSelectionDialog(csvContent);
     }
 
     function showFormatSelectionDialog(content) {
