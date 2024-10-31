@@ -61,6 +61,8 @@
                 alert('请先执行SQL');
                 return;
             }
+            trySetPageSize();
+            // 设置表头
             const rows = dataArea.querySelectorAll('tbody tr.r-table-row.r-table-row-level-0');
             rows.forEach(row => {
                 const cells = Array.from(row.querySelectorAll('td')).map(td => td.getAttribute('title') || td.innerText);
@@ -78,6 +80,30 @@
 
         collectDataAndGoToNextPage();
     });
+
+    function trySetPageSize(){
+        // 如果分页存在100条/页选项，则先设置为100条/页
+        // 找到包含分页选项的父容器
+        const listHolder = document.querySelector(".rc-virtual-list-holder-inner");
+        if (!listHolder) {
+            return;
+        }
+        // 获取所有分页选项
+        const options = listHolder.querySelectorAll(".r-select-item-option");
+        // 选中最后一个选项
+        options[options.length - 1].click();
+        // // 重置选项的选中状态
+        // options.forEach(option => {
+        // option.setAttribute("aria-selected", "false");
+        // option.classList.remove("r-select-item-option-active", "r-select-item-option-selected");
+        // });
+
+        
+        // const lastOption = options[options.length - 1];
+        // lastOption.setAttribute("aria-selected", "true");
+        // lastOption.classList.add("r-select-item-option-active", "r-select-item-option-selected");
+        // lastOption.click()
+    }
     function exportCurrentPageData() {
         const csvContent = [];
         const dataArea = document.querySelector('div.r-table-content table');
