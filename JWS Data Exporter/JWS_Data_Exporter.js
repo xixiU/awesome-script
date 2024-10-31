@@ -50,6 +50,7 @@
             alert('请先执行SQL');
             return;
         }
+        trySetPageSize();
         const headers = Array.from(dataArea.querySelector('thead.r-table-thead').querySelectorAll('th'))
         .map(th => th.getAttribute('title') || th.innerText);
         allData.push(headers.join(','));
@@ -61,7 +62,7 @@
                 alert('请先执行SQL');
                 return;
             }
-            trySetPageSize();
+            
             // 设置表头
             const rows = dataArea.querySelectorAll('tbody tr.r-table-row.r-table-row-level-0');
             rows.forEach(row => {
