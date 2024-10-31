@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JWS Data Exporter - Current and All Pages
 // @namespace    https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js
-// @version      1.4
+// @version      1.5
 // @description  导出当前页或所有页的查询结果为CSV或Excel文件
 // @author       rongjie.Yuan
 // @match        https://jws.jiduprod.com/*
