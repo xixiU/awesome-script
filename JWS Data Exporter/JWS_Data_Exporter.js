@@ -82,7 +82,7 @@
     }
 
     function getPageData(dataArea){
-        csvContent = [];
+        const csvContent = [];
         const rows = dataArea.querySelectorAll('tbody tr.r-table-row.r-table-row-level-0');
         rows.forEach(row => {
             const cells = Array.from(row.querySelectorAll('td')).map(td => td.getAttribute('title') || td.innerText);
