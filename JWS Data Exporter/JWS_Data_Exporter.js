@@ -51,9 +51,8 @@
             return;
         }
         trySetPageSize();
-        const headers = Array.from(dataArea.querySelector('thead.r-table-thead').querySelectorAll('th'))
-        .map(th => th.getAttribute('title') || th.innerText);
-        allData.push(headers.join(','));
+        
+        allData.push(getTableHeader(dataArea));
         function collectDataAndGoToNextPage() {
             updateProgress(currentPage, totalPages);
             const dataArea = document.querySelector('div.r-table-content table');
@@ -62,13 +61,8 @@
                 alert('请先执行SQL');
                 return;
             }
-            
-            // 设置表头
-            const rows = dataArea.querySelectorAll('tbody tr.r-table-row.r-table-row-level-0');
-            rows.forEach(row => {
-                const cells = Array.from(row.querySelectorAll('td')).map(td => td.getAttribute('title') || td.innerText);
-                allData.push(cells.join(','));
-            });
+             // add data
+            getPageData(dataArea).map(row => allData.push(row));
 
             if (currentPage < totalPages) {
                 currentPage++;
@@ -81,6 +75,22 @@
 
         collectDataAndGoToNextPage();
     });
+
+    function getTableHeader(dataArea){
+        return Array.from(dataArea.querySelector('thead.r-table-thead').querySelectorAll('th'))
+        .map(th => th.getAttribute('title') || th.innerText);
+    }
+
+    function getPageData(dataArea){
+        csvContent = [];
+        const rows = dataArea.querySelectorAll('tbody tr.r-table-row.r-table-row-level-0');
+        rows.forEach(row => {
+            const cells = Array.from(row.querySelectorAll('td')).map(td => td.getAttribute('title') || td.innerText);
+            csvContent.push(cells);
+        });
+        return csvContent;
+    }
+    
 
     function trySetPageSize(){
         // 如果分页存在100条/页选项，则先设置为100条/页
@@ -105,21 +115,19 @@
         // lastOption.classList.add("r-select-item-option-active", "r-select-item-option-selected");
         // lastOption.click()
     }
+
+
     function exportCurrentPageData() {
         const csvContent = [];
         const dataArea = document.querySelector('div.r-table-content table');
-        const headers = Array.from(dataArea.querySelector('thead.r-table-thead').querySelectorAll('th'))
-        .map(th => th.getAttribute('title') || th.innerText);
-        csvContent.push(headers);
-
-        const rows = dataArea.querySelectorAll('tbody tr.r-table-row.r-table-row-level-0');
-        rows.forEach(row => {
-            const cells = Array.from(row.querySelectorAll('td')).map(td => td.getAttribute('title') || td.innerText);
-            csvContent.push(cells);
-        });
+        // add header
+        csvContent.push(getTableHeader(dataArea));
+        // add data
+        getPageData(dataArea).map(row => csvContent.push(row));
 
         showFormatSelectionDialog(csvContent);
     }
+
 
     function getTotalPages() {
         const paginationElement = document.querySelector('.r-pagination');
