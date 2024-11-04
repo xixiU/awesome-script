@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JWS Data Exporter - Current and All Pages
 // @namespace    https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js
-// @version      1.5
+// @version      1.6
 // @description  导出当前页或所有页的查询结果为CSV或Excel文件
 // @author       rongjie.Yuan
 // @match        https://jws.jiduprod.com/*
@@ -110,12 +110,12 @@
         const dataArea = document.querySelector('div.r-table-content table');
         const headers = Array.from(dataArea.querySelector('thead.r-table-thead').querySelectorAll('th'))
         .map(th => th.getAttribute('title') || th.innerText);
-        csvContent.push(headers.join(','));
+        csvContent.push(headers);
 
         const rows = dataArea.querySelectorAll('tbody tr.r-table-row.r-table-row-level-0');
         rows.forEach(row => {
             const cells = Array.from(row.querySelectorAll('td')).map(td => td.getAttribute('title') || td.innerText);
-            csvContent.push(cells.join(','));
+            csvContent.push(cells);
         });
 
         showFormatSelectionDialog(csvContent);
@@ -263,7 +263,7 @@
 
     function exportAsCSV(content) {
         const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
-        const csvData = content.join('\n');
+        const csvData = Array.from(content).map((row) => row.join(',')).join('\n');
         const blob = new Blob([bom, csvData], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -277,7 +277,7 @@
 
     function exportAsExcel(content) {
         const workbook = XLSX.utils.book_new();
-        const worksheet = XLSX.utils.aoa_to_sheet(content.map(row => row.split(',')));
+        const worksheet = XLSX.utils.aoa_to_sheet(content);
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
         XLSX.writeFile(workbook, 'data.xlsx');
     }
