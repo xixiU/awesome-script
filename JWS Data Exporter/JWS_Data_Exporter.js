@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JWS Data Exporter - Current and All Pages
 // @namespace    https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js
-// @version      1.6
+// @version      1.7
 // @description  导出当前页或所有页的查询结果为CSV或Excel文件
 // @author       rongjie.Yuan
 // @match        https://jws.jiduprod.com/*
@@ -10,7 +10,7 @@
 // @grant        none
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // 创建“导出当前页”和“导出所有页”按钮
@@ -23,6 +23,13 @@
     exportAllButton.innerText = '导出所有页数据';
     exportAllButton.style.display = 'block';
     exportAllButton.className = 'r-btn r-btn-text _action-button_178z2_1';
+
+    // 创建一个导出insert语句的按钮
+    const exportMySqlInsertButton = document.createElement('button');
+    exportMySqlInsertButton.innerText = '导出insert语句';
+    exportMySqlInsertButton.style.display = 'block';
+    exportMySqlInsertButton.className = 'r-btn r-btn-text _action-button_178z2_1';
+
 
     // 导出当前页按钮点击事件
     exportCurrentButton.addEventListener('click', () => {
@@ -51,7 +58,7 @@
             return;
         }
         trySetPageSize();
-        
+
         allData.push(getTableHeader(dataArea));
         function collectDataAndGoToNextPage() {
             updateProgress(currentPage, totalPages);
@@ -61,7 +68,7 @@
                 alert('请先执行SQL');
                 return;
             }
-             // add data
+            // add data
             getPageData(dataArea).map(row => allData.push(row));
 
             if (currentPage < totalPages) {
@@ -76,12 +83,66 @@
         collectDataAndGoToNextPage();
     });
 
-    function getTableHeader(dataArea){
-        return Array.from(dataArea.querySelector('thead.r-table-thead').querySelectorAll('th'))
-        .map(th => th.getAttribute('title') || th.innerText);
+    exportMySqlInsertButton.addEventListener('click', () => {
+        // 弹出输入框让用户输入表名
+        const tableName = prompt("请输入要导出的表名：");
+        if (tableName) {
+            showLoading(); // 显示Loading提示
+            exportAllDataAsMySQLInsert(tableName);
+        } else {
+            alert("未输入表名，操作取消。");
+        }
+    });
+
+    function exportAllDataAsMySQLInsert(tableName) {
+        const totalPages = getTotalPages();
+        let currentPage = 1;
+        const allData = [];
+        const dataArea = document.querySelector('div.r-table-content table');
+
+        if (!dataArea) {
+            hideLoading();
+            alert('请先执行SQL');
+            return;
+        }
+
+        allData.push(getTableHeader(dataArea).map(header => `\`${header}\``).join(', ')); // 添加带引号的列名
+
+        function collectDataAndGoToNextPage() {
+            updateProgress(currentPage, totalPages);
+            const data = getPageData(dataArea).map(row => `(${row.map(cell => `'${cell.replace(/'/g, "''")}'`).join(', ')})`).join(',\n'); // 转义单引号并格式化数据
+            allData.push(data);
+
+            if (currentPage < totalPages) {
+                currentPage++;
+                goToPage(currentPage, collectDataAndGoToNextPage);
+            } else {
+                hideLoading();
+                const insertStatements = `INSERT INTO \`${tableName}\` (\n${allData[0]}\n) VALUES \n${allData.slice(1).join(',\n')};`; // 生成完整的insert语句
+                downloadMySQLInsert(insertStatements, tableName); // 下载生成的insert语句
+            }
+        }
+
+        collectDataAndGoToNextPage();
     }
 
-    function getPageData(dataArea){
+    function downloadMySQLInsert(insertStatements, tableName) {
+        const blob = new Blob([insertStatements], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${tableName}_insert_statements.sql`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    function getTableHeader(dataArea) {
+        return Array.from(dataArea.querySelector('thead.r-table-thead').querySelectorAll('th'))
+            .map(th => th.getAttribute('title') || th.innerText);
+    }
+
+    function getPageData(dataArea) {
         const csvContent = [];
         const rows = dataArea.querySelectorAll('tbody tr.r-table-row.r-table-row-level-0');
         rows.forEach(row => {
@@ -90,9 +151,9 @@
         });
         return csvContent;
     }
-    
 
-    function trySetPageSize(){
+
+    function trySetPageSize() {
         // 如果分页存在100条/页选项，则先设置为100条/页
         // 找到包含分页选项的父容器
         const listHolder = document.querySelector(".rc-virtual-list-holder-inner");
@@ -109,7 +170,7 @@
         // option.classList.remove("r-select-item-option-active", "r-select-item-option-selected");
         // });
 
-        
+
         // const lastOption = options[options.length - 1];
         // lastOption.setAttribute("aria-selected", "true");
         // lastOption.classList.add("r-select-item-option-active", "r-select-item-option-selected");
@@ -297,6 +358,7 @@
             const actionBar = document.querySelector('div._action-bar_k507v_1');
             actionBar.appendChild(exportCurrentButton); // 添加“导出当前页数据”按钮
             actionBar.appendChild(exportAllButton); // 添加“导出所有页数据”按钮
+            actionBar.appendChild(exportMySqlInsertButton);// 添加“导出为MySQL插入语句”按钮
             observer.disconnect();
         }
     });
