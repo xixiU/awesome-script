@@ -6,8 +6,10 @@
 // @author       rongjie.Yuan
 // @match        https://jws.jiduprod.com/*
 // @downloadURL  https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js
-// @updateURL    https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js
-// @grant        none
+// @updateURL    https://jidudev.com/rongjie-awesome/awesome-script/-/raw/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js
+// @note        2024-11-11 1.7  支持导出insert语句
+// @note        2024-09-24 1.0  初始导出支持
+
 // ==/UserScript==
 
 (function () {
