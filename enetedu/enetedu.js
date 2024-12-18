@@ -20,7 +20,7 @@
         randomNum(minNum, maxNum) {
             return Math.floor(Math.random() * (maxNum - minNum + 1) + minNum);
         },
-        
+
         log(message) {
             console.log(`[自动刷课] ${new Date().toLocaleTimeString()} - ${message}`);
         }
@@ -37,7 +37,7 @@
             this.playInterval = setInterval(() => {
                 try {
                     const iframe = $(".classcenter-chapter1 iframe").contents();
-                    
+
                     // 处理弹窗
                     if (iframe.find(".layui-layer-content iframe").length > 0) {
                         setTimeout(() => {
@@ -89,8 +89,8 @@
         // 处理视频完成
         handleVideoComplete() {
             let hasNextVideo = false;
-            $(".classcenter-chapter2 ul li").each(function() {
-                if ($(this).css("background-color") !== "rgb(204, 197, 197)" && 
+            $(".classcenter-chapter2 ul li").each(function () {
+                if ($(this).css("background-color") !== "rgb(204, 197, 197)" &&
                     $(this).find("span").text() !== "[100%]") {
                     hasNextVideo = true;
                     $(this).trigger("click");
@@ -109,11 +109,11 @@
         checkCurrentProgress() {
             let nextVideoFound = false;
             let allComplete = true;
-            
-            $(".classcenter-chapter2 ul li").each(function() {
+
+            $(".classcenter-chapter2 ul li").each(function () {
                 const isCurrentVideo = $(this).css("background-color") === "rgb(204, 197, 197)";
                 const isComplete = $(this).find("span").text() === "[100%]";
-                
+
                 if (isCurrentVideo && isComplete && !nextVideoFound) {
                     nextVideoFound = true;
                 } else if (!isCurrentVideo && !isComplete && nextVideoFound) {
@@ -133,7 +133,7 @@
     }
 
     // 主程序
-    window.onload = function() {
+    window.onload = function () {
         const pageTitle = document.title;
         utils.log(`当前页面: ${pageTitle}`);
 
@@ -142,10 +142,10 @@
             controller.initVideoPlay();
             controller.initProgressMonitor();
         } else if (pageTitle === "课单-课程列表") {
-            $(".per-class2 dl").each(function() {
+            $(".per-class2 dl").each(function () {
                 const statusSpan = $($(this).find("dd span")[0]).html();
                 if (statusSpan === "学习中") {
-                    const classLink = "https://onlinenew.enetedu.com/" + 
+                    const classLink = "https://onlinenew.enetedu.com/" +
                         $($(this).find("dt a")[0]).attr("href");
                     window.location.href = classLink;
                     return false;
