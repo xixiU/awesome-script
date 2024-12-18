@@ -1,5 +1,5 @@
 # 如果需要对应的参数，取消注释对应的参数即可
-config_dirPath = './allToConvert'
+config_dirPath = './'
 
 # 生成sql文本的保存位置，
 config_output = 'output'
@@ -13,7 +13,7 @@ config_filesuffix = 'xlsx'
 
 # 需要生成的字段列表 如include = [region ,is_delete]
 #id,gmt_create,gmt_modified,code,name,type,scope,effective_from,effective_to,own_sign,region_sign,is_delete,db_remark,order_no,tax_type,scope_type,fetch_condition,source_condition,data_source
-config_include = [ ]#'code', 'name','type','scope','scope_type','fetch_condition'
+config_include = [ 'gmt_create']#'code', 'name','type','scope','scope_type','fetch_condition'
 
 # 通用字段
 config_common_include = ['gmt_create', 'gmt_modified', 'own_sign', 'region_sign', 'is_delete']

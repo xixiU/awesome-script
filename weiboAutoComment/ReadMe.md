@@ -12,8 +12,14 @@
 2.安装脚本<br>
 
 ![Images](images/tampermonkey.png)
-打开油猴-管理面板-使用工具-从URL安装。输入如下URL:<https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/weibo_auto_comment/weibo_auto_comment.js>
+打开油猴-管理面板-使用工具-从URL安装。输入如下URL:<https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/weiboAutoComment/weibo_auto_comment.js>
 
 3.使用
-# 安装并按需修改配置
 
+## 安装并按需修改配置
+![Images](images/step1.png)
+
+## 搜索你关心的关键词
+![Images](images/step2.png)
+
+等待即可，程序会自动执行

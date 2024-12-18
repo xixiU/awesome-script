@@ -16,7 +16,7 @@
 
     /** 配置区域 **/
     const COMMENT_TEXT = "测试"; // 评论内容
-    const COMMENT_INTERVAL = 5000; // 评论间隔时间，单位为毫秒
+    const COMMENT_INTERVAL = 2000; // 评论间隔时间，单位为毫秒
 
     /** 工具函数 **/
     function sleep(ms) {
@@ -38,6 +38,10 @@
         return commentedIds.includes(id);
     }
 
+    function scrollToElement(element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
     /** 点击评论按钮并提交评论 **/
     async function commentOnWeibo(item) {
         const weiboId = item.getAttribute('mid'); // 微博唯一 ID
@@ -45,7 +49,7 @@
         if (!weiboId || isAlreadyCommented(weiboId)) {
             return;
         }
-
+        scrollToElement(item);
         // 选择第二个按钮（评论按钮）
         const commentButtons = item.querySelectorAll('.card-act .woo-box-flex.woo-box-alignCenter.woo-box-justifyCenter');
         if (commentButtons.length < 3) {
