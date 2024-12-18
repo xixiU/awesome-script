@@ -6,7 +6,7 @@
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
 // @grant        none
-// @require      https://cdn.bootcdn.net/ajax/libs/jquery/3.7.1/jquery.min.js
+// @require      https://cdn.bootcdn.net/ajax/libs/jquery/2.2.4/jquery.min.js
 // @license MIT
 // @downloadURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/enetedu/enetedu.js
 // @updateURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/enetedu/enetedu.js
