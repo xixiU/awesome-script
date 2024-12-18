@@ -84,6 +84,7 @@
             } else {
                 this.checkCurrentProgress();
             }
+            utils.log(`当前视频进度: ${currentTime}s/${duration}s`);
         }
 
         // 处理视频完成
