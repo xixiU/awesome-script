@@ -42,9 +42,15 @@
                 // 开始播放视频并设置音量
                 const video = iframe.find("video");
                 if (video.length > 0) {
-                    video.trigger("play");
-                    video[0].volume = 0.01; // 设置音量为 1%
-                    console.log("视频已开始播放，音量设置为 1%");
+                    const videoElement = video[0];
+
+                    // 设置音量为 1% 并播放
+                    videoElement.volume = 0.01; // 设置音量为 1%
+                    videoElement.play().then(() => {
+                        console.log("视频已开始播放，音量设置为 1%");
+                    }).catch((error) => {
+                        console.error("播放视频时出错:", error);
+                    });
                 }
             }
 
