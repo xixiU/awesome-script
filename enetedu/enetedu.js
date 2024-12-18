@@ -55,7 +55,6 @@
             const iframe = $(".classcenter-chapter1 iframe").contents();
             iframe.find("video").on("timeupdate", function () {
                 const video = this;
-                console.log(`当前时间: ${Math.ceil(video.currentTime)}s ,视频时长: ${Math.ceil(video.duration)}s`);
                 if (Math.ceil(video.currentTime) >= Math.ceil(video.duration) / 2) {
                     // 视频播放完成，切换到下一个
                     let nextVideoFlag = false;
