@@ -104,7 +104,10 @@
                 clearInterval(this.playInterval);
                 utils.log("所有视频播放完成");
             }
-            utils.log(`视频播放中，当前时间: ${Math.ceil(video.currentTime)}s`);
+            // 5s输出一次播放进度
+            setTimeout(() => {
+                utils.log(`视频播放中，当前时间: ${Math.ceil(video.currentTime)}s`);
+            }, 5000);
         }
 
         // 检查当前进度
