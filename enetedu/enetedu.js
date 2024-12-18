@@ -55,29 +55,29 @@
             const iframe = $(".classcenter-chapter1 iframe").contents();
             iframe.find("video").on("timeupdate", function () {
                 const video = this;
-                if (Math.ceil(video.currentTime) >= Math.ceil(video.duration) / 2) {
-                    // 视频播放完成，切换到下一个
-                    let nextVideoFlag = false;
-                    $(".classcenter-chapter2 ul li").each(function () {
-                        const backgroundColor = $(this).css("background-color");
-                        const progressText = $(this).find("span").text();
-                        console.log(`当前视频状态: ${backgroundColor}, 进度: ${progressText}`);
-                        if (backgroundColor !== "rgb(204, 197, 197)" && progressText !== "[100%]") {
-                            nextVideoFlag = true;
-                            $(this).trigger("click");
-                            console.log("切换到下一个未完成的视频");
-                            return false;
-                        }
-                    });
-
-                    if (!nextVideoFlag) {
-                        clearInterval(intervalId);
-                        console.log("所有视频播放完毕，返回课程目录");
-                        $(".buttonmore-red").trigger("click");
+                // if (Math.ceil(video.currentTime) >= Math.ceil(video.duration) / 2) {
+                // 视频播放完成，切换到下一个
+                let nextVideoFlag = false;
+                $(".classcenter-chapter2 ul li").each(function () {
+                    const backgroundColor = $(this).css("background-color");
+                    const progressText = $(this).find("span").text();
+                    console.log(`当前视频状态: ${backgroundColor}, 进度: ${progressText}`);
+                    if (backgroundColor !== "rgb(204, 197, 197)" && progressText !== "[100%]") {
+                        nextVideoFlag = true;
+                        $(this).trigger("click");
+                        console.log("切换到下一个未完成的视频");
+                        return false;
                     }
-                } else {
-                    console.log(`视频播放中，当前时间: ${Math.ceil(video.currentTime)}s`);
+                });
+
+                if (!nextVideoFlag) {
+                    clearInterval(intervalId);
+                    console.log("所有视频播放完毕，返回课程目录");
+                    $(".buttonmore-red").trigger("click");
                 }
+                // } else {
+                //     console.log(`视频播放中，当前时间: ${Math.ceil(video.currentTime)}s`);
+                // }
             });
         }, 8000);
     }
