@@ -114,7 +114,6 @@
             $(".classcenter-chapter2 ul li").each(function () {
                 const isCurrentVideo = $(this).css("background-color") === "rgb(204, 197, 197)";
                 const isComplete = $(this).find("span").text() === "[100%]";
-                utils.log(`当前视频进度: ${isCurrentVideo ? "播放中" : "未播放"}, 是否完成: ${isComplete}`);
                 if (isCurrentVideo && isComplete && !nextVideoFound) {
                     nextVideoFound = true;
                 } else if (!isCurrentVideo && !isComplete && nextVideoFound) {
