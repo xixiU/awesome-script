@@ -7,7 +7,7 @@
 
 ## 1.安装浏览器脚本插件<br>
 
-* Tampermonkey (新油猴) (又名:篡改猴) <sup>*<a href="https://www.tampermonkey.net/">插件安装链接</a></sup>  
+* Tampermonkey (新油猴) (又名:篡改猴,推荐) <sup>*<a href="https://www.tampermonkey.net/">插件安装链接</a></sup>  
 * Script Cat (脚本猫) (中国社区开发) <sup>*<a href="https://docs.scriptcat.org/">插件安装链接</a></sup>
 * Violentmonkey (暴力猴) <sup>*<a href="https://violentmonkey.github.io/get-it/">插件安装链接</a></sup>
 * Greasemonkey (旧油猴) <sup>*<a href="https://addons.mozilla.org/firefox/addon/greasemonkey/">插件安装链接</a></sup> </br> <sup>注：Greasemonkey (旧油猴) 可能由于过于古老，无法支持该脚本。</sup>
@@ -32,10 +32,7 @@
 等待即可，程序会自动执行
 详情请看如下视频
 
-https://github.com/user-attachments/assets/46eb877b-2ec7-4a31-bfca-bd58c0d191de
-
-
-
+<https://github.com/user-attachments/assets/46eb877b-2ec7-4a31-bfca-bd58c0d191de>
 
 ## 4.其他
 
