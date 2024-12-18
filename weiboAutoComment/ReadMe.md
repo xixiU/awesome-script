@@ -29,7 +29,7 @@
 
 等待即可，程序会自动执行
 
-<video src='./images/usage.mp4'></video>
+<video src='https://github.com/xixiU/awesome-script/raw/refs/heads/master/weiboAutoComment/images/usage.mp4" title="./images/usage.mp4'></video>
 
 ## 4.其他
 
