@@ -16,7 +16,7 @@
 
     /** 配置区域 **/
     const COMMENT_TEXT = "测试"; // 评论内容
-    const COMMENT_INTERVAL = 2000; // 评论间隔时间，单位为毫秒
+    const COMMENT_INTERVAL = 5000; // 评论间隔时间，单位为毫秒
 
     /** 工具函数 **/
     function sleep(ms) {
