@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         *2024版继续教育*全国高校教师网络培训中心-自动刷课
+// @name         继续教育*全国高校教师网络培训中心-自动刷课
 // @namespace    https://onlinenew.enetedu.com/
 // @version      0.4
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 的网站自动刷课，自动点击播放，检查当前视频是否已经是播放完毕的，当前视频播放完成的则自动播放下一个视频，列表播放完毕后自动返回目录。
