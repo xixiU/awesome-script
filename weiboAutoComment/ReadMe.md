@@ -10,7 +10,7 @@
 * Tampermonkey (新油猴) (又名:篡改猴,推荐) <sup>*<a href="https://www.tampermonkey.net/">插件安装链接</a></sup>  
 * Script Cat (脚本猫) (中国社区开发) <sup>*<a href="https://docs.scriptcat.org/">插件安装链接</a></sup>
 * Violentmonkey (暴力猴) <sup>*<a href="https://violentmonkey.github.io/get-it/">插件安装链接</a></sup>
-* Greasemonkey (旧油猴) <sup>*<a href="https://addons.mozilla.org/firefox/addon/greasemonkey/">插件安装链接</a></sup> </br> <sup>注：Greasemonkey (旧油猴) 可能由于过于古老，无法支持该脚本。</sup>
+* Greasemonkey (旧油猴) <sup>*<a href="https://addons.mozilla.org/firefox/addon/greasemonkey/">插件安装链接</a></sup> </br> <sup>注：Greasemonkey (旧油猴) 可能由于过于古老，无法支持该脚本。上面脚本管理工具任意安装一个即可</sup>
 
 ## 2.安装脚本<br>
 
