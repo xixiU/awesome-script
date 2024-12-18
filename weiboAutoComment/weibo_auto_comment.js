@@ -55,7 +55,7 @@
         if (commentButtons.length < 3) {
             return
         }
-        const commentButton = commentButtons[2]; // 第二个按钮是评论按钮
+        const commentButton = commentButtons[2]; // 第0和1个是转发,第二个按钮是评论按钮，最后是转发
 
         if (commentButton) {
             commentButton.click();
