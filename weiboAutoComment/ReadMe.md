@@ -28,8 +28,12 @@
 ![Images](images/step2.png)
 
 等待即可，程序会自动执行
+详情请看如下视频
 
-<video src='https://github.com/xixiU/awesome-script/raw/refs/heads/master/weiboAutoComment/images/usage.mp4" title="./images/usage.mp4'></video>
+https://github.com/user-attachments/assets/46eb877b-2ec7-4a31-bfca-bd58c0d191de
+
+
+
 
 ## 4.其他
 
