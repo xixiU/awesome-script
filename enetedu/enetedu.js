@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         继续教育*全国高校教师网络培训中心-自动刷课
 // @namespace    https://onlinenew.enetedu.com/
-// @version      1.1
+// @version      0.2
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 的网站自动刷课，自动点击播放，检查当前视频是否已经是播放完毕的，当前视频播放完成的则自动播放下一个视频，列表播放完毕后自动返回目录。
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -55,8 +55,8 @@
             const iframe = $(".classcenter-chapter1 iframe").contents();
             iframe.find("video").on("timeupdate", function () {
                 const video = this;
-                console.log(`视频时长: ${Math.ceil(video.duration)}s, 当前时间: ${Math.ceil(video.currentTime)}s`);
-                if (Math.ceil(video.currentTime) >= Math.ceil(video.duration)) {
+                console.log(`当前时间: ${Math.ceil(video.currentTime)}s ,视频时长: ${Math.ceil(video.duration)}s`);
+                if (Math.ceil(video.currentTime) >= Math.ceil(video.duration) / 2) {
                     // 视频播放完成，切换到下一个
                     let nextVideoFlag = false;
                     $(".classcenter-chapter2 ul li").each(function () {
