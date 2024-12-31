@@ -165,7 +165,7 @@
             controller.initProgressMonitor();
         } else if (pageTitle === "我的培训课程") {
             $(".detail-act2 li").each(function () {
-                const statusSpan = $($(this).find("span.right1")[3]).text();
+                const statusSpan = $($(this).find("span.right1")[3]);
                 if (statusSpan.text().trim() === "学习") {
                     const classLink = "https://onlinenew.enetedu.com/" +
                         $($(this).find("a")[0]).attr("href");
