@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         继续教育*全国高校教师网络培训中心-自动刷课
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.4
+// @version      0.4.1
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -15,7 +15,8 @@
 
 (function () {
     'use strict';
-
+    // 倍速
+    const speed = 1.5;
     // 工具函数
     const utils = {
         randomNum(minNum, maxNum) {
@@ -49,12 +50,13 @@
                         return;
                     }
 
-                    // 播放视频
+                    // 播放视频并设置1.5倍速
                     const video = iframe.find("video");
                     if (video.length > 0) {
                         video.trigger("play");
                         video[0].volume = 0.01;
-                        utils.log("视频开始播放，音量设置为1%");
+                        video[0].playbackRate = speed; // 设置倍速
+                        utils.log(`视频开始播放，音量设置为1%，播放速度${video[0].playbackRate}倍`);
                     }
                 } catch (err) {
                     utils.log(`播放出错: ${err.message}`);
@@ -80,12 +82,18 @@
             const currentTime = Math.ceil(video.currentTime);
             const duration = Math.ceil(video.duration);
 
+            // 确保播放速度保持在1.5倍
+            if (video.playbackRate !== 1.5) {
+                video.playbackRate = 1.5;
+                utils.log("重置播放速度为1.5倍");
+            }
+
             if (currentTime >= duration) {
                 this.handleVideoComplete();
             } else {
                 this.checkCurrentProgress();
             }
-            utils.log(`当前视频进度: ${currentTime}s/${duration}s`);
+            utils.log(`当前视频进度: ${currentTime}s/${duration}s，播放速度: ${video.playbackRate}倍`);
         }
 
         // 处理视频完成
