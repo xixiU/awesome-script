@@ -83,8 +83,8 @@
             const duration = Math.ceil(video.duration);
 
             // 确保播放速度保持在1.5倍
-            if (video.playbackRate !== 1.5) {
-                video.playbackRate = 1.5;
+            if (video.playbackRate !== speed) {
+                video[0].playbackRate = speed;
                 utils.log("重置播放速度为1.5倍");
             }
 
