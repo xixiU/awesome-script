@@ -46,7 +46,7 @@
                             utils.log("点击确定按钮");
                             iframe.find(".layui-layer-content iframe").contents()
                                 .find("#questionid~div button").trigger("click");
-                        }, utils.randomNum(15, 40) * 100);
+                        }, utils.randomNum(4, 10) * 100);
                         return;
                     }
 
@@ -82,7 +82,7 @@
             const currentTime = Math.ceil(video.currentTime);
             const duration = Math.ceil(video.duration);
 
-            // 确保播放速度保持在1.5倍
+            // 设置播放倍速
             if (video.playbackRate !== speed) {
                 video[0].playbackRate = speed;
                 utils.log("重置播放速度为1.5倍");
