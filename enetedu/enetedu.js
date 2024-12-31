@@ -163,13 +163,14 @@
             const controller = new VideoController();
             controller.initVideoPlay();
             controller.initProgressMonitor();
-        } else if (pageTitle === "课单-课程列表") {
-            $(".per-class2 dl").each(function () {
-                const statusSpan = $($(this).find("dd span")[0]).html();
-                if (statusSpan === "学习中") {
+        } else if (pageTitle === "我的培训课程") {
+            $(".detail-act2 li").each(function () {
+                const statusSpan = $($(this).find("span.right1")[3]).text();
+                if (statusSpan.text().trim() === "学习") {
                     const classLink = "https://onlinenew.enetedu.com/" +
-                        $($(this).find("dt a")[0]).attr("href");
-                    window.location.href = classLink;
+                        $($(this).find("a")[0]).attr("href");
+                    // 开一个新tab打开链接
+                    window.open(classLink, "_blank");
                     return false;
                 }
             });
