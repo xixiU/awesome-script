@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         继续教育*全国高校教师网络培训中心-自动刷课
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.4.1
+// @version      0.4.2
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -50,13 +50,18 @@
                         return;
                     }
 
-                    // 播放视频并设置1.5倍速
+                    // 播放视频并设置倍速
                     const video = iframe.find("video");
                     if (video.length > 0) {
-                        video.trigger("play");
-                        video[0].volume = 0.01;
-                        video[0].playbackRate = speed; // 设置倍速
-                        utils.log(`视频开始播放，音量设置为1%，播放速度${video[0].playbackRate}倍`);
+                        const videoElement = video[0];
+                        videoElement.play(); // 使用原生play方法
+                        videoElement.volume = 0.01;
+                        try {
+                            videoElement.playbackRate = speed;
+                            utils.log(`视频开始播放，音量设置为1%，播放速度${speed}倍`);
+                        } catch (err) {
+                            utils.log(`设置播放速度失败: ${err.message}`);
+                        }
                     }
                 } catch (err) {
                     utils.log(`播放出错: ${err.message}`);
@@ -82,10 +87,14 @@
             const currentTime = Math.ceil(video.currentTime);
             const duration = Math.ceil(video.duration);
 
-            // 设置播放倍速
-            if (video.playbackRate !== speed) {
-                video[0].playbackRate = speed;
-                utils.log("重置播放速度为1.5倍");
+            // 修改播放速度设置的方式
+            try {
+                if (video && video.playbackRate !== speed) {
+                    video.playbackRate = speed; // 直接使用video对象而不是video[0]
+                    utils.log(`重置播放速度为${speed}倍`);
+                }
+            } catch (err) {
+                utils.log(`设置播放速度失败: ${err.message}`);
             }
 
             if (currentTime >= duration) {
