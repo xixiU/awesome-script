@@ -19,7 +19,7 @@
     // 普通课程倍速
     const speed = 1.5;
     // 直播课程倍速
-    const liveSpeed = 2.0;
+    const liveSpeed = 4.0;
 
     // 工具函数增加检测是否为直播页面的方法
     const utils = {
