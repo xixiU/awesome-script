@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         继续教育*全国高校教师网络培训中心-自动刷课
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.4.3
+// @version      0.4.4
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
+// @match        huiyi.enetedu.com/liveWacth/*
 // @grant        none
 // @require      https://cdn.bootcss.com/jquery/3.2.1/jquery.min.js
 // @license MIT
@@ -15,9 +16,12 @@
 
 (function () {
     'use strict';
-    // 倍速
+    // 普通课程倍速
     const speed = 1.5;
-    // 工具函数
+    // 直播课程倍速
+    const liveSpeed = 2.0;
+
+    // 工具函数增加检测是否为直播页面的方法
     const utils = {
         randomNum(minNum, maxNum) {
             return Math.floor(Math.random() * (maxNum - minNum + 1) + minNum);
@@ -25,6 +29,10 @@
 
         log(message) {
             console.log(`[自动刷课] ${new Date().toLocaleTimeString()} - ${message}`);
+        },
+
+        isLivePage() {
+            return window.location.href.includes('huiyi.enetedu.com/liveWacth');
         }
     };
 
@@ -154,22 +162,69 @@
         }
     }
 
-    // 主程序
+    // 直播控制器
+    class LiveController {
+        constructor() {
+            this.checkInterval = null;
+        }
+
+        init() {
+            utils.log('初始化直播控制器');
+            this.initLivePlay();
+        }
+
+        initLivePlay() {
+            this.checkInterval = setInterval(() => {
+                try {
+                    const video = document.querySelector('video');
+                    if (video) {
+                        // 确保视频在播放
+                        if (video.paused) {
+                            video.play();
+                        }
+
+                        // 设置音量和播放速度
+                        video.volume = 0.01;
+                        try {
+                            if (video.playbackRate !== liveSpeed) {
+                                video.playbackRate = liveSpeed;
+                                utils.log(`直播播放速度设置为${liveSpeed}倍`);
+                            }
+                        } catch (err) {
+                            utils.log(`设置直播播放速度失败: ${err.message}`);
+                        }
+
+                        // 输出播放状态
+                        utils.log(`直播播放中 - 速度: ${video.playbackRate}倍, 音量: ${video.volume}`);
+                    }
+                } catch (err) {
+                    utils.log(`直播控制出错: ${err.message}`);
+                }
+            }, 5000);
+        }
+    }
+
+    // 主程序修改
     window.onload = function () {
         const pageTitle = document.title;
         utils.log(`当前页面: ${pageTitle}`);
 
-        if (pageTitle === "课程学习") {
+        if (utils.isLivePage()) {
+            // 直播页面处理
+            const liveController = new LiveController();
+            liveController.init();
+        } else if (pageTitle === "课程学习") {
+            // 原有的视频课程处理
             const controller = new VideoController();
             controller.initVideoPlay();
             controller.initProgressMonitor();
         } else if (pageTitle === "我的培训课程") {
+            // 原有的课程列表处理
             $(".detail-act2 li").each(function () {
                 const statusSpan = $($(this).find("span.right1")[3]);
                 if (statusSpan.text().trim() === "学习") {
                     const classLink = "https://onlinenew.enetedu.com/" +
                         $($(this).find("a")[0]).attr("href");
-                    // 开一个新tab打开链接
                     window.open(classLink, "_blank");
                     return false;
                 }
