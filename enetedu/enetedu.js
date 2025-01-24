@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         继续教育*全国高校教师网络培训中心-自动刷课
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.4.5
+// @version      0.4.6
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -17,7 +17,7 @@
 (function () {
     'use strict';
     // 普通课程倍速
-    const speed = 1.5;
+    const speed = 2.0;
     // 直播课程倍速
     const liveSpeed = 4.0;
 
