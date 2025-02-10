@@ -1,11 +1,12 @@
 // ==UserScript==
-// @name         继续教育*全国高校教师网络培训中心
+// @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.4.6
-// @description  适用于网址是 https://onlinenew.enetedu.com/ 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
+// @version      0.4.8
+// @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
 // @match        huiyi.enetedu.com/liveWacth/*
+// @match        *.smartedu.cn/p/course/*
 // @grant        none
 // @require      https://cdn.bootcss.com/jquery/3.2.1/jquery.min.js
 // @license MIT
@@ -21,6 +22,13 @@
     // 直播课程倍速
     const liveSpeed = 4.0;
 
+    // 添加 smartedu 速度设置
+    const SPEEDS = {
+        normal: 2.0,
+        live: 4.0,
+        smartedu: 2.0
+    };
+
     // 工具函数增加检测是否为直播页面的方法
     const utils = {
         randomNum(minNum, maxNum) {
@@ -33,6 +41,10 @@
 
         isLivePage() {
             return window.location.href.includes('huiyi.enetedu.com/liveWacth');
+        },
+
+        isSmartEduPage() {
+            return window.location.href.includes('smartedu.cn/p/course');
         }
     };
 
@@ -204,12 +216,73 @@
         }
     }
 
+    // 添加 SmartEduController 类
+    class SmartEduController {
+        constructor() {
+            this.confirmInterval = null;
+            this.speedInterval = null;
+        }
+
+        init() {
+            utils.log('初始化 SmartEdu 控制器');
+            this.initConfirmCheck();
+            this.initSpeedControl();
+        }
+
+        initConfirmCheck() {
+            this.confirmInterval = setInterval(() => {
+                try {
+                    const confirmBtn = $('.layui-layer-btn0');
+                    if (confirmBtn.length > 0) {
+                        confirmBtn.click();
+                        utils.log('点击确定按钮');
+                    }
+                } catch (err) {
+                    utils.log(`确认按钮检查出错: ${err.message}`);
+                }
+            }, 3000);
+        }
+
+        initSpeedControl() {
+            this.speedInterval = setInterval(() => {
+                try {
+                    const playbackRateElement = document.querySelector('xg-playbackrate');
+                    if (playbackRateElement) {
+                        const playbackRateText = playbackRateElement.querySelector('p.name')?.innerText;
+                        if (playbackRateText === '1x') {
+                            const speedOption = playbackRateElement.querySelector('ul li');
+                            if (speedOption) {
+                                speedOption.click();
+                                utils.log('已将播放速度调整为 2x');
+                            }
+                        }
+                    }
+                } catch (err) {
+                    utils.log(`播放速度调整出错: ${err.message}`);
+                }
+            }, 10000);
+        }
+
+        destroy() {
+            if (this.confirmInterval) {
+                clearInterval(this.confirmInterval);
+            }
+            if (this.speedInterval) {
+                clearInterval(this.speedInterval);
+            }
+        }
+    }
+
     // 主程序修改
     window.onload = function () {
         const pageTitle = document.title;
         utils.log(`当前页面: ${pageTitle}`);
 
-        if (utils.isLivePage()) {
+        if (utils.isSmartEduPage()) {
+            // SmartEdu 课程处理
+            const smartEduController = new SmartEduController();
+            smartEduController.init();
+        } else if (utils.isLivePage()) {
             // 直播页面处理
             const liveController = new LiveController();
             liveController.init();
@@ -225,8 +298,14 @@
                 if (statusSpan.text().trim() === "学习") {
                     const classLink = "https://onlinenew.enetedu.com/" +
                         $($(this).find("a")[0]).attr("href");
-                    window.open(classLink, "_blank");
-                    return false;
+
+                    // 在后台打开新标签页
+                    const newWindow = window.open(classLink, '_blank');
+                    if (newWindow) {
+                        newWindow.blur(); // 将新窗口置于后台
+                        window.focus(); // 保持当前窗口焦点
+                        utils.log(`已打开课程: ${classLink}`);
+                    }
                 }
             });
         }
