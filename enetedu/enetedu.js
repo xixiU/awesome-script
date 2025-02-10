@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.5.2
+// @version      0.5.3
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -333,7 +333,7 @@
             this.progressCheckInterval = setInterval(() => {
                 try {
                     // 使用正确的选择器找到当前选中的章节
-                    const currentChapter = document.querySelector('div.video-title.clearfix.on')?.closest('li');
+                    const currentChapter = document.querySelector('div.video-title.clearfix.on');
                     if (!currentChapter) {
                         utils.log('未找到当前选中章节');
                         return;
