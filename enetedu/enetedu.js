@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.4.8
+// @version      0.4.9
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -216,17 +216,19 @@
         }
     }
 
-    // 添加 SmartEduController 类
+    // 修改 SmartEduController 类
     class SmartEduController {
         constructor() {
             this.confirmInterval = null;
             this.speedInterval = null;
+            this.progressCheckInterval = null;
         }
 
         init() {
             utils.log('初始化 SmartEdu 控制器');
             this.initConfirmCheck();
-            this.initSpeedControl();
+            this.initSpeedVolumeControl();
+            this.initProgressCheck();
         }
 
         initConfirmCheck() {
@@ -243,24 +245,121 @@
             }, 3000);
         }
 
-        initSpeedControl() {
+        initSpeedVolumeControl() {
             this.speedInterval = setInterval(() => {
                 try {
-                    const playbackRateElement = document.querySelector('xg-playbackrate');
-                    if (playbackRateElement) {
-                        const playbackRateText = playbackRateElement.querySelector('p.name')?.innerText;
-                        if (playbackRateText === '1x') {
-                            const speedOption = playbackRateElement.querySelector('ul li');
-                            if (speedOption) {
-                                speedOption.click();
-                                utils.log('已将播放速度调整为 2x');
+                    const video = document.querySelector('#video-Player video');
+                    if (video) {
+                        // 设置音量
+                        if (video.volume !== 0.01) {
+                            video.volume = 0.01;
+                            utils.log('设置音量为 1%');
+                        }
+
+                        // 确保没有静音
+                        if (video.muted) {
+                            video.muted = false;
+                            utils.log('取消静音');
+                        }
+
+                        // 输出当前状态
+                        utils.log(`当前状态 - 速度: ${video.playbackRate}x, 音量: ${Math.round(video.volume * 100)}%, 播放中: ${!video.paused}`);
+
+                        // 设置播放速度
+                        if (video.playbackRate !== SPEEDS.smartedu) {
+                            video.playbackRate = SPEEDS.smartedu;
+                            utils.log(`设置播放速度为 ${SPEEDS.smartedu}x`);
+                        }
+
+                        // 确保视频在播放
+                        if (video.paused) {
+                            video.play();
+                            utils.log('恢复视频播放');
+                        }
+
+                        // 如果找不到video元素，尝试通过播放器控件设置
+                        const playbackRateElement = document.querySelector('xg-playbackrate');
+                        if (playbackRateElement) {
+                            const playbackRateText = playbackRateElement.querySelector('p.name')?.innerText;
+                            if (playbackRateText === '1x') {
+                                const speedOption = playbackRateElement.querySelector('ul li');
+                                if (speedOption) {
+                                    speedOption.click();
+                                    utils.log('通过播放器控件设置为 2x 速度');
+                                }
                             }
                         }
                     }
                 } catch (err) {
                     utils.log(`播放速度调整出错: ${err.message}`);
                 }
-            }, 10000);
+            }, 5000);
+        }
+
+        initProgressCheck() {
+            this.progressCheckInterval = setInterval(() => {
+                try {
+                    // 检查当前章节进度
+                    const currentChapter = document.querySelector('ul.chapter li.on');
+                    if (!currentChapter) {
+                        utils.log('未找到当前章节');
+                        return;
+                    }
+
+                    // 获取进度信息
+                    const progressSpan = currentChapter.querySelector('span.four');
+                    if (progressSpan && progressSpan.textContent.includes('100')) {
+                        utils.log('当前章节已完成，准备切换到下一章节');
+                        this.switchToNextChapter(currentChapter);
+                    } else {
+                        // 输出当前章节的进度
+                        const chapterTitle = currentChapter.querySelector('span.two')?.textContent || '未知章节';
+                        const progress = progressSpan?.textContent || '0%';
+                        utils.log(`当前章节: ${chapterTitle}, 进度: ${progress}`);
+                    }
+                } catch (err) {
+                    utils.log(`进度检查出错: ${err.message}`);
+                }
+            }, 10000); // 每10秒检查一次进度
+        }
+
+        switchToNextChapter(currentChapter) {
+            try {
+                let nextChapter = currentChapter;
+                let foundNext = false;
+
+                // 遍历所有章节，找到下一个未完成的章节
+                const allChapters = document.querySelectorAll('ul.chapter li');
+                for (let i = 0; i < allChapters.length; i++) {
+                    if (allChapters[i] === currentChapter) {
+                        // 从当前章节开始往后找
+                        for (let j = i + 1; j < allChapters.length; j++) {
+                            const progressSpan = allChapters[j].querySelector('span.four');
+                            if (progressSpan && !progressSpan.textContent.includes('100')) {
+                                nextChapter = allChapters[j];
+                                foundNext = true;
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+
+                if (foundNext) {
+                    // 点击切换到下一章节
+                    const chapterLink = nextChapter.querySelector('div.video-title');
+                    if (chapterLink) {
+                        chapterLink.click();
+                        const nextChapterTitle = nextChapter.querySelector('span.two')?.textContent || '未知章节';
+                        utils.log(`已切换到下一章节: ${nextChapterTitle}`);
+                    }
+                } else {
+                    utils.log('所有章节已完成');
+                    // 可以添加课程完成后的处理逻辑
+                }
+            } catch (err) {
+                utils.log(`切换章节出错: ${err.message}`);
+            }
         }
 
         destroy() {
@@ -269,6 +368,9 @@
             }
             if (this.speedInterval) {
                 clearInterval(this.speedInterval);
+            }
+            if (this.progressCheckInterval) {
+                clearInterval(this.progressCheckInterval);
             }
         }
     }
