@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.4.9
+// @version      0.5.0
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -299,10 +299,10 @@
         initProgressCheck() {
             this.progressCheckInterval = setInterval(() => {
                 try {
-                    // 检查当前章节进度
-                    const currentChapter = document.querySelector('ul.chapter li.on');
+                    // 使用正确的选择器找到当前选中的章节
+                    const currentChapter = document.querySelector('div.video-title.clearfix.on')?.closest('li');
                     if (!currentChapter) {
-                        utils.log('未找到当前章节');
+                        utils.log('未找到当前选中章节');
                         return;
                     }
 
@@ -320,42 +320,37 @@
                 } catch (err) {
                     utils.log(`进度检查出错: ${err.message}`);
                 }
-            }, 10000); // 每10秒检查一次进度
+            }, 10000);
         }
 
         switchToNextChapter(currentChapter) {
             try {
-                let nextChapter = currentChapter;
                 let foundNext = false;
 
                 // 遍历所有章节，找到下一个未完成的章节
                 const allChapters = document.querySelectorAll('ul.chapter li');
-                for (let i = 0; i < allChapters.length; i++) {
-                    if (allChapters[i] === currentChapter) {
-                        // 从当前章节开始往后找
-                        for (let j = i + 1; j < allChapters.length; j++) {
-                            const progressSpan = allChapters[j].querySelector('span.four');
-                            if (progressSpan && !progressSpan.textContent.includes('100')) {
-                                nextChapter = allChapters[j];
+                const currentIndex = Array.from(allChapters).indexOf(currentChapter);
+
+                if (currentIndex !== -1) {
+                    // 从当前章节的下一个开始查找
+                    for (let i = currentIndex + 1; i < allChapters.length; i++) {
+                        const progressSpan = allChapters[i].querySelector('span.four');
+                        if (progressSpan && !progressSpan.textContent.includes('100')) {
+                            // 找到下一个未完成的章节，点击其 video-title
+                            const videoTitle = allChapters[i].querySelector('div.video-title.clearfix');
+                            if (videoTitle) {
+                                videoTitle.click();
+                                const nextChapterTitle = allChapters[i].querySelector('span.two')?.textContent || '未知章节';
+                                utils.log(`已切换到下一章节: ${nextChapterTitle}`);
                                 foundNext = true;
                                 break;
                             }
                         }
-                        break;
                     }
                 }
 
-                if (foundNext) {
-                    // 点击切换到下一章节
-                    const chapterLink = nextChapter.querySelector('div.video-title');
-                    if (chapterLink) {
-                        chapterLink.click();
-                        const nextChapterTitle = nextChapter.querySelector('span.two')?.textContent || '未知章节';
-                        utils.log(`已切换到下一章节: ${nextChapterTitle}`);
-                    }
-                } else {
-                    utils.log('所有章节已完成');
-                    // 可以添加课程完成后的处理逻辑
+                if (!foundNext) {
+                    utils.log('所有章节已完成或未找到下一个可播放章节');
                 }
             } catch (err) {
                 utils.log(`切换章节出错: ${err.message}`);
