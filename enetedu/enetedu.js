@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.5.3
+// @version      0.5.4
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -362,21 +362,17 @@
 
                 // 遍历所有章节，找到下一个未完成的章节
                 const allChapters = document.querySelectorAll('div.video-title.clearfix');
-                const currentIndex = Array.from(allChapters).indexOf(currentChapter);
 
                 // 从第一个章节查找
                 for (let i = 0; i < allChapters.length; i++) {
                     const progressSpan = allChapters[i].querySelector('span.four');
                     if (progressSpan && !progressSpan.textContent.includes('100')) {
                         // 找到下一个未完成的章节，点击其 video-title
-                        const videoTitle = allChapters[i].querySelector('div.video-title.clearfix');
-                        if (videoTitle) {
-                            videoTitle.click();
-                            const nextChapterTitle = allChapters[i].querySelector('span.two')?.textContent || '未知章节';
-                            utils.log(`已切换到下一章节: ${nextChapterTitle}`);
-                            foundNext = true;
-                            break;
-                        }
+                        allChapters[i].click();
+                        const nextChapterTitle = allChapters[i].querySelector('span.two')?.textContent || '未知章节';
+                        utils.log(`已切换到下一章节: ${nextChapterTitle}`);
+                        foundNext = true;
+                        break;
                     }
                 }
 
