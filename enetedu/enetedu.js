@@ -246,24 +246,30 @@
         }
 
         initSpeedVolumeControl() {
+            // 添加一个静音播放的标志
+            let autoPlayAttempted = false;
+
             this.speedInterval = setInterval(() => {
                 try {
                     const video = document.querySelector('#video-Player video');
                     if (video) {
-                        // 设置音量
-                        if (video.volume !== 0.01) {
-                            video.volume = 0.01;
-                            utils.log('设置音量为 1%');
+                        // 首次尝试播放时，先静音播放
+                        if (!autoPlayAttempted) {
+                            video.muted = true; // 先静音
+                            video.play().then(() => {
+                                // 播放成功后，设置实际音量
+                                video.muted = false;
+                                video.volume = 0.01;
+                                utils.log('视频开始播放');
+                            }).catch(err => {
+                                utils.log(`自动播放失败: ${err.message}`);
+                                // 如果自动播放失败，添加点击事件监听器
+                                if (!document.getElementById('autoPlayHelper')) {
+                                    this.createAutoPlayHelper();
+                                }
+                            });
+                            autoPlayAttempted = true;
                         }
-
-                        // 确保没有静音
-                        if (video.muted) {
-                            video.muted = false;
-                            utils.log('取消静音');
-                        }
-
-                        // 输出当前状态
-                        utils.log(`当前状态 - 速度: ${video.playbackRate}x, 音量: ${Math.round(video.volume * 100)}%, 播放中: ${!video.paused}`);
 
                         // 设置播放速度
                         if (video.playbackRate !== SPEEDS.smartedu) {
@@ -271,29 +277,56 @@
                             utils.log(`设置播放速度为 ${SPEEDS.smartedu}x`);
                         }
 
-                        // 确保视频在播放
-                        if (video.paused) {
-                            video.play();
-                            utils.log('恢复视频播放');
+                        // 确保音量设置正确
+                        if (!video.muted && video.volume !== 0.01) {
+                            video.volume = 0.01;
                         }
 
-                        // 如果找不到video元素，尝试通过播放器控件设置
-                        const playbackRateElement = document.querySelector('xg-playbackrate');
-                        if (playbackRateElement) {
-                            const playbackRateText = playbackRateElement.querySelector('p.name')?.innerText;
-                            if (playbackRateText === '1x') {
-                                const speedOption = playbackRateElement.querySelector('ul li');
-                                if (speedOption) {
-                                    speedOption.click();
-                                    utils.log('通过播放器控件设置为 2x 速度');
-                                }
-                            }
-                        }
+                        // 输出当前状态
+                        utils.log(`当前状态 - 速度: ${video.playbackRate}x, 音量: ${Math.round(video.volume * 100)}%, 播放中: ${!video.paused}`);
                     }
                 } catch (err) {
-                    utils.log(`播放速度调整出错: ${err.message}`);
+                    utils.log(`播放控制出错: ${err.message}`);
                 }
             }, 5000);
+        }
+
+        // 添加创建自动播放辅助按钮的方法
+        createAutoPlayHelper() {
+            const helper = document.createElement('button');
+            helper.id = 'autoPlayHelper';
+            helper.innerHTML = '点击开始自动播放';
+            helper.style.cssText = `
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 9999;
+                padding: 10px 20px;
+                background: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+            `;
+
+            helper.onclick = () => {
+                const video = document.querySelector('#video-Player video');
+                if (video) {
+                    video.muted = false;
+                    video.volume = 0.01;
+                    video.play().then(() => {
+                        helper.remove();
+                        utils.log('用户触发播放成功');
+                    }).catch(err => {
+                        utils.log(`用户触发播放失败: ${err.message}`);
+                    });
+                }
+            };
+
+            document.body.appendChild(helper);
+            utils.log('已添加自动播放辅助按钮，请点击按钮开始播放');
         }
 
         initProgressCheck() {
