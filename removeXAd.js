@@ -5,7 +5,15 @@
 // @description  Hide ads on x.com (Twitter) 移除推特广告
 // @match        https://x.com/*
 // @match        https://twitter.com/*
-// @grant        none
+// @downloadURL  https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/removeXAd.js
+// @updateURL  https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/removeXAd.js
+// @author       xixiU
+// @license      MIT
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=twitter.com
+// @homepage     https://github.com/xixiU/awesome-script
+// @supportURL   https://github.com/xixiU/awesome-script/issues
+// @run-at       document-idle
+// @noframes
 // ==/UserScript==
 
 (function () {
