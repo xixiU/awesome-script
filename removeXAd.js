@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         X Ad Blocker
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Hide ads on x.com (Twitter) 移除推特广告
 // @match        https://x.com/*
 // @match        https://twitter.com/*
