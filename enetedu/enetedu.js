@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.5.4
-// @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
+// @version      0.5.5
+// @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
 // @match        huiyi.enetedu.com/liveWacth/*
 // @match        *.smartedu.cn/p/course/*
+// @match        bwgl.qchengkeji.com/user/node?nodeId=*
 // @grant        none
 // @require      https://cdn.bootcss.com/jquery/3.2.1/jquery.min.js
 // @license MIT
@@ -45,6 +46,9 @@
 
         isSmartEduPage() {
             return window.location.href.includes('smartedu.cn/p/course');
+        },
+        isChengKejiPahe() {
+            return window.location.href.includes("bwgl.qchengkeji.com/user/node");
         }
     };
 
@@ -406,7 +410,7 @@
             // SmartEdu 课程处理
             const smartEduController = new SmartEduController();
             smartEduController.init();
-        } else if (utils.isLivePage()) {
+        } else if (utils.isLivePage() || utils.isChengKejiPahe()) {
             // 直播页面处理
             const liveController = new LiveController();
             liveController.init();
