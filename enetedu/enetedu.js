@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.5.8
+// @version      0.5.8.1
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -237,7 +237,7 @@
                 try {
                     const video = $('video')[0]; // Using jQuery to select the first video element
                     if (video) {
-                        if (video.paused) {
+                        if (video.paused && !video.ended) {
                             video.play().then(() => {
                                 utils.log('[QChengKeji] Video playing.');
                             }).catch(e => {
