@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.5.8.1
+// @version      0.5.8.2
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -224,7 +224,6 @@
     class QChengKejiController {
         constructor() {
             this.videoPlayInterval = null;
-            // this.progressCheckInterval = null; // Not used yet, can be added for progress-based next video
         }
 
         startVideoTasks() {
@@ -232,131 +231,224 @@
             this.initVideoPlaybackAndNext();
         }
 
+        createAutoPlayHelper(videoElement) {
+            if (document.getElementById('qchengkeji-autoplay-helper')) return;
+
+            const helper = document.createElement('button');
+            helper.id = 'qchengkeji-autoplay-helper';
+            helper.innerHTML = '点击开始播放 (启城科技)';
+            helper.style.cssText = `
+                position: fixed;
+                top: 50px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 10000;
+                padding: 10px 20px;
+                background: #FF9800;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+            `;
+
+            helper.onclick = () => {
+                videoElement.play().then(() => {
+                    utils.log('[QChengKeji] User initiated playback successfully.');
+                    if (videoElement.volume !== 0.01) videoElement.volume = 0.01;
+                    helper.remove();
+                }).catch(err => {
+                    utils.log(`[QChengKeji] User initiated playback failed: ${err.message}`);
+                });
+            };
+
+            document.body.appendChild(helper);
+            utils.log('[QChengKeji] Added autoplay helper button. Please click it to start.');
+        }
+
         initVideoPlaybackAndNext() {
             this.videoPlayInterval = setInterval(() => {
                 try {
-                    const video = $('video')[0]; // Using jQuery to select the first video element
+                    const video = $('video')[0];
                     if (video) {
                         if (video.paused && !video.ended) {
-                            video.play().then(() => {
-                                utils.log('[QChengKeji] Video playing.');
-                            }).catch(e => {
-                                utils.log(`[QChengKeji] Error playing video: ${e.message}. User interaction might be required to start playback.`);
-                                // Consider adding a helper button if autoplay fails consistently due to browser restrictions
-                            });
+                            const playPromise = video.play();
+                            if (playPromise !== undefined) {
+                                playPromise.then(() => {
+                                    utils.log('[QChengKeji] Video playing.');
+                                    const helperButton = document.getElementById('qchengkeji-autoplay-helper');
+                                    if (helperButton) {
+                                        helperButton.remove();
+                                    }
+                                }).catch(e => {
+                                    utils.log(`[QChengKeji] Error playing video: ${e.message}.`);
+                                    if (e.name === 'NotAllowedError' || e.message.toLowerCase().includes("user didn't interact") || e.message.toLowerCase().includes("interaction")) {
+                                        utils.log('[QChengKeji] Autoplay failed due to user interaction policy. Adding helper button.');
+                                        this.createAutoPlayHelper(video);
+                                    }
+                                });
+                            }
                         }
                         if (video.volume !== 0.01) {
                             video.volume = 0.01;
                             utils.log('[QChengKeji] Video volume set to 0.01.');
                         }
 
-                        // Check for video completion to play next
                         if (video.ended) {
                             utils.log('[QChengKeji] Video ended. Attempting to play next.');
                             this.playNextVideo();
                         }
-                    } else {
-                        // This log can be noisy if the video element briefly disappears during page transitions
-                        // utils.log('[QChengKeji] Video element not found in interval.');
                     }
                 } catch (err) {
                     utils.log(`[QChengKeji] Error in video playback interval: ${err.message}`);
                 }
-            }, 3000); // Check every 3 seconds
+            }, 3000);
         }
 
         playNextVideo() {
-            utils.log('[QChengKeji] Attempting to find and click next video.');
+            utils.log('[QChengKeji] Attempting to find and click next video (specific structure).');
             let clickedNext = false;
+            const $navList = $('.detmain-navlist');
 
-            // Attempt 1: Look for a "next" button
-            // These selectors are generic and cover common patterns. Specific selectors for the site would be more reliable.
+            if (!$navList.length) {
+                utils.log('[QChengKeji] .detmain-navlist not found. Falling back to generic.');
+                this.playNextVideoGeneric();
+                return;
+            }
+
+            let $currentLink = $navList.find('.item.sel a.on, .item.sel a, .item a.on').first();
+            let $currentItem;
+
+            if ($currentLink.length) {
+                $currentItem = $currentLink.closest('.item');
+            } else {
+                utils.log('[QChengKeji] Could not reliably determine the current active item via .sel or .on classes. Falling back to generic.');
+                this.playNextVideoGeneric();
+                return;
+            }
+
+            if (!$currentItem.length) {
+                utils.log('[QChengKeji] Current link found, but cannot find parent .item. Falling back to generic.');
+                this.playNextVideoGeneric();
+                return;
+            }
+
+            let $nextItemAnchor = $currentItem.nextAll('.item:first').find('a').first();
+
+            if ($nextItemAnchor.length) {
+                utils.log(`[QChengKeji] Found next item in current list: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}". Clicking.`);
+                $nextItemAnchor[0].click();
+                clickedNext = true;
+            } else {
+                const $currentGroup = $currentItem.closest('.group');
+                if ($currentGroup.length) {
+                    const $nextGroup = $currentGroup.nextAll('.group:first');
+                    if ($nextGroup.length) {
+                        $nextItemAnchor = $nextGroup.find('.list .item:first a').first();
+                        if ($nextItemAnchor.length) {
+                            utils.log(`[QChengKeji] No more items in current group. Found next group, clicking first item: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}".`);
+                            $nextItemAnchor[0].click();
+                            clickedNext = true;
+                        } else {
+                            utils.log('[QChengKeji] Found next group, but no clickable items in its list.');
+                        }
+                    } else {
+                        utils.log('[QChengKeji] No next item in current list and no subsequent group found. Potentially end of all content.');
+                    }
+                } else {
+                    utils.log('[QChengKeji] Could not find current group for the item. Structure might be different.');
+                }
+            }
+
+            if (!clickedNext) {
+                utils.log('[QChengKeji] Specific next video logic did not find/click a next item. Falling back to generic.');
+                this.playNextVideoGeneric();
+            }
+        }
+
+        playNextVideoGeneric() {
+            utils.log('[QChengKeji] Attempting to find and click next video (Generic Fallback).');
+            let clickedNextGeneric = false;
+
             const nextButtonSelectors = [
                 'button:contains("下一节")', 'button:contains("Next")', 'a:contains("下一节")', 'a:contains("Next")',
                 '.next-video', '.icon-next', '[class*="next"]', '[aria-label*="Next"]', '[title*="Next"]', '[title*="下一"]',
-                '.vjs-next-button', // Common for video.js
-                '#nextButton', '#btnNext', '.next_button', '.next-btn',
-                '.nextChapter', '.next_video_button', '.jw-button-container .jw-icon-next', // JW Player
+                '.vjs-next-button', '#nextButton', '#btnNext', '.next_button', '.next-btn',
+                '.nextChapter', '.next_video_button', '.jw-button-container .jw-icon-next',
                 '.navigation-button-next', '.pagination-next a'
             ];
 
             for (const selector of nextButtonSelectors) {
-                const buttons = $(selector).filter(':visible'); // Prefer visible buttons
-                if (buttons.length > 0) {
-                    buttons.first().click();
-                    utils.log(`[QChengKeji] Clicked visible "next" button with selector: ${selector}`);
-                    clickedNext = true;
+                const $buttons = $(selector).filter(':visible');
+                if ($buttons.length > 0) {
+                    $buttons.first()[0].click();
+                    utils.log(`[QChengKeji] (Generic) Clicked visible "next" button with selector: ${selector}`);
+                    clickedNextGeneric = true;
                     break;
                 }
-                // If no visible button found, try non-visible ones as a fallback
-                if (!clickedNext) {
-                    const hiddenButtons = $(selector);
-                    if (hiddenButtons.length > 0) {
-                        hiddenButtons.first().click();
-                        utils.log(`[QChengKeji] Clicked (possibly hidden) "next" button with selector: ${selector}`);
-                        clickedNext = true;
+                if (!clickedNextGeneric) {
+                    const $hiddenButtons = $(selector);
+                    if ($hiddenButtons.length > 0) {
+                        $hiddenButtons.first()[0].click();
+                        utils.log(`[QChengKeji] (Generic) Clicked (possibly hidden) "next" button with selector: ${selector}`);
+                        clickedNextGeneric = true;
                         break;
                     }
                 }
             }
-            if (clickedNext) return;
+            if (clickedNextGeneric) return;
 
-            // Attempt 2: Look for a list of videos/chapters and click the next uncompleted one
             const chapterListSelectors = [
                 '.chapter-list li', '.video-list-item', '.playlist-item', '.toc-item',
                 '.course-menu ul li', '.lesson-list .item', '.index_item.video', '.video_list li'
             ];
 
             for (const listSelector of chapterListSelectors) {
-                const items = $(listSelector);
-                if (items.length > 0) {
+                const $items = $(listSelector);
+                if ($items.length > 0) {
                     let currentIndex = -1;
-                    items.each(function (index) {
-                        // Identify current item by common classes indicating active/current state
-                        if ($(this).is('.active, .current, .playing, .on, .is-current, .current_play, .cur, .current_lesson')) {
+                    $items.each(function (index) {
+                        if ($(this).is('.active, .current, .playing, .on, .is-current, .current_play, .cur, .current_lesson, .sel')) {
                             currentIndex = index;
-                            return false; // break .each
+                            return false;
                         }
                     });
 
-                    if (currentIndex !== -1 && currentIndex < items.length - 1) {
-                        const nextItem = $(items[currentIndex + 1]);
-                        // Check if next item is marked as completed (skip if so, though ideally it shouldn't be 'next')
-                        if (nextItem.is('.completed, .is_learned, .viewed')) {
-                            utils.log(`[QChengKeji] Next item (index ${currentIndex + 1}) in list (${listSelector}) is marked completed, trying next one.`);
-                            if (currentIndex + 2 < items.length) {
-                                const nextNextItem = $(items[currentIndex + 2]);
-                                if (!nextNextItem.is('.completed, .is_learned, .viewed')) {
-                                    const clickableNN = nextNextItem.find('a, button, [role="button"], .title, span').first();
-                                    (clickableNN.length > 0 ? clickableNN : nextNextItem).click();
-                                    utils.log(`[QChengKeji] Clicked next-next video item (index ${currentIndex + 2}) in list: ${listSelector}`);
-                                    clickedNext = true;
+                    if (currentIndex !== -1 && currentIndex < $items.length - 1) {
+                        const $nextItem = $($items[currentIndex + 1]);
+                        if ($nextItem.is('.completed, .is_learned, .viewed')) {
+                            utils.log(`[QChengKeji] (Generic) Next item (index ${currentIndex + 1}) in list (${listSelector}) is marked completed, trying next one.`);
+                            if (currentIndex + 2 < $items.length) {
+                                const $nextNextItem = $($items[currentIndex + 2]);
+                                if (!$nextNextItem.is('.completed, .is_learned, .viewed')) {
+                                    const $clickableNN = $nextNextItem.find('a, button, [role="button"], .title, span').first();
+                                    ($clickableNN.length > 0 ? $clickableNN : $nextNextItem)[0].click();
+                                    utils.log(`[QChengKeji] (Generic) Clicked next-next video item (index ${currentIndex + 2}) in list: ${listSelector}`);
+                                    clickedNextGeneric = true;
                                     break;
                                 }
                             }
-                            continue; // Skip to next list selector if this path fails
+                            continue;
                         }
 
-                        const clickable = nextItem.find('a, button, [role="button"], .title, span').first(); // Try to find a clickable element within
-                        if (clickable.length > 0) {
-                            clickable.click();
-                        } else {
-                            nextItem.click(); // Click the item itself
-                        }
-                        utils.log(`[QChengKeji] Clicked next video item (index ${currentIndex + 1}) in list: ${listSelector}`);
-                        clickedNext = true;
-                        break; // Exit loop over chapterListSelectors
+                        const $clickable = $nextItem.find('a, button, [role="button"], .title, span').first();
+                        ($clickable.length > 0 ? $clickable : $nextItem)[0].click();
+                        utils.log(`[QChengKeji] (Generic) Clicked next video item (index ${currentIndex + 1}) in list: ${listSelector}`);
+                        clickedNextGeneric = true;
+                        break;
                     }
                 }
+                if (clickedNextGeneric) break;
             }
-            if (clickedNext) return;
 
-            utils.log('[QChengKeji] Could not find a "next video" mechanism. Manual intervention may be needed or selectors need adjustment.');
+            if (!clickedNextGeneric) {
+                utils.log('[QChengKeji] (Generic Fallback) Could not find a "next video" mechanism. Manual intervention may be needed or selectors need adjustment.');
+            }
         }
 
         destroy() {
             if (this.videoPlayInterval) clearInterval(this.videoPlayInterval);
-            const msgDiv = document.getElementById('qchengkeji-helper-message');
+            const msgDiv = document.getElementById('qchengkeji-autoplay-helper'); // Changed ID to match new helper
             if (msgDiv) msgDiv.remove();
             utils.log('[QChengKeji] Controller destroyed.');
         }
