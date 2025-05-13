@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.5.5
+// @version      0.5.6
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -220,6 +220,200 @@
         }
     }
 
+    // 启城科技控制器
+    class QChengKejiController {
+        constructor() {
+            this.videoPlayInterval = null;
+            // this.progressCheckInterval = null; // Not used yet, can be added for progress-based next video
+        }
+
+        init() {
+            utils.log('[QChengKeji] Initializing controller.');
+            this.waitForLoginAndCaptcha();
+        }
+
+        waitForLoginAndCaptcha() {
+            utils.log('[QChengKeji] Please log in and solve the captcha on the page.');
+
+            const messageDivId = 'qchengkeji-helper-message';
+            if (!document.getElementById(messageDivId)) {
+                const messageDiv = document.createElement('div');
+                messageDiv.id = messageDivId;
+                messageDiv.innerHTML = `
+                    <p style="margin: 0 0 5px 0; font-weight: bold;">启城科技刷课助手:</p>
+                    <p style="margin: 0 0 5px 0;">请先手动登录并完成验证码。</p>
+                    <p style="margin: 0;">脚本将自动检测视频并开始播放。</p>
+                `;
+                messageDiv.style.cssText = `
+                    position: fixed; top: 10px; right: 10px; padding: 15px;
+                    background-color: #f0ad4e; color: white; border-radius: 5px;
+                    z-index: 10000; font-size: 14px; text-align: left;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                `;
+                document.body.appendChild(messageDiv);
+            }
+
+            const checkInterval = setInterval(() => {
+                const videoElement = document.querySelector('video'); // Simple check for any video element
+
+                if (videoElement) {
+                    utils.log('[QChengKeji] Video element detected. Assuming login and captcha are complete.');
+                    clearInterval(checkInterval);
+                    const msgDiv = document.getElementById(messageDivId);
+                    if (msgDiv) {
+                        msgDiv.innerHTML = '<p style="margin:0;font-weight:bold;">启城科技刷课助手:</p><p style="margin:5px 0 0 0;">视频已检测到，开始处理...</p>';
+                        msgDiv.style.backgroundColor = '#5cb85c'; // Green for success
+                        setTimeout(() => {
+                            const currentMsgDiv = document.getElementById(messageDivId);
+                            if (currentMsgDiv) currentMsgDiv.remove();
+                        }, 5000);
+                    }
+                    this.startVideoTasks();
+                } else {
+                    utils.log('[QChengKeji] Waiting for video element to appear (post-login/captcha)...');
+                    const msgDiv = document.getElementById(messageDivId);
+                    if (msgDiv && !msgDiv.innerHTML.includes('检测中')) {
+                         msgDiv.innerHTML += '<p style="margin: 5px 0 0 0; border-top: 1px solid #eea236; padding-top: 5px;">检测中，请确保您已登录并进入课程页面...</p>';
+                    }
+                }
+            }, 5000); // Check every 5 seconds
+        }
+
+        startVideoTasks() {
+            utils.log('[QChengKeji] Starting video tasks.');
+            this.initVideoPlaybackAndNext();
+        }
+
+        initVideoPlaybackAndNext() {
+            this.videoPlayInterval = setInterval(() => {
+                try {
+                    const video = $('video')[0]; // Using jQuery to select the first video element
+                    if (video) {
+                        if (video.paused) {
+                            video.play().then(() => {
+                                utils.log('[QChengKeji] Video playing.');
+                            }).catch(e => {
+                                utils.log(`[QChengKeji] Error playing video: ${e.message}. User interaction might be required to start playback.`);
+                                // Consider adding a helper button if autoplay fails consistently due to browser restrictions
+                            });
+                        }
+                        if (video.volume !== 0.01) {
+                            video.volume = 0.01;
+                            utils.log('[QChengKeji] Video volume set to 0.01.');
+                        }
+
+                        // Check for video completion to play next
+                        if (video.ended) {
+                            utils.log('[QChengKeji] Video ended. Attempting to play next.');
+                            this.playNextVideo();
+                        }
+                    } else {
+                        // This log can be noisy if the video element briefly disappears during page transitions
+                        // utils.log('[QChengKeji] Video element not found in interval.');
+                    }
+                } catch (err) {
+                    utils.log(`[QChengKeji] Error in video playback interval: ${err.message}`);
+                }
+            }, 3000); // Check every 3 seconds
+        }
+
+        playNextVideo() {
+            utils.log('[QChengKeji] Attempting to find and click next video.');
+            let clickedNext = false;
+
+            // Attempt 1: Look for a "next" button
+            // These selectors are generic and cover common patterns. Specific selectors for the site would be more reliable.
+            const nextButtonSelectors = [
+                'button:contains("下一节")', 'button:contains("Next")', 'a:contains("下一节")', 'a:contains("Next")',
+                '.next-video', '.icon-next', '[class*="next"]', '[aria-label*="Next"]', '[title*="Next"]', '[title*="下一"]',
+                '.vjs-next-button', // Common for video.js
+                '#nextButton', '#btnNext', '.next_button', '.next-btn',
+                '.nextChapter', '.next_video_button', '.jw-button-container .jw-icon-next', // JW Player
+                '.navigation-button-next', '.pagination-next a'
+            ];
+
+            for (const selector of nextButtonSelectors) {
+                const buttons = $(selector).filter(':visible'); // Prefer visible buttons
+                if (buttons.length > 0) {
+                    buttons.first().click();
+                    utils.log(`[QChengKeji] Clicked visible "next" button with selector: ${selector}`);
+                    clickedNext = true;
+                    break;
+                }
+                // If no visible button found, try non-visible ones as a fallback
+                if (!clickedNext) {
+                    const hiddenButtons = $(selector);
+                    if (hiddenButtons.length > 0) {
+                        hiddenButtons.first().click();
+                        utils.log(`[QChengKeji] Clicked (possibly hidden) "next" button with selector: ${selector}`);
+                        clickedNext = true;
+                        break;
+                    }
+                }
+            }
+            if (clickedNext) return;
+
+            // Attempt 2: Look for a list of videos/chapters and click the next uncompleted one
+            const chapterListSelectors = [
+                '.chapter-list li', '.video-list-item', '.playlist-item', '.toc-item',
+                '.course-menu ul li', '.lesson-list .item', '.index_item.video', '.video_list li'
+            ];
+
+            for (const listSelector of chapterListSelectors) {
+                const items = $(listSelector);
+                if (items.length > 0) {
+                    let currentIndex = -1;
+                    items.each(function(index) {
+                        // Identify current item by common classes indicating active/current state
+                        if ($(this).is('.active, .current, .playing, .on, .is-current, .current_play, .cur, .current_lesson')) {
+                            currentIndex = index;
+                            return false; // break .each
+                        }
+                    });
+
+                    if (currentIndex !== -1 && currentIndex < items.length - 1) {
+                        const nextItem = $(items[currentIndex + 1]);
+                        // Check if next item is marked as completed (skip if so, though ideally it shouldn't be 'next')
+                        if (nextItem.is('.completed, .is_learned, .viewed')) {
+                             utils.log(`[QChengKeji] Next item (index ${currentIndex + 1}) in list (${listSelector}) is marked completed, trying next one.`);
+                             if (currentIndex + 2 < items.length) {
+                                 const nextNextItem = $(items[currentIndex + 2]);
+                                 if (!nextNextItem.is('.completed, .is_learned, .viewed')) {
+                                     const clickableNN = nextNextItem.find('a, button, [role="button"], .title, span').first();
+                                     (clickableNN.length > 0 ? clickableNN : nextNextItem).click();
+                                     utils.log(`[QChengKeji] Clicked next-next video item (index ${currentIndex + 2}) in list: ${listSelector}`);
+                                     clickedNext = true;
+                                     break;
+                                 }
+                             }
+                             continue; // Skip to next list selector if this path fails
+                        }
+
+                        const clickable = nextItem.find('a, button, [role="button"], .title, span').first(); // Try to find a clickable element within
+                        if (clickable.length > 0) {
+                            clickable.click();
+                        } else {
+                            nextItem.click(); // Click the item itself
+                        }
+                        utils.log(`[QChengKeji] Clicked next video item (index ${currentIndex + 1}) in list: ${listSelector}`);
+                        clickedNext = true;
+                        break; // Exit loop over chapterListSelectors
+                    }
+                }
+            }
+            if (clickedNext) return;
+
+            utils.log('[QChengKeji] Could not find a "next video" mechanism. Manual intervention may be needed or selectors need adjustment.');
+        }
+
+        destroy() {
+            if (this.videoPlayInterval) clearInterval(this.videoPlayInterval);
+            const msgDiv = document.getElementById('qchengkeji-helper-message');
+            if (msgDiv) msgDiv.remove();
+            utils.log('[QChengKeji] Controller destroyed.');
+        }
+    }
+
     // 修改 SmartEduController 类
     class SmartEduController {
         constructor() {
@@ -406,11 +600,15 @@
         const pageTitle = document.title;
         utils.log(`当前页面: ${pageTitle}`);
 
-        if (utils.isSmartEduPage()) {
+        if (utils.isChengKejiPahe()) { // Check for QChengKeji first
+            utils.log('[QChengKeji] Page detected by URL.');
+            const qchengController = new QChengKejiController();
+            qchengController.init();
+        } else if (utils.isSmartEduPage()) {
             // SmartEdu 课程处理
             const smartEduController = new SmartEduController();
             smartEduController.init();
-        } else if (utils.isLivePage() || utils.isChengKejiPahe()) {
+        } else if (utils.isLivePage()) {
             // 直播页面处理
             const liveController = new LiveController();
             liveController.init();
