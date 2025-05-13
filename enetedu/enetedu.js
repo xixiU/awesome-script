@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.5.8.2
+// @version      0.5.8.3
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -244,7 +244,7 @@
                 transform: translateX(-50%);
                 z-index: 10000;
                 padding: 10px 20px;
-                background: #FF9800;
+                background: #FF9800; /* Orange for autoplay */
                 color: white;
                 border: none;
                 border-radius: 5px;
@@ -266,9 +266,48 @@
             utils.log('[QChengKeji] Added autoplay helper button. Please click it to start.');
         }
 
+        createCaptchaMessage() {
+            if (document.getElementById('qchengkeji-captcha-message')) return;
+            const msgDiv = document.createElement('div');
+            msgDiv.id = 'qchengkeji-captcha-message';
+            msgDiv.innerHTML = 'CAPTCHA 检测到! 请手动解决以继续。';
+            msgDiv.style.cssText = `
+                position: fixed; top: 100px; left: 50%; transform: translateX(-50%);
+                padding: 15px; background-color: #f44336; /* Red for CAPTCHA */
+                color: white; z-index: 10001;
+                border-radius: 5px; text-align: center; font-size: 16px;
+            `;
+            document.body.appendChild(msgDiv);
+            utils.log('[QChengKeji] CAPTCHA message displayed.');
+        }
+
+        removeCaptchaMessage() {
+            const msgDiv = document.getElementById('qchengkeji-captcha-message');
+            if (msgDiv) {
+                msgDiv.remove();
+                utils.log('[QChengKeji] CAPTCHA message removed.');
+            }
+        }
+
         initVideoPlaybackAndNext() {
             this.videoPlayInterval = setInterval(() => {
                 try {
+                    // Check for CAPTCHA modal first
+                    const $captchaContent = $('div.layui-layer-page:visible .layui-layer-content');
+                    if ($captchaContent.length > 0 &&
+                        ($captchaContent.find('img[src*="captcha"]').length > 0 ||
+                            $captchaContent.text().includes("请输入验证码") ||
+                            $captchaContent.text().includes("确认是本人在操作"))) {
+                        utils.log('[QChengKeji] CAPTCHA detected. Please solve it manually.');
+                        this.createCaptchaMessage();
+                        // Ensure autoplay helper is removed if CAPTCHA appears over it or at the same time
+                        const autoPlayHelper = document.getElementById('qchengkeji-autoplay-helper');
+                        if (autoPlayHelper) autoPlayHelper.remove();
+                        return; // Pause operations until CAPTCHA is solved
+                    } else {
+                        this.removeCaptchaMessage(); // Remove message if CAPTCHA is no longer visible
+                    }
+
                     const video = $('video')[0];
                     if (video) {
                         if (video.paused && !video.ended) {
@@ -322,6 +361,9 @@
             if ($currentLink.length) {
                 $currentItem = $currentLink.closest('.item');
             } else {
+                // Fallback: if no .sel or .on, try to find any .item and assume the first one if nothing else indicates current
+                // This part is tricky without a clear "current" marker if .sel/.on is missing.
+                // For now, if .sel or .on is missing, we might be on a page where this logic isn't robust.
                 utils.log('[QChengKeji] Could not reliably determine the current active item via .sel or .on classes. Falling back to generic.');
                 this.playNextVideoGeneric();
                 return;
@@ -337,7 +379,7 @@
 
             if ($nextItemAnchor.length) {
                 utils.log(`[QChengKeji] Found next item in current list: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}". Clicking.`);
-                $nextItemAnchor[0].click();
+                $nextItemAnchor[0].click(); // Use native click
                 clickedNext = true;
             } else {
                 const $currentGroup = $currentItem.closest('.group');
@@ -347,7 +389,7 @@
                         $nextItemAnchor = $nextGroup.find('.list .item:first a').first();
                         if ($nextItemAnchor.length) {
                             utils.log(`[QChengKeji] No more items in current group. Found next group, clicking first item: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}".`);
-                            $nextItemAnchor[0].click();
+                            $nextItemAnchor[0].click(); // Use native click
                             clickedNext = true;
                         } else {
                             utils.log('[QChengKeji] Found next group, but no clickable items in its list.');
@@ -381,7 +423,7 @@
             for (const selector of nextButtonSelectors) {
                 const $buttons = $(selector).filter(':visible');
                 if ($buttons.length > 0) {
-                    $buttons.first()[0].click();
+                    $buttons.first()[0].click(); // Use native click
                     utils.log(`[QChengKeji] (Generic) Clicked visible "next" button with selector: ${selector}`);
                     clickedNextGeneric = true;
                     break;
@@ -389,7 +431,7 @@
                 if (!clickedNextGeneric) {
                     const $hiddenButtons = $(selector);
                     if ($hiddenButtons.length > 0) {
-                        $hiddenButtons.first()[0].click();
+                        $hiddenButtons.first()[0].click(); // Use native click
                         utils.log(`[QChengKeji] (Generic) Clicked (possibly hidden) "next" button with selector: ${selector}`);
                         clickedNextGeneric = true;
                         break;
@@ -422,7 +464,7 @@
                                 const $nextNextItem = $($items[currentIndex + 2]);
                                 if (!$nextNextItem.is('.completed, .is_learned, .viewed')) {
                                     const $clickableNN = $nextNextItem.find('a, button, [role="button"], .title, span').first();
-                                    ($clickableNN.length > 0 ? $clickableNN : $nextNextItem)[0].click();
+                                    ($clickableNN.length > 0 ? $clickableNN : $nextNextItem)[0].click(); // Use native click
                                     utils.log(`[QChengKeji] (Generic) Clicked next-next video item (index ${currentIndex + 2}) in list: ${listSelector}`);
                                     clickedNextGeneric = true;
                                     break;
@@ -432,7 +474,7 @@
                         }
 
                         const $clickable = $nextItem.find('a, button, [role="button"], .title, span').first();
-                        ($clickable.length > 0 ? $clickable : $nextItem)[0].click();
+                        ($clickable.length > 0 ? $clickable : $nextItem)[0].click(); // Use native click
                         utils.log(`[QChengKeji] (Generic) Clicked next video item (index ${currentIndex + 1}) in list: ${listSelector}`);
                         clickedNextGeneric = true;
                         break;
@@ -448,8 +490,9 @@
 
         destroy() {
             if (this.videoPlayInterval) clearInterval(this.videoPlayInterval);
-            const msgDiv = document.getElementById('qchengkeji-autoplay-helper'); // Changed ID to match new helper
-            if (msgDiv) msgDiv.remove();
+            const autoPlayHelper = document.getElementById('qchengkeji-autoplay-helper');
+            if (autoPlayHelper) autoPlayHelper.remove();
+            this.removeCaptchaMessage(); // Ensure CAPTCHA message is removed on destroy
             utils.log('[QChengKeji] Controller destroyed.');
         }
     }
