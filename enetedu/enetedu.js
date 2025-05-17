@@ -575,7 +575,7 @@
 
                 // 计算下一个随机延迟时间 (10000ms 到 30000ms)
                 const minDelay = 10000; // 10 秒
-                const maxDelay = 30000; // 30 秒
+                const maxDelay = 600000; // 600 秒
                 const randomDelay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
 
                 if (typeof utils !== 'undefined' && typeof utils.log === 'function') {
