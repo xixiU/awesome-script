@@ -49,7 +49,6 @@ def recognize_captcha():
         result = ocr.classification(image_bytes)
 
         # 直接返回识别结果字符串
-        # 如果希望返回JSON格式，可以使用 jsonify({"result": result})
         return jsonify({"result": result})
 
     except Exception as e:
