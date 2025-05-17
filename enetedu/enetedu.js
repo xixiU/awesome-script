@@ -276,7 +276,6 @@
 
                             // 识别验证码
                             const $captchaInput = $captchaContent.find('input[type="text"]:visible');
-                            const $playButton = $('.layui-layer-btn0');
 
                             if ($captchaContent.length > 0) {
                                 const $captchaImg = $captchaContent.find('img[src*="/service/code/"]:visible');
@@ -311,6 +310,8 @@
                                                         utils.log(`[QChengKeji] Captcha recognized: ${captchaText}`);
                                                         $captchaInput.val(captchaText);
                                                         utils.log('[QChengKeji] Filled captcha input. Clicking play button.');
+                                                        const $playButton = $('.layui-layer-btn0');
+
                                                         utils.log(`playButton.length：${$playButton.length}`);
 
                                                         if ($playButton.length > 0) {
@@ -380,7 +381,7 @@
                             utils.log('[QChengKeji] set video volume 0.01');
                         }
 
-                        if (video.ended) {
+                        if (video.ended || video.currentTime / video.duration > 0.95) {
                             utils.log('[QChengKeji] Video ended. Attempting to play next.');
                             this.playNextVideo();
                         }
@@ -388,7 +389,7 @@
                 } catch (err) {
                     utils.log(`[QChengKeji] Error in video playback interval: ${err.message}`);
                 }
-            }, 5000);
+            }, 3000);
         }
 
         playNextVideo() {
