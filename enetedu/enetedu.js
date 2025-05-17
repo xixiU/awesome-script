@@ -315,11 +315,44 @@
                                                         utils.log(`playButton.length：${$playButton.length}`);
 
                                                         if ($playButton.length > 0) {
-                                                            $playButton.click();
-                                                            utils.log(`continue to play.`);
+                                                            const buttonElement = $playButton[0]; // 获取原生DOM元素
+                                                            const currentWindow = document.defaultView; // 使用 document.defaultView
+
+                                                            if (!currentWindow) {
+                                                                utils.error('[QChengKeji] Failed to get defaultView (window object).');
+                                                                return; // 或者尝试回退到 window，或者抛出错误
+                                                            }
+                                                            // 尝试发送mousedown和mouseup事件，有些复杂的按钮依赖这个顺序
+                                                            const downEvent = new MouseEvent('mousedown', {
+                                                                bubbles: true,
+                                                                cancelable: true,
+                                                                view: currentWindow
+                                                            });
+                                                            buttonElement.dispatchEvent(downEvent);
+
+                                                            // 可以加一个极小的延时
+                                                            setTimeout(function () {
+                                                                const upEvent = new MouseEvent('mouseup', {
+                                                                    bubbles: true,
+                                                                    cancelable: true,
+                                                                    view: currentWindow
+                                                                });
+                                                                buttonElement.dispatchEvent(upEvent);
+
+                                                                // 再尝试一次click事件，或者有时候mousedown/up就够了
+                                                                const clickEvent = new MouseEvent('click', {
+                                                                    bubbles: true,
+                                                                    cancelable: true,
+                                                                    view: currentWindow
+                                                                });
+                                                                buttonElement.dispatchEvent(clickEvent);
+
+                                                                utils.log('Dispatched mousedown, mouseup, and click events.');
+
+                                                            }, 50); // 短暂延时
 
                                                         } else {
-                                                            console.error('[QChengKeji] Play button .layui-layer-btn0 not found after recognition.');
+                                                            utils.error('Play button .layui-layer-btn0 not found after recognition.');
                                                         }
                                                     } else {
                                                         console.error('[QChengKeji] Captcha recognition response missing result:', result);
