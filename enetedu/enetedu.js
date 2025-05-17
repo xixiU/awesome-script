@@ -314,8 +314,6 @@
                                                         utils.log('[QChengKeji] Filled captcha input. Clicking play button.');
                                                         const $playButton = $('.layui-layer-btn0');
 
-                                                        utils.log(`playButton.length：${$playButton.length}`);
-
                                                         if ($playButton.length > 0) {
                                                             const buttonElement = $playButton[0]; // 获取原生DOM元素
                                                             const currentWindow = document.defaultView; // 使用 document.defaultView
@@ -440,7 +438,7 @@
                         clientY: randomY,
                         bubbles: true,
                         cancelable: true,
-                        view: window
+                        view: document.defaultView
                     };
 
                     document.dispatchEvent(new MouseEvent('mousemove', eventOptions));
