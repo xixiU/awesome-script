@@ -240,52 +240,52 @@
             utils.log('[QChengKeji] Applying anti-cheat bypasses.');
 
             // Bypass multi-page detection by modifying localStorage and cookie methods
-            try {
-                const originalLocalStorageSetItem = window.localStorage.setItem;
-                window.localStorage.setItem = function(key, value) {
-                    if (key.startsWith('node_play_')) {
-                        utils.log(`[QChengKeji] Blocked localStorage.setItem for key: ${key}`);
-                        return; // Block setting play state
-                    }
-                    originalLocalStorageSetItem.call(this, key, value);
-                };
+            // try {
+            //     const originalLocalStorageSetItem = window.localStorage.setItem;
+            //     window.localStorage.setItem = function(key, value) {
+            //         if (key.startsWith('node_play_')) {
+            //             utils.log(`[QChengKeji] Blocked localStorage.setItem for key: ${key}`);
+            //             return; // Block setting play state
+            //         }
+            //         originalLocalStorageSetItem.call(this, key, value);
+            //     };
 
-                const originalLocalStorageGetItem = window.localStorage.getItem;
-                window.localStorage.getItem = function(key) {
-                     if (key.startsWith('node_play_')) {
-                        utils.log(`[QChengKeji] Faked localStorage.getItem for key: ${key}`);
-                        return null; // Fake no other page is playing
-                    }
-                    return originalLocalStorageGetItem.call(this, key);
-                };
+            //     const originalLocalStorageGetItem = window.localStorage.getItem;
+            //     window.localStorage.getItem = function(key) {
+            //          if (key.startsWith('node_play_')) {
+            //             utils.log(`[QChengKeji] Faked localStorage.getItem for key: ${key}`);
+            //             return null; // Fake no other page is playing
+            //         }
+            //         return originalLocalStorageGetItem.call(this, key);
+            //     };
 
-                 const originalCookieSet = document.cookie.__lookupSetter__('cookie');
-                 document.__defineSetter__('cookie', function(value) {
-                     if (value.includes('node_play_')) {
-                         utils.log(`[QChengKeji] Blocked document.cookie set for play state`);
-                         return; // Block setting play state cookie
-                     }
-                     originalCookieSet.call(this, value);
-                 });
+            //      const originalCookieSet = document.cookie.__lookupSetter__('cookie');
+            //      document.__defineSetter__('cookie', function(value) {
+            //          if (value.includes('node_play_')) {
+            //              utils.log(`[QChengKeji] Blocked document.cookie set for play state`);
+            //              return; // Block setting play state cookie
+            //          }
+            //          originalCookieSet.call(this, value);
+            //      });
 
-                 const originalCookieGet = document.cookie.__lookupGetter__('cookie');
-                 document.__defineGetter__('cookie', function() {
-                     const cookie = originalCookieGet.call(this);
-                     if (cookie.includes('node_play_')) {
-                          utils.log(`[QChengKeji] Faked document.cookie get for play state`);
-                          return cookie.replace(/node_play_[^;]+;?\s*/g, ''); // Remove play state cookie
-                     }
-                     return cookie;
-                 });
+            //      const originalCookieGet = document.cookie.__lookupGetter__('cookie');
+            //      document.__defineGetter__('cookie', function() {
+            //          const cookie = originalCookieGet.call(this);
+            //          if (cookie.includes('node_play_')) {
+            //               utils.log(`[QChengKeji] Faked document.cookie get for play state`);
+            //               return cookie.replace(/node_play_[^;]+;?\s*/g, ''); // Remove play state cookie
+            //          }
+            //          return cookie;
+            //      });
 
-                utils.log('[QChengKeji] localStorage and cookie methods modified for multi-page bypass.');
-            } catch (e) {
-                utils.log(`[QChengKeji] Failed to modify localStorage or cookie methods: ${e.message}`);
-            }
+            //     utils.log('[QChengKeji] localStorage and cookie methods modified for multi-page bypass.');
+            // } catch (e) {
+            //     utils.log(`[QChengKeji] Failed to modify localStorage or cookie methods: ${e.message}`);
+            // }
 
 
             // Intercept AJAX requests to modify studyTime
-            $(document).ajaxSend(function(event, jqxhr, settings) {
+            $(document).ajaxSend(function (event, jqxhr, settings) {
                 if (settings.url && settings.url.includes('/user/node/study') && settings.type === 'POST') {
                     try {
                         // settings.data could be a string or an object
@@ -300,37 +300,37 @@
                                 utils.log(`[QChengKeji] Intercepted /user/node/study AJAX. Changed studyTime from ${originalStudyTime} to 9999.`);
                             }
                         } else if (typeof data === 'object') {
-                             if (data.hasOwnProperty('studyTime')) {
-                                 const originalStudyTime = data.studyTime;
-                                 data.studyTime = 9999; // Force studyTime to a high value
-                                 utils.log(`[QChengKeji] Intercepted /user/node/study AJAX. Changed studyTime from ${originalStudyTime} to 9999.`);
-                             }
+                            if (data.hasOwnProperty('studyTime')) {
+                                const originalStudyTime = data.studyTime;
+                                data.studyTime = 9999; // Force studyTime to a high value
+                                utils.log(`[QChengKeji] Intercepted /user/node/study AJAX. Changed studyTime from ${originalStudyTime} to 9999.`);
+                            }
                         }
                     } catch (e) {
                         utils.log(`[QChengKeji] Error modifying AJAX data: ${e.message}`);
                     }
                 }
             });
-             utils.log('[QChengKeji] AJAX send listener added to modify studyTime.');
+            utils.log('[QChengKeji] AJAX send listener added to modify studyTime.');
 
 
             // Bypass sendBeacon on page unload
             try {
                 if (typeof navigator.sendBeacon === 'function') {
                     const originalSendBeacon = navigator.sendBeacon;
-                    navigator.sendBeacon = function(url, data) {
+                    navigator.sendBeacon = function (url, data) {
                         if (url && url.includes('/user/node/study')) {
                             utils.log('[QChengKeji] Blocked navigator.sendBeacon for study data.');
                             return true; // Indicate success without sending
                         }
                         return originalSendBeacon.call(this, url, data);
                     };
-                     utils.log('[QChengKeji] navigator.sendBeacon method modified.');
+                    utils.log('[QChengKeji] navigator.sendBeacon method modified.');
                 } else {
-                     utils.log('[QChengKeji] navigator.sendBeacon not available.');
+                    utils.log('[QChengKeji] navigator.sendBeacon not available.');
                 }
             } catch (e) {
-                 utils.log(`[QChengKeji] Failed to modify navigator.sendBeacon: ${e.message}`);
+                utils.log(`[QChengKeji] Failed to modify navigator.sendBeacon: ${e.message}`);
             }
 
         }
