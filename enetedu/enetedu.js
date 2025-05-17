@@ -270,24 +270,27 @@
             this.videoPlayInterval = setInterval(() => {
                 try {
 
-                    const video = $('video')[0];
+                    const video = $('video')[0]; ``
                     if (video) {
                         if (video.paused && !video.ended) {
-                            video.muted = true; // Mute before attempting to play
-                            const playPromise = video.play();
-                            const $captchaInput = $('input[type="text"]:visible');
+                            const $captchaContent = $('div.layui-layer-page:visible .layui-layer-content');
+
+                            // 识别验证码
+                            const $captchaInput = $captchaContent.find('input[type="text"]:visible');
                             const $playButton = $('.layui-layer-btn0');
 
-                            if ($captchaInput.length > 0 && $captchaInput.val() !== '') {
+                            if ($captchaContent.length > 0 && $captchaInput.val() !== '') {
                                 utils.log('[QChengKeji] Captcha input is not empty. Clicking play button.');
                                 if ($playButton.length) {
                                     $playButton.click();
                                 } else {
                                     console.error('[QChengKeji] Play button .layui-layer-btn0 not found.');
                                 }
-                            } else if ($captchaInput.length === 0) {
+                            } else if ($captchaContent.length == 0) {
                                 // No captcha input field, attempt to play video
                                 utils.log('[QChengKeji] No captcha input field detected. Attempting to play video.');
+                                video.muted = true; // Mute before attempting to play
+                                video.volume = 0.01;
                                 const playPromise = video.play();
                                 if (playPromise !== undefined) {
                                     playPromise.then(() => {
@@ -314,9 +317,9 @@
                         } else if (!video.paused && !video.muted && video.volume !== 0.01) {
                             // Ensure volume is set if video is already playing and not muted
                             video.volume = 0.01;
-                            utils.log('[QChengKeji] Video volume set to 0.01.');
-                        }
+                            utils.log('[QChengKeji] set video volume 0.01');
 
+                        }
 
                         if (video.ended) {
                             utils.log('[QChengKeji] Video ended. Attempting to play next.');
@@ -326,7 +329,7 @@
                 } catch (err) {
                     utils.log(`[QChengKeji] Error in video playback interval: ${err.message}`);
                 }
-            }, 3000);
+            }, 5000);
         }
 
         playNextVideo() {
