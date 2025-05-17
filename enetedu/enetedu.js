@@ -8,7 +8,7 @@
 // @match        huiyi.enetedu.com/liveWacth/*
 // @match        *.smartedu.cn/p/course/*
 // @match        bwgl.qchengkeji.com/user/node?nodeId=*
-// @grant        none
+// @grant        GM.xmlHttpRequest
 // @require      https://cdn.bootcss.com/jquery/3.2.1/jquery.min.js
 // @require      https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js
 // @license MIT
@@ -279,14 +279,81 @@
                             const $captchaInput = $captchaContent.find('input[type="text"]:visible');
                             const $playButton = $('.layui-layer-btn0');
 
-                            if ($captchaContent.length > 0 && $captchaInput.val() !== '') {
-                                utils.log('[QChengKeji] Captcha input is not empty. Clicking play button.');
-                                if ($playButton.length) {
-                                    $playButton.click();
+                            if ($captchaContent.length > 0) {
+                                const $captchaImg = $captchaContent.find('img[src*="/service/code/"]:visible');
+                                const captchaSrc = $captchaImg.attr('src');
+
+                                if (captchaSrc) {
+                                    const img = new Image();
+                                    utils.log(`captchaSrc:${captchaSrc}`);
+
+                                    img.crossOrigin = 'Anonymous';
+                                    img.onload = () => {
+                                        const canvas = document.createElement('canvas');
+                                        canvas.width = img.width;
+                                        canvas.height = img.height;
+                                        const ctx = canvas.getContext('2d');
+                                        ctx.drawImage(img, 0, 0);
+                                        const base64Image = canvas.toDataURL('image/png').split(',')[1];
+                                        // Execute Python script for captcha recognition
+                                        // Note: This requires the user to have a local server running at the specified URL
+                                        // and the recognize_captcha.py script in the awesome-script directory.
+                                        // The execute_command tool output will contain the recognized text.
+                                        // We need to handle the output and fill the input field.
+                                        // This part needs to be handled asynchronously.
+                                        utils.log('[QChengKeji] Captcha image loaded. Sending for recognition.');
+                                        GM.xmlHttpRequest({
+                                            method: "POST",
+                                            url: "http://127.0.0.1:9876/recognize_captcha",
+                                            headers: {
+                                                "Content-Type": "application/json"
+                                            },
+                                            data: JSON.stringify({ image_base64: base64Image }),
+                                            onload: function (response) {
+                                                try {
+                                                    const result = JSON.parse(response.responseText);
+                                                    if (result && result.result) {
+                                                        const captchaText = result.result;
+                                                        utils.log(`[QChengKeji] Captcha recognized: ${captchaText}`);
+                                                        $captchaInput.val(captchaText);
+                                                        utils.log('[QChengKeji] Filled captcha input. Clicking play button.');
+                                                        utils.log(`playButton.length：${playButton.length}`);
+
+                                                        if ($playButton.length) {
+                                                            $playButton.click();
+                                                        } else {
+                                                            console.error('[QChengKeji] Play button .layui-layer-btn0 not found after recognition.');
+                                                        }
+                                                    } else {
+                                                        console.error('[QChengKeji] Captcha recognition response missing result:', result);
+                                                        utils.log('[QChengKeji] Captcha recognition failed. Manual input required.');
+                                                    }
+                                                } catch (e) {
+                                                    console.error('[QChengKeji] Error parsing recognition response:', e);
+                                                    utils.log('[QChengKeji] Error processing recognition response. Manual input required.');
+                                                }
+                                            },
+                                            onerror: function (response) {
+                                                console.error('[QChengKeji] Captcha recognition request failed:', response.status, response.statusText);
+                                                utils.log('[QChengKeji] Captcha recognition request failed. Manual input required.');
+                                            },
+                                            ontimeout: function () {
+                                                console.error('[QChengKeji] Captcha recognition request timed out.');
+                                                utils.log('[QChengKeji] Captcha recognition request timed out. Manual input required.');
+                                            }
+                                        });
+                                    };
+                                    img.onerror = () => {
+                                        console.error('[QChengKeji] Failed to load CAPTCHA image for recognition.');
+                                        utils.log('[QChengKeji] Failed to load CAPTCHA image. Manual input required.');
+                                    };
+                                    img.src = "https://bwgl.qchengkeji.com" + captchaSrc;
                                 } else {
-                                    console.error('[QChengKeji] Play button .layui-layer-btn0 not found.');
+                                    console.error('[QChengKeji] CAPTCHA image not found.');
+                                    utils.log('[QChengKeji] CAPTCHA image not found. Manual input required.');
                                 }
-                            } else if ($captchaContent.length == 0) {
+
+                            } else {
                                 // No captcha input field, attempt to play video
                                 utils.log('[QChengKeji] No captcha input field detected. Attempting to play video.');
                                 video.muted = true; // Mute before attempting to play
@@ -310,8 +377,6 @@
                                         }
                                     });
                                 }
-                            } else {
-                                utils.log('[QChengKeji] Captcha input field is visible but empty. Waiting for input.');
                             }
 
                         } else if (!video.paused && !video.muted && video.volume !== 0.01) {
