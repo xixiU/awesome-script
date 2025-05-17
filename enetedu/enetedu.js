@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.5.8.5
+// @version      0.5.8.6
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -224,11 +224,13 @@
     class QChengKejiController {
         constructor() {
             this.videoPlayInterval = null;
+            this.mouseMoveInterval = null;
         }
 
         startVideoTasks() {
             utils.log('[QChengKeji] Starting video tasks.');
             this.initVideoPlaybackAndNext();
+            this.startMouseMoveSimulation();
         }
 
         createAutoPlayHelper(videoElement) {
@@ -423,6 +425,28 @@
                     utils.log(`[QChengKeji] Error in video playback interval: ${err.message}`);
                 }
             }, 3000);
+        }
+
+        startMouseMoveSimulation() {
+            this.mouseMoveInterval = setInterval(() => {
+                const video = $('video')[0];
+                if (video && !video.paused && !video.ended) {
+                    const videoRect = video.getBoundingClientRect();
+                    const randomX = videoRect.left + videoRect.width * Math.random();
+                    const randomY = videoRect.top + videoRect.height * Math.random();
+
+                    const eventOptions = {
+                        clientX: randomX,
+                        clientY: randomY,
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    };
+
+                    document.dispatchEvent(new MouseEvent('mousemove', eventOptions));
+                    utils.log(`[QChengKeji] Dispatched mousemove to ${randomX.toFixed(2)}, ${randomY.toFixed(2)}`); // Optional: log mouse movements
+                }
+            }, 5000); // Dispatch mousemove every 5 seconds
         }
 
         playNextVideo() {
