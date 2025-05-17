@@ -270,7 +270,7 @@
             this.videoPlayInterval = setInterval(() => {
                 try {
 
-                    const video = $('video')[0]; ``
+                    const video = $('video')[0];
                     if (video) {
                         if (video.paused && !video.ended) {
                             const $captchaContent = $('div.layui-layer-page:visible .layui-layer-content');
@@ -295,12 +295,7 @@
                                         const ctx = canvas.getContext('2d');
                                         ctx.drawImage(img, 0, 0);
                                         const base64Image = canvas.toDataURL('image/png').split(',')[1];
-                                        // Execute Python script for captcha recognition
-                                        // Note: This requires the user to have a local server running at the specified URL
-                                        // and the recognize_captcha.py script in the awesome-script directory.
-                                        // The execute_command tool output will contain the recognized text.
-                                        // We need to handle the output and fill the input field.
-                                        // This part needs to be handled asynchronously.
+
                                         utils.log('[QChengKeji] Captcha image loaded. Sending for recognition.');
                                         GM.xmlHttpRequest({
                                             method: "POST",
