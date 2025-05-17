@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.5.8.7
+// @version      0.5.8.6
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -386,13 +386,10 @@
                             } else {
                                 // No captcha input field, attempt to play video
                                 utils.log('[QChengKeji] No captcha input field detected. Attempting to play video.');
-                                video.muted = true; // Mute before attempting to play
                                 video.volume = 0.01;
                                 const playPromise = video.play();
                                 if (playPromise !== undefined) {
                                     playPromise.then(() => {
-                                        utils.log('[QChengKeji] Video playing.');
-                                        video.muted = false; // Unmute after successful playback
                                         video.volume = 0.01; // Set desired volume
                                         utils.log('[QChengKeji] Video unmuted and volume set to 0.01.');
                                         const helperButton = document.getElementById('qchengkeji-autoplay-helper');
@@ -472,6 +469,7 @@
                         }
                     }
                 }
+
                 // 计算下一个随机延迟时间 (10000ms 到 30000ms)
                 const minDelay = 10000; // 10 秒
                 const maxDelay = 30000; // 30 秒
@@ -503,254 +501,240 @@
             this.mouseMoveTimeout = setTimeout(simulateAndScheduleNext, initialRandomDelay);
         }
 
-        // 你还需要一个方法来停止这个模拟，例如：
-        stopMouseMoveSimulation() {
-            if (this.mouseMoveTimeout) {
-                clearTimeout(this.mouseMoveTimeout);
-                this.mouseMoveTimeout = null;
-                if (typeof utils !== 'undefined' && typeof utils.log === 'function') {
-                    utils.log('[QChengKeji] Mouse move simulation stopped.');
-                } else {
-                    console.log('[QChengKeji] Mouse move simulation stopped.');
-                }
+        playNextVideo() {
+            utils.log('[QChengKeji] Attempting to find and click next video (specific structure).');
+            let clickedNext = false;
+            const $navList = $('.detmain-navlist');
+
+            if (!$navList.length) {
+                utils.log('[QChengKeji] .detmain-navlist not found. Falling back to generic.');
+                this.playNextVideoGeneric();
+                return;
             }
-        }
-    }
 
-    playNextVideo() {
-        utils.log('[QChengKeji] Attempting to find and click next video (specific structure).');
-        let clickedNext = false;
-        const $navList = $('.detmain-navlist');
+            let $currentLink = $navList.find('.item.sel a.on, .item.sel a, .item a.on').first();
+            let $currentItem;
 
-        if (!$navList.length) {
-            utils.log('[QChengKeji] .detmain-navlist not found. Falling back to generic.');
-            this.playNextVideoGeneric();
-            return;
-        }
-
-        let $currentLink = $navList.find('.item.sel a.on, .item.sel a, .item a.on').first();
-        let $currentItem;
-
-        if ($currentLink.length) {
-            $currentItem = $currentLink.closest('.item');
-        } else {
-            // Fallback: if no .sel or .on, try to find any .item and assume the first one if nothing else indicates current
-            // This part is tricky without a clear "current" marker if .sel/.on is missing.
-            // For now, if .sel or .on is missing, we might be on a page where this logic isn't robust.
-            utils.log('[QChengKeji] Could not reliably determine the current active item via .sel or .on classes. Falling back to generic.');
-            this.playNextVideoGeneric();
-            return;
-        }
-
-        if (!$currentItem.length) {
-            utils.log('[QChengKeji] Current link found, but cannot find parent .item. Falling back to generic.');
-            this.playNextVideoGeneric();
-            return;
-        }
-
-        let $nextItemAnchor = $currentItem.nextAll('.item:first').find('a').first();
-
-        if ($nextItemAnchor.length) {
-            utils.log(`[QChengKeji] Found next item in current list: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}".Clicking.`);
-            $nextItemAnchor[0].click(); // Use native click
-            clickedNext = true;
-        } else {
-            const $currentGroup = $currentItem.closest('.group');
-            if ($currentGroup.length) {
-                const $nextGroup = $currentGroup.nextAll('.group:first');
-                if ($nextGroup.length) {
-                    $nextItemAnchor = $nextGroup.find('.list .item:first a').first();
-                    if ($nextItemAnchor.length) {
-                        utils.log(`[QChengKeji] No more items in current group.Found next group, clicking first item: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}".`);
-                        $nextItemAnchor[0].click(); // Use native click
-                        clickedNext = true;
-                    } else {
-                        utils.log('[QChengKeji] Found next group, but no clickable items in its list.');
-                    }
-                } else {
-                    utils.log('[QChengKeji] No next item in current list and no subsequent group found. Potentially end of all content.');
-                }
+            if ($currentLink.length) {
+                $currentItem = $currentLink.closest('.item');
             } else {
-                utils.log('[QChengKeji] Could not find current group for the item. Structure might be different.');
+                // Fallback: if no .sel or .on, try to find any .item and assume the first one if nothing else indicates current
+                // This part is tricky without a clear "current" marker if .sel/.on is missing.
+                // For now, if .sel or .on is missing, we might be on a page where this logic isn't robust.
+                utils.log('[QChengKeji] Could not reliably determine the current active item via .sel or .on classes. Falling back to generic.');
+                this.playNextVideoGeneric();
+                return;
             }
-        }
 
-        if (!clickedNext) {
-            utils.log('[QChengKeji] Specific next video logic did not find/click a next item. Falling back to generic.');
-            this.playNextVideoGeneric();
-        }
-    }
-
-    playNextVideoGeneric() {
-        utils.log('[QChengKeji] Attempting to find and click next video (Generic Fallback).');
-        let clickedNextGeneric = false;
-
-        const nextButtonSelectors = [
-            'button:contains("下一节")', 'button:contains("Next")', 'a:contains("下一节")', 'a:contains("Next")',
-            '.next-video', '.icon-next', '[class*="next"]', '[aria-label*="Next"]', '[title*="Next"]', '[title*="下一"]',
-            '.vjs-next-button', '#nextButton', '#btnNext', '.next_button', '.next-btn',
-            '.nextChapter', '.next_video_button', '.jw-button-container .jw-icon-next',
-            '.navigation-button-next', '.pagination-next a'
-        ];
-
-        for (const selector of nextButtonSelectors) {
-            const $buttons = $(selector).filter(':visible');
-            if ($buttons.length > 0) {
-                $buttons.first()[0].click(); // Use native click
-                utils.log(`[QChengKeji](Generic) Clicked visible "next" button with selector: ${selector} `);
-                clickedNextGeneric = true;
-                break;
+            if (!$currentItem.length) {
+                utils.log('[QChengKeji] Current link found, but cannot find parent .item. Falling back to generic.');
+                this.playNextVideoGeneric();
+                return;
             }
-            if (!clickedNextGeneric) {
-                const $hiddenButtons = $(selector);
-                if ($hiddenButtons.length > 0) {
-                    $hiddenButtons.first()[0].click(); // Use native click
-                    utils.log(`[QChengKeji](Generic) Clicked(possibly hidden) "next" button with selector: ${selector} `);
-                    clickedNextGeneric = true;
-                    break;
-                }
-            }
-        }
-        if (clickedNextGeneric) return;
 
-        const chapterListSelectors = [
-            '.chapter-list li', '.video-list-item', '.playlist-item', '.toc-item',
-            '.course-menu ul li', '.lesson-list .item', '.index_item.video', '.video_list li'
-        ];
+            let $nextItemAnchor = $currentItem.nextAll('.item:first').find('a').first();
 
-        for (const listSelector of chapterListSelectors) {
-            const $items = $(listSelector);
-            if ($items.length > 0) {
-                let currentIndex = -1;
-                $items.each(function (index) {
-                    if ($(this).is('.active, .current, .playing, .on, .is-current, .current_play, .cur, .current_lesson, .sel')) {
-                        currentIndex = index;
-                        return false;
-                    }
-                });
-
-                if (currentIndex !== -1 && currentIndex < $items.length - 1) {
-                    const $nextItem = $($items[currentIndex + 1]);
-                    if ($nextItem.is('.completed, .is_learned, .viewed')) {
-                        utils.log(`[QChengKeji](Generic) Next item(index ${currentIndex + 1}) in list(${listSelector}) is marked completed, trying next one.`);
-                        if (currentIndex + 2 < $items.length) {
-                            const $nextNextItem = $($items[currentIndex + 2]);
-                            if (!$nextNextItem.is('.completed, .is_learned, .viewed')) {
-                                const $clickableNN = $nextNextItem.find('a, button, [role="button"], .title, span').first();
-                                ($clickableNN.length > 0 ? $clickableNN : $nextNextItem)[0].click(); // Use native click
-                                utils.log(`[QChengKeji](Generic) Clicked next - next video item(index ${currentIndex + 2}) in list: ${listSelector} `);
-                                clickedNextGeneric = true;
-                                break;
-                            }
+            if ($nextItemAnchor.length) {
+                utils.log(`[QChengKeji] Found next item in current list: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}".Clicking.`);
+                $nextItemAnchor[0].click(); // Use native click
+                clickedNext = true;
+            } else {
+                const $currentGroup = $currentItem.closest('.group');
+                if ($currentGroup.length) {
+                    const $nextGroup = $currentGroup.nextAll('.group:first');
+                    if ($nextGroup.length) {
+                        $nextItemAnchor = $nextGroup.find('.list .item:first a').first();
+                        if ($nextItemAnchor.length) {
+                            utils.log(`[QChengKeji] No more items in current group.Found next group, clicking first item: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}".`);
+                            $nextItemAnchor[0].click(); // Use native click
+                            clickedNext = true;
+                        } else {
+                            utils.log('[QChengKeji] Found next group, but no clickable items in its list.');
                         }
-                        continue;
+                    } else {
+                        utils.log('[QChengKeji] No next item in current list and no subsequent group found. Potentially end of all content.');
                     }
+                } else {
+                    utils.log('[QChengKeji] Could not find current group for the item. Structure might be different.');
+                }
+            }
 
-                    const $clickable = $nextItem.find('a, button, [role="button"], .title, span').first();
-                    ($clickable.length > 0 ? $clickable : $nextItem)[0].click(); // Use native click
-                    utils.log(`[QChengKeji](Generic) Clicked next video item(index ${currentIndex + 1}) in list: ${listSelector} `);
+            if (!clickedNext) {
+                utils.log('[QChengKeji] Specific next video logic did not find/click a next item. Falling back to generic.');
+                this.playNextVideoGeneric();
+            }
+        }
+
+        playNextVideoGeneric() {
+            utils.log('[QChengKeji] Attempting to find and click next video (Generic Fallback).');
+            let clickedNextGeneric = false;
+
+            const nextButtonSelectors = [
+                'button:contains("下一节")', 'button:contains("Next")', 'a:contains("下一节")', 'a:contains("Next")',
+                '.next-video', '.icon-next', '[class*="next"]', '[aria-label*="Next"]', '[title*="Next"]', '[title*="下一"]',
+                '.vjs-next-button', '#nextButton', '#btnNext', '.next_button', '.next-btn',
+                '.nextChapter', '.next_video_button', '.jw-button-container .jw-icon-next',
+                '.navigation-button-next', '.pagination-next a'
+            ];
+
+            for (const selector of nextButtonSelectors) {
+                const $buttons = $(selector).filter(':visible');
+                if ($buttons.length > 0) {
+                    $buttons.first()[0].click(); // Use native click
+                    utils.log(`[QChengKeji](Generic) Clicked visible "next" button with selector: ${selector} `);
                     clickedNextGeneric = true;
                     break;
                 }
+                if (!clickedNextGeneric) {
+                    const $hiddenButtons = $(selector);
+                    if ($hiddenButtons.length > 0) {
+                        $hiddenButtons.first()[0].click(); // Use native click
+                        utils.log(`[QChengKeji](Generic) Clicked(possibly hidden) "next" button with selector: ${selector} `);
+                        clickedNextGeneric = true;
+                        break;
+                    }
+                }
             }
-            if (clickedNextGeneric) break;
+            if (clickedNextGeneric) return;
+
+            const chapterListSelectors = [
+                '.chapter-list li', '.video-list-item', '.playlist-item', '.toc-item',
+                '.course-menu ul li', '.lesson-list .item', '.index_item.video', '.video_list li'
+            ];
+
+            for (const listSelector of chapterListSelectors) {
+                const $items = $(listSelector);
+                if ($items.length > 0) {
+                    let currentIndex = -1;
+                    $items.each(function (index) {
+                        if ($(this).is('.active, .current, .playing, .on, .is-current, .current_play, .cur, .current_lesson, .sel')) {
+                            currentIndex = index;
+                            return false;
+                        }
+                    });
+
+                    if (currentIndex !== -1 && currentIndex < $items.length - 1) {
+                        const $nextItem = $($items[currentIndex + 1]);
+                        if ($nextItem.is('.completed, .is_learned, .viewed')) {
+                            utils.log(`[QChengKeji](Generic) Next item(index ${currentIndex + 1}) in list(${listSelector}) is marked completed, trying next one.`);
+                            if (currentIndex + 2 < $items.length) {
+                                const $nextNextItem = $($items[currentIndex + 2]);
+                                if (!$nextNextItem.is('.completed, .is_learned, .viewed')) {
+                                    const $clickableNN = $nextNextItem.find('a, button, [role="button"], .title, span').first();
+                                    ($clickableNN.length > 0 ? $clickableNN : $nextNextItem)[0].click(); // Use native click
+                                    utils.log(`[QChengKeji](Generic) Clicked next - next video item(index ${currentIndex + 2}) in list: ${listSelector} `);
+                                    clickedNextGeneric = true;
+                                    break;
+                                }
+                            }
+                            continue;
+                        }
+
+                        const $clickable = $nextItem.find('a, button, [role="button"], .title, span').first();
+                        ($clickable.length > 0 ? $clickable : $nextItem)[0].click(); // Use native click
+                        utils.log(`[QChengKeji](Generic) Clicked next video item(index ${currentIndex + 1}) in list: ${listSelector} `);
+                        clickedNextGeneric = true;
+                        break;
+                    }
+                }
+                if (clickedNextGeneric) break;
+            }
+
+            if (!clickedNextGeneric) {
+                utils.log('[QChengKeji] (Generic Fallback) Could not find a "next video" mechanism. Manual intervention may be needed or selectors need adjustment.');
+            }
         }
 
-        if (!clickedNextGeneric) {
-            utils.log('[QChengKeji] (Generic Fallback) Could not find a "next video" mechanism. Manual intervention may be needed or selectors need adjustment.');
+        destroy() {
+            if (this.videoPlayInterval) clearInterval(this.videoPlayInterval);
+            const autoPlayHelper = document.getElementById('qchengkeji-autoplay-helper');
+            if (autoPlayHelper) autoPlayHelper.remove();
+            this.removeCaptchaMessage(); // Ensure CAPTCHA message is removed on destroy
+            utils.log('[QChengKeji] Controller destroyed.');
         }
     }
-
-    destroy() {
-        if (this.videoPlayInterval) clearInterval(this.videoPlayInterval);
-        const autoPlayHelper = document.getElementById('qchengkeji-autoplay-helper');
-        if (autoPlayHelper) autoPlayHelper.remove();
-        this.removeCaptchaMessage(); // Ensure CAPTCHA message is removed on destroy
-        utils.log('[QChengKeji] Controller destroyed.');
-    }
-}
 
     // 修改 SmartEduController 类
     class SmartEduController {
-    constructor() {
-        this.confirmInterval = null;
-        this.speedInterval = null;
-        this.progressCheckInterval = null;
-    }
+        constructor() {
+            this.confirmInterval = null;
+            this.speedInterval = null;
+            this.progressCheckInterval = null;
+        }
 
-    init() {
-        utils.log('初始化 SmartEdu 控制器');
-        this.initConfirmCheck();
-        this.initSpeedVolumeControl();
-        this.initProgressCheck();
-    }
+        init() {
+            utils.log('初始化 SmartEdu 控制器');
+            this.initConfirmCheck();
+            this.initSpeedVolumeControl();
+            this.initProgressCheck();
+        }
 
-    initConfirmCheck() {
-        this.confirmInterval = setInterval(() => {
-            try {
-                const confirmBtn = $('.layui-layer-btn0');
-                if (confirmBtn.length > 0) {
-                    confirmBtn.click();
-                    utils.log('点击确定按钮');
+        initConfirmCheck() {
+            this.confirmInterval = setInterval(() => {
+                try {
+                    const confirmBtn = $('.layui-layer-btn0');
+                    if (confirmBtn.length > 0) {
+                        confirmBtn.click();
+                        utils.log('点击确定按钮');
+                    }
+                } catch (err) {
+                    utils.log(`确认按钮检查出错: ${err.message} `);
                 }
-            } catch (err) {
-                utils.log(`确认按钮检查出错: ${err.message} `);
-            }
-        }, 3000);
-    }
+            }, 3000);
+        }
 
-    initSpeedVolumeControl() {
-        // 添加一个静音播放的标志
-        let autoPlayAttempted = false;
+        initSpeedVolumeControl() {
+            // 添加一个静音播放的标志
+            let autoPlayAttempted = false;
 
-        this.speedInterval = setInterval(() => {
-            try {
-                const video = document.querySelector('#video-Player video');
-                if (video) {
-                    // 首次尝试播放时，先静音播放
-                    if (!autoPlayAttempted) {
-                        video.muted = true; // 先静音
-                        video.play().then(() => {
-                            // 播放成功后，设置实际音量
-                            video.muted = false;
+            this.speedInterval = setInterval(() => {
+                try {
+                    const video = document.querySelector('#video-Player video');
+                    if (video) {
+                        // 首次尝试播放时，先静音播放
+                        if (!autoPlayAttempted) {
+                            video.muted = true; // 先静音
+                            video.play().then(() => {
+                                // 播放成功后，设置实际音量
+                                video.muted = false;
+                                video.volume = 0.01;
+                                utils.log('视频开始播放');
+                            }).catch(err => {
+                                utils.log(`自动播放失败: ${err.message} `);
+                                // 如果自动播放失败，添加点击事件监听器
+                                if (!document.getElementById('autoPlayHelper')) {
+                                    this.createAutoPlayHelper();
+                                }
+                            });
+                            autoPlayAttempted = true;
+                        }
+
+                        // 设置播放速度
+                        if (video.playbackRate !== SPEEDS.smartedu) {
+                            video.playbackRate = SPEEDS.smartedu;
+                            utils.log(`设置播放速度为 ${SPEEDS.smartedu} x`);
+                        }
+
+                        // 确保音量设置正确
+                        if (!video.muted && video.volume !== 0.01) {
                             video.volume = 0.01;
-                            utils.log('视频开始播放');
-                        }).catch(err => {
-                            utils.log(`自动播放失败: ${err.message} `);
-                            // 如果自动播放失败，添加点击事件监听器
-                            if (!document.getElementById('autoPlayHelper')) {
-                                this.createAutoPlayHelper();
-                            }
-                        });
-                        autoPlayAttempted = true;
-                    }
+                        }
 
-                    // 设置播放速度
-                    if (video.playbackRate !== SPEEDS.smartedu) {
-                        video.playbackRate = SPEEDS.smartedu;
-                        utils.log(`设置播放速度为 ${SPEEDS.smartedu} x`);
+                        // 输出当前状态
+                        utils.log(`当前状态 - 速度: ${video.playbackRate} x, 音量: ${Math.round(video.volume * 100)}%, 播放中: ${!video.paused} `);
                     }
-
-                    // 确保音量设置正确
-                    if (!video.muted && video.volume !== 0.01) {
-                        video.volume = 0.01;
-                    }
-
-                    // 输出当前状态
-                    utils.log(`当前状态 - 速度: ${video.playbackRate} x, 音量: ${Math.round(video.volume * 100)}%, 播放中: ${!video.paused} `);
+                } catch (err) {
+                    utils.log(`播放控制出错: ${err.message} `);
                 }
-            } catch (err) {
-                utils.log(`播放控制出错: ${err.message} `);
-            }
-        }, 5000);
-    }
+            }, 5000);
+        }
 
-    // 添加创建自动播放辅助按钮的方法
-    createAutoPlayHelper() {
-        const helper = document.createElement('button');
-        helper.id = 'autoPlayHelper';
-        helper.innerHTML = '点击开始自动播放';
-        helper.style.cssText = `
+        // 添加创建自动播放辅助按钮的方法
+        createAutoPlayHelper() {
+            const helper = document.createElement('button');
+            helper.id = 'autoPlayHelper';
+            helper.innerHTML = '点击开始自动播放';
+            helper.style.cssText = `
     position: fixed;
     top: 20px;
     left: 50 %;
@@ -765,131 +749,131 @@
     font - size: 16px;
     `;
 
-        helper.onclick = () => {
-            const video = document.querySelector('#video-Player video');
-            if (video) {
-                video.muted = false;
-                video.volume = 0.01;
-                video.play().then(() => {
-                    helper.remove();
-                    utils.log('用户触发播放成功');
-                }).catch(err => {
-                    utils.log(`用户触发播放失败: ${err.message} `);
-                });
-            }
-        };
+            helper.onclick = () => {
+                const video = document.querySelector('#video-Player video');
+                if (video) {
+                    video.muted = false;
+                    video.volume = 0.01;
+                    video.play().then(() => {
+                        helper.remove();
+                        utils.log('用户触发播放成功');
+                    }).catch(err => {
+                        utils.log(`用户触发播放失败: ${err.message} `);
+                    });
+                }
+            };
 
-        document.body.appendChild(helper);
-        utils.log('已添加自动播放辅助按钮，请点击按钮开始播放');
-    }
+            document.body.appendChild(helper);
+            utils.log('已添加自动播放辅助按钮，请点击按钮开始播放');
+        }
 
-    initProgressCheck() {
-        this.progressCheckInterval = setInterval(() => {
+        initProgressCheck() {
+            this.progressCheckInterval = setInterval(() => {
+                try {
+                    // 使用正确的选择器找到当前选中的章节
+                    const currentChapter = document.querySelector('div.video-title.clearfix.on');
+                    if (!currentChapter) {
+                        utils.log('未找到当前选中章节');
+                        return;
+                    }
+
+                    // 获取进度信息
+                    const progressSpan = currentChapter.querySelector('span.four');
+                    if (progressSpan && progressSpan.textContent.includes('100')) {
+                        utils.log('当前章节已完成，准备切换到下一章节');
+                        this.switchToNextChapter(currentChapter);
+                    } else {
+                        // 输出当前章节的进度
+                        const chapterTitle = currentChapter.querySelector('span.two')?.textContent || '未知章节';
+                        const progress = progressSpan?.textContent || '0%';
+                        utils.log(`当前章节: ${chapterTitle}, 进度: ${progress} `);
+                    }
+                } catch (err) {
+                    utils.log(`进度检查出错: ${err.message} `);
+                }
+            }, 10000);
+        }
+
+        switchToNextChapter(currentChapter) {
             try {
-                // 使用正确的选择器找到当前选中的章节
-                const currentChapter = document.querySelector('div.video-title.clearfix.on');
-                if (!currentChapter) {
-                    utils.log('未找到当前选中章节');
-                    return;
+                let foundNext = false;
+
+                // 遍历所有章节，找到下一个未完成的章节
+                const allChapters = document.querySelectorAll('div.video-title.clearfix');
+
+                // 从第一个章节查找
+                for (let i = 0; i < allChapters.length; i++) {
+                    const progressSpan = allChapters[i].querySelector('span.four');
+                    if (progressSpan && !progressSpan.textContent.includes('100')) {
+                        // 找到下一个未完成的章节，点击其 video-title
+                        allChapters[i].click();
+                        const nextChapterTitle = allChapters[i].querySelector('span.two')?.textContent || '未知章节';
+                        utils.log(`已切换到下一章节: ${nextChapterTitle} `);
+                        foundNext = true;
+                        break;
+                    }
                 }
 
-                // 获取进度信息
-                const progressSpan = currentChapter.querySelector('span.four');
-                if (progressSpan && progressSpan.textContent.includes('100')) {
-                    utils.log('当前章节已完成，准备切换到下一章节');
-                    this.switchToNextChapter(currentChapter);
-                } else {
-                    // 输出当前章节的进度
-                    const chapterTitle = currentChapter.querySelector('span.two')?.textContent || '未知章节';
-                    const progress = progressSpan?.textContent || '0%';
-                    utils.log(`当前章节: ${chapterTitle}, 进度: ${progress} `);
+                if (!foundNext) {
+                    utils.log('所有章节已完成或未找到下一个可播放章节');
                 }
             } catch (err) {
-                utils.log(`进度检查出错: ${err.message} `);
+                utils.log(`切换章节出错: ${err.message} `);
             }
-        }, 10000);
+        }
+
+        destroy() {
+            if (this.confirmInterval) {
+                clearInterval(this.confirmInterval);
+            }
+            if (this.speedInterval) {
+                clearInterval(this.speedInterval);
+            }
+            if (this.progressCheckInterval) {
+                clearInterval(this.progressCheckInterval);
+            }
+        }
     }
 
-    switchToNextChapter(currentChapter) {
-        try {
-            let foundNext = false;
+    // 主程序修改
+    window.onload = function () {
+        const pageTitle = document.title;
+        utils.log(`当前页面: ${pageTitle} `);
 
-            // 遍历所有章节，找到下一个未完成的章节
-            const allChapters = document.querySelectorAll('div.video-title.clearfix');
+        if (utils.isChengKejiPahe()) { // Check for QChengKeji first
+            utils.log('[QChengKeji] Page detected by URL.');
+            const qchengController = new QChengKejiController();
+            qchengController.startVideoTasks();
+        } else if (utils.isSmartEduPage()) {
+            // SmartEdu 课程处理
+            const smartEduController = new SmartEduController();
+            smartEduController.init();
+        } else if (utils.isLivePage()) {
+            // 直播页面处理
+            const liveController = new LiveController();
+            liveController.init();
+        } else if (pageTitle === "课程学习") {
+            // 原有的视频课程处理
+            const controller = new VideoController();
+            controller.initVideoPlay();
+            controller.initProgressMonitor();
+        } else if (pageTitle === "我的培训课程") {
+            // 原有的课程列表处理
+            $(".detail-act2 li").each(function () {
+                const statusSpan = $($(this).find("span.right1")[3]);
+                if (statusSpan.text().trim() === "学习") {
+                    const classLink = "https://onlinenew.enetedu.com/" +
+                        $($(this).find("a")[0]).attr("href");
 
-            // 从第一个章节查找
-            for (let i = 0; i < allChapters.length; i++) {
-                const progressSpan = allChapters[i].querySelector('span.four');
-                if (progressSpan && !progressSpan.textContent.includes('100')) {
-                    // 找到下一个未完成的章节，点击其 video-title
-                    allChapters[i].click();
-                    const nextChapterTitle = allChapters[i].querySelector('span.two')?.textContent || '未知章节';
-                    utils.log(`已切换到下一章节: ${nextChapterTitle} `);
-                    foundNext = true;
-                    break;
+                    // 在后台打开新标签页
+                    const newWindow = window.open(classLink, '_blank');
+                    if (newWindow) {
+                        newWindow.blur(); // 将新窗口置于后台
+                        window.focus(); // 保持当前窗口焦点
+                        utils.log(`已打开课程: ${classLink} `);
+                    }
                 }
-            }
-
-            if (!foundNext) {
-                utils.log('所有章节已完成或未找到下一个可播放章节');
-            }
-        } catch (err) {
-            utils.log(`切换章节出错: ${err.message} `);
+            });
         }
-    }
-
-    destroy() {
-        if (this.confirmInterval) {
-            clearInterval(this.confirmInterval);
-        }
-        if (this.speedInterval) {
-            clearInterval(this.speedInterval);
-        }
-        if (this.progressCheckInterval) {
-            clearInterval(this.progressCheckInterval);
-        }
-    }
-}
-
-// 主程序修改
-window.onload = function () {
-    const pageTitle = document.title;
-    utils.log(`当前页面: ${pageTitle} `);
-
-    if (utils.isChengKejiPahe()) { // Check for QChengKeji first
-        utils.log('[QChengKeji] Page detected by URL.');
-        const qchengController = new QChengKejiController();
-        qchengController.startVideoTasks();
-    } else if (utils.isSmartEduPage()) {
-        // SmartEdu 课程处理
-        const smartEduController = new SmartEduController();
-        smartEduController.init();
-    } else if (utils.isLivePage()) {
-        // 直播页面处理
-        const liveController = new LiveController();
-        liveController.init();
-    } else if (pageTitle === "课程学习") {
-        // 原有的视频课程处理
-        const controller = new VideoController();
-        controller.initVideoPlay();
-        controller.initProgressMonitor();
-    } else if (pageTitle === "我的培训课程") {
-        // 原有的课程列表处理
-        $(".detail-act2 li").each(function () {
-            const statusSpan = $($(this).find("span.right1")[3]);
-            if (statusSpan.text().trim() === "学习") {
-                const classLink = "https://onlinenew.enetedu.com/" +
-                    $($(this).find("a")[0]).attr("href");
-
-                // 在后台打开新标签页
-                const newWindow = window.open(classLink, '_blank');
-                if (newWindow) {
-                    newWindow.blur(); // 将新窗口置于后台
-                    window.focus(); // 保持当前窗口焦点
-                    utils.log(`已打开课程: ${classLink} `);
-                }
-            }
-        });
-    }
-};
-}) ();
+    };
+})();
