@@ -10,6 +10,7 @@
 // @match        bwgl.qchengkeji.com/user/node?nodeId=*
 // @grant        none
 // @require      https://cdn.bootcss.com/jquery/3.2.1/jquery.min.js
+// @require      https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js
 // @license MIT
 // @thanks        https://update.greasyfork.org/scripts/497263/%2A2024%E7%89%88%E7%BB%A7%E7%BB%AD%E6%95%99%E8%82%B2%2A%E5%85%A8%E5%9B%BD%E9%AB%98%E6%A0%A1%E6%95%99%E5%B8%88%E7%BD%91%E7%BB%9C%E5%9F%B9%E8%AE%AD%E4%B8%AD%E5%BF%83-%E8%87%AA%E5%8A%A8%E5%88%B7%E8%AF%BE.user.js
 // @downloadURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/enetedu/enetedu.js
@@ -265,56 +266,77 @@
             document.body.appendChild(helper);
             utils.log('[QChengKeji] Added autoplay helper button. Please click it to start.');
         }
-
-        createCaptchaMessage() {
-            if (document.getElementById('qchengkeji-captcha-message')) return;
-            const msgDiv = document.createElement('div');
-            msgDiv.id = 'qchengkeji-captcha-message';
-            msgDiv.innerHTML = 'CAPTCHA 检测到! 请手动解决以继续。';
-            msgDiv.style.cssText = `
-                position: fixed; top: 100px; left: 50%; transform: translateX(-50%);
-                padding: 15px; background-color: #f44336; /* Red for CAPTCHA */
-                color: white; z-index: 10001;
-                border-radius: 5px; text-align: center; font-size: 16px;
-            `;
-            document.body.appendChild(msgDiv);
-            utils.log('[QChengKeji] CAPTCHA message displayed.');
-        }
-
-        removeCaptchaMessage() {
-            const msgDiv = document.getElementById('qchengkeji-captcha-message');
-            if (msgDiv) {
-                msgDiv.remove();
-                utils.log('[QChengKeji] CAPTCHA message removed.');
-            }
-        }
-
         initVideoPlaybackAndNext() {
             this.videoPlayInterval = setInterval(() => {
                 try {
-                    // Check for CAPTCHA modal first
-                    const $captchaContent = $('div.layui-layer-page:visible .layui-layer-content');
-                    if ($captchaContent.length > 0 &&
-                        ($captchaContent.find('img[src*="captcha"]').length > 0 ||
-                            $captchaContent.text().includes("请输入验证码") ||
-                            $captchaContent.text().includes("确认是本人在操作"))) {
-                        utils.log('[QChengKeji] CAPTCHA detected. Please solve it manually.');
-                        this.createCaptchaMessage();
-                        // Ensure autoplay helper is removed if CAPTCHA appears over it or at the same time
-                        const autoPlayHelper = document.getElementById('qchengkeji-autoplay-helper');
-                        if (autoPlayHelper) autoPlayHelper.remove();
-                        return; // Pause operations until CAPTCHA is solved
-                    } else {
-                        this.removeCaptchaMessage(); // Remove message if CAPTCHA is no longer visible
-                    }
 
                     const video = $('video')[0];
                     if (video) {
                         if (video.paused && !video.ended) {
+                            video.muted = true; // Mute before attempting to play
                             const playPromise = video.play();
+                            // 检查验证码弹窗是否可见
+                            const $captchaContent = $('div.layui-layer-page:visible .layui-layer-content');
+                            if ($captchaContent.length) {
+                                // 选择验证码图片（假设使用最新的图片，src 中包含 /service/code/）
+                                const $captchaImg = $captchaContent.find('img[src*="/service/code/"]:visible');
+                                const captchaSrc = $captchaImg.attr('src');
+
+                                if (captchaSrc) {
+                                    // 创建一个临时的 canvas 来加载图片
+                                    const img = new Image();
+                                    img.crossOrigin = 'Anonymous'; // 避免跨域问题
+                                    img.src = "https://bwgl.qchengkeji.com" + captchaSrc;
+
+                                    img.onload = function () {
+                                        // 将图片绘制到 canvas
+                                        const canvas = document.createElement('canvas');
+                                        canvas.width = img.width;
+                                        canvas.height = img.height;
+                                        const ctx = canvas.getContext('2d');
+                                        ctx.drawImage(img, 0, 0);
+
+                                        // 使用 Tesseract.js 识别验证码
+                                        Tesseract.recognize(
+                                            canvas,
+                                            'eng', // 语言设置为英文（可根据验证码类型调整）
+                                            {
+                                            }
+                                        ).then(({ data: { text } }) => {
+                                            // 清理识别结果（去除空格和换行）
+                                            const captchaText = text.trim();
+                                            utils.log(`验证码识别结果${captchaText}.`);
+                                            // 填写验证码到输入框
+                                            const $input = $captchaContent.find('input[type="text"]:visible');
+                                            $input.val(captchaText);
+
+                                            // 模拟点击“开始播放”按钮
+                                            const $playButton = $('.layui-layer-btn0');
+                                            if ($playButton.length) {
+                                                $playButton.click();
+                                            } else {
+                                                console.error('Play button not found');
+                                            }
+                                        }).catch((err) => {
+                                            console.error('CAPTCHA recognition failed:', err);
+                                        });
+                                    };
+
+                                    img.onerror = function () {
+                                        console.error('Failed to load CAPTCHA image');
+                                    };
+                                } else {
+                                    console.error('CAPTCHA image not found');
+                                }
+                            } else {
+                                console.log('No CAPTCHA popup detected');
+                            }
                             if (playPromise !== undefined) {
                                 playPromise.then(() => {
                                     utils.log('[QChengKeji] Video playing.');
+                                    video.muted = false; // Unmute after successful playback
+                                    video.volume = 0.01; // Set desired volume
+                                    utils.log('[QChengKeji] Video unmuted and volume set to 0.01.');
                                     const helperButton = document.getElementById('qchengkeji-autoplay-helper');
                                     if (helperButton) {
                                         helperButton.remove();
@@ -327,11 +349,12 @@
                                     }
                                 });
                             }
-                        }
-                        if (video.volume !== 0.01) {
+                        } else if (!video.paused && !video.muted && video.volume !== 0.01) {
+                            // Ensure volume is set if video is already playing and not muted
                             video.volume = 0.01;
                             utils.log('[QChengKeji] Video volume set to 0.01.');
                         }
+
 
                         if (video.ended) {
                             utils.log('[QChengKeji] Video ended. Attempting to play next.');
