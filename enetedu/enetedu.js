@@ -313,8 +313,10 @@
                                                         utils.log('[QChengKeji] Filled captcha input. Clicking play button.');
                                                         utils.log(`playButton.length：${$playButton.length}`);
 
-                                                        if ($playButton.length) {
+                                                        if ($playButton.length > 0) {
                                                             $playButton.click();
+                                                            utils.log(`continue to play.`);
+
                                                         } else {
                                                             console.error('[QChengKeji] Play button .layui-layer-btn0 not found after recognition.');
                                                         }
@@ -423,7 +425,7 @@
             let $nextItemAnchor = $currentItem.nextAll('.item:first').find('a').first();
 
             if ($nextItemAnchor.length) {
-                utils.log(`[QChengKeji] Found next item in current list: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}". Clicking.`);
+                utils.log(`[QChengKeji] Found next item in current list: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}".Clicking.`);
                 $nextItemAnchor[0].click(); // Use native click
                 clickedNext = true;
             } else {
@@ -433,7 +435,7 @@
                     if ($nextGroup.length) {
                         $nextItemAnchor = $nextGroup.find('.list .item:first a').first();
                         if ($nextItemAnchor.length) {
-                            utils.log(`[QChengKeji] No more items in current group. Found next group, clicking first item: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}".`);
+                            utils.log(`[QChengKeji] No more items in current group.Found next group, clicking first item: "${$nextItemAnchor.attr('title') || $nextItemAnchor.text().trim()}".`);
                             $nextItemAnchor[0].click(); // Use native click
                             clickedNext = true;
                         } else {
@@ -469,7 +471,7 @@
                 const $buttons = $(selector).filter(':visible');
                 if ($buttons.length > 0) {
                     $buttons.first()[0].click(); // Use native click
-                    utils.log(`[QChengKeji] (Generic) Clicked visible "next" button with selector: ${selector}`);
+                    utils.log(`[QChengKeji](Generic) Clicked visible "next" button with selector: ${selector} `);
                     clickedNextGeneric = true;
                     break;
                 }
@@ -477,7 +479,7 @@
                     const $hiddenButtons = $(selector);
                     if ($hiddenButtons.length > 0) {
                         $hiddenButtons.first()[0].click(); // Use native click
-                        utils.log(`[QChengKeji] (Generic) Clicked (possibly hidden) "next" button with selector: ${selector}`);
+                        utils.log(`[QChengKeji](Generic) Clicked(possibly hidden) "next" button with selector: ${selector} `);
                         clickedNextGeneric = true;
                         break;
                     }
@@ -504,13 +506,13 @@
                     if (currentIndex !== -1 && currentIndex < $items.length - 1) {
                         const $nextItem = $($items[currentIndex + 1]);
                         if ($nextItem.is('.completed, .is_learned, .viewed')) {
-                            utils.log(`[QChengKeji] (Generic) Next item (index ${currentIndex + 1}) in list (${listSelector}) is marked completed, trying next one.`);
+                            utils.log(`[QChengKeji](Generic) Next item(index ${currentIndex + 1}) in list(${listSelector}) is marked completed, trying next one.`);
                             if (currentIndex + 2 < $items.length) {
                                 const $nextNextItem = $($items[currentIndex + 2]);
                                 if (!$nextNextItem.is('.completed, .is_learned, .viewed')) {
                                     const $clickableNN = $nextNextItem.find('a, button, [role="button"], .title, span').first();
                                     ($clickableNN.length > 0 ? $clickableNN : $nextNextItem)[0].click(); // Use native click
-                                    utils.log(`[QChengKeji] (Generic) Clicked next-next video item (index ${currentIndex + 2}) in list: ${listSelector}`);
+                                    utils.log(`[QChengKeji](Generic) Clicked next - next video item(index ${currentIndex + 2}) in list: ${listSelector} `);
                                     clickedNextGeneric = true;
                                     break;
                                 }
@@ -520,7 +522,7 @@
 
                         const $clickable = $nextItem.find('a, button, [role="button"], .title, span').first();
                         ($clickable.length > 0 ? $clickable : $nextItem)[0].click(); // Use native click
-                        utils.log(`[QChengKeji] (Generic) Clicked next video item (index ${currentIndex + 1}) in list: ${listSelector}`);
+                        utils.log(`[QChengKeji](Generic) Clicked next video item(index ${currentIndex + 1}) in list: ${listSelector} `);
                         clickedNextGeneric = true;
                         break;
                     }
@@ -566,7 +568,7 @@
                         utils.log('点击确定按钮');
                     }
                 } catch (err) {
-                    utils.log(`确认按钮检查出错: ${err.message}`);
+                    utils.log(`确认按钮检查出错: ${err.message} `);
                 }
             }, 3000);
         }
@@ -588,7 +590,7 @@
                                 video.volume = 0.01;
                                 utils.log('视频开始播放');
                             }).catch(err => {
-                                utils.log(`自动播放失败: ${err.message}`);
+                                utils.log(`自动播放失败: ${err.message} `);
                                 // 如果自动播放失败，添加点击事件监听器
                                 if (!document.getElementById('autoPlayHelper')) {
                                     this.createAutoPlayHelper();
@@ -600,7 +602,7 @@
                         // 设置播放速度
                         if (video.playbackRate !== SPEEDS.smartedu) {
                             video.playbackRate = SPEEDS.smartedu;
-                            utils.log(`设置播放速度为 ${SPEEDS.smartedu}x`);
+                            utils.log(`设置播放速度为 ${SPEEDS.smartedu} x`);
                         }
 
                         // 确保音量设置正确
@@ -609,10 +611,10 @@
                         }
 
                         // 输出当前状态
-                        utils.log(`当前状态 - 速度: ${video.playbackRate}x, 音量: ${Math.round(video.volume * 100)}%, 播放中: ${!video.paused}`);
+                        utils.log(`当前状态 - 速度: ${video.playbackRate} x, 音量: ${Math.round(video.volume * 100)}%, 播放中: ${!video.paused} `);
                     }
                 } catch (err) {
-                    utils.log(`播放控制出错: ${err.message}`);
+                    utils.log(`播放控制出错: ${err.message} `);
                 }
             }, 5000);
         }
@@ -623,19 +625,19 @@
             helper.id = 'autoPlayHelper';
             helper.innerHTML = '点击开始自动播放';
             helper.style.cssText = `
-                position: fixed;
-                top: 20px;
-                left: 50%;
-                transform: translateX(-50%);
-                z-index: 9999;
-                padding: 10px 20px;
-                background: #4CAF50;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
-            `;
+    position: fixed;
+    top: 20px;
+    left: 50 %;
+    transform: translateX(-50 %);
+    z - index: 9999;
+    padding: 10px 20px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border - radius: 5px;
+    cursor: pointer;
+    font - size: 16px;
+    `;
 
             helper.onclick = () => {
                 const video = document.querySelector('#video-Player video');
@@ -646,7 +648,7 @@
                         helper.remove();
                         utils.log('用户触发播放成功');
                     }).catch(err => {
-                        utils.log(`用户触发播放失败: ${err.message}`);
+                        utils.log(`用户触发播放失败: ${err.message} `);
                     });
                 }
             };
@@ -674,10 +676,10 @@
                         // 输出当前章节的进度
                         const chapterTitle = currentChapter.querySelector('span.two')?.textContent || '未知章节';
                         const progress = progressSpan?.textContent || '0%';
-                        utils.log(`当前章节: ${chapterTitle}, 进度: ${progress}`);
+                        utils.log(`当前章节: ${chapterTitle}, 进度: ${progress} `);
                     }
                 } catch (err) {
-                    utils.log(`进度检查出错: ${err.message}`);
+                    utils.log(`进度检查出错: ${err.message} `);
                 }
             }, 10000);
         }
@@ -696,7 +698,7 @@
                         // 找到下一个未完成的章节，点击其 video-title
                         allChapters[i].click();
                         const nextChapterTitle = allChapters[i].querySelector('span.two')?.textContent || '未知章节';
-                        utils.log(`已切换到下一章节: ${nextChapterTitle}`);
+                        utils.log(`已切换到下一章节: ${nextChapterTitle} `);
                         foundNext = true;
                         break;
                     }
@@ -706,7 +708,7 @@
                     utils.log('所有章节已完成或未找到下一个可播放章节');
                 }
             } catch (err) {
-                utils.log(`切换章节出错: ${err.message}`);
+                utils.log(`切换章节出错: ${err.message} `);
             }
         }
 
@@ -726,7 +728,7 @@
     // 主程序修改
     window.onload = function () {
         const pageTitle = document.title;
-        utils.log(`当前页面: ${pageTitle}`);
+        utils.log(`当前页面: ${pageTitle} `);
 
         if (utils.isChengKejiPahe()) { // Check for QChengKeji first
             utils.log('[QChengKeji] Page detected by URL.');
@@ -758,7 +760,7 @@
                     if (newWindow) {
                         newWindow.blur(); // 将新窗口置于后台
                         window.focus(); // 保持当前窗口焦点
-                        utils.log(`已打开课程: ${classLink}`);
+                        utils.log(`已打开课程: ${classLink} `);
                     }
                 }
             });
