@@ -311,7 +311,7 @@
                                                         utils.log(`[QChengKeji] Captcha recognized: ${captchaText}`);
                                                         $captchaInput.val(captchaText);
                                                         utils.log('[QChengKeji] Filled captcha input. Clicking play button.');
-                                                        utils.log(`playButton.length：${playButton.length}`);
+                                                        utils.log(`playButton.length：${$playButton.length}`);
 
                                                         if ($playButton.length) {
                                                             $playButton.click();
@@ -372,12 +372,10 @@
                                     });
                                 }
                             }
-
                         } else if (!video.paused && !video.muted && video.volume !== 0.01) {
                             // Ensure volume is set if video is already playing and not muted
                             video.volume = 0.01;
                             utils.log('[QChengKeji] set video volume 0.01');
-
                         }
 
                         if (video.ended) {
