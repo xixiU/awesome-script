@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.5.8.3
+// @version      0.5.8.4
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -275,80 +275,42 @@
                         if (video.paused && !video.ended) {
                             video.muted = true; // Mute before attempting to play
                             const playPromise = video.play();
-                            // 检查验证码弹窗是否可见
-                            const $captchaContent = $('div.layui-layer-page:visible .layui-layer-content');
-                            if ($captchaContent.length) {
-                                // 选择验证码图片（假设使用最新的图片，src 中包含 /service/code/）
-                                const $captchaImg = $captchaContent.find('img[src*="/service/code/"]:visible');
-                                const captchaSrc = $captchaImg.attr('src');
+                            const $captchaInput = $('input[type="text"]:visible');
+                            const $playButton = $('.layui-layer-btn0');
 
-                                if (captchaSrc) {
-                                    // 创建一个临时的 canvas 来加载图片
-                                    const img = new Image();
-                                    img.crossOrigin = 'Anonymous'; // 避免跨域问题
-                                    img.src = "https://bwgl.qchengkeji.com" + captchaSrc;
-
-                                    img.onload = function () {
-                                        // 将图片绘制到 canvas
-                                        const canvas = document.createElement('canvas');
-                                        canvas.width = img.width;
-                                        canvas.height = img.height;
-                                        const ctx = canvas.getContext('2d');
-                                        ctx.drawImage(img, 0, 0);
-
-                                        // 使用 Tesseract.js 识别验证码
-                                        Tesseract.recognize(
-                                            canvas,
-                                            'eng', // 语言设置为英文（可根据验证码类型调整）
-                                            {
-                                            }
-                                        ).then(({ data: { text } }) => {
-                                            // 清理识别结果（去除空格和换行）
-                                            const captchaText = text.trim();
-                                            utils.log(`验证码识别结果${captchaText}.`);
-                                            // 填写验证码到输入框
-                                            const $input = $captchaContent.find('input[type="text"]:visible');
-                                            $input.val(captchaText);
-
-                                            // 模拟点击“开始播放”按钮
-                                            const $playButton = $('.layui-layer-btn0');
-                                            if ($playButton.length) {
-                                                $playButton.click();
-                                            } else {
-                                                console.error('Play button not found');
-                                            }
-                                        }).catch((err) => {
-                                            console.error('CAPTCHA recognition failed:', err);
-                                        });
-                                    };
-
-                                    img.onerror = function () {
-                                        console.error('Failed to load CAPTCHA image');
-                                    };
+                            if ($captchaInput.length > 0 && $captchaInput.val() !== '') {
+                                utils.log('[QChengKeji] Captcha input is not empty. Clicking play button.');
+                                if ($playButton.length) {
+                                    $playButton.click();
                                 } else {
-                                    console.error('CAPTCHA image not found');
+                                    console.error('[QChengKeji] Play button .layui-layer-btn0 not found.');
+                                }
+                            } else if ($captchaInput.length === 0) {
+                                // No captcha input field, attempt to play video
+                                utils.log('[QChengKeji] No captcha input field detected. Attempting to play video.');
+                                const playPromise = video.play();
+                                if (playPromise !== undefined) {
+                                    playPromise.then(() => {
+                                        utils.log('[QChengKeji] Video playing.');
+                                        video.muted = false; // Unmute after successful playback
+                                        video.volume = 0.01; // Set desired volume
+                                        utils.log('[QChengKeji] Video unmuted and volume set to 0.01.');
+                                        const helperButton = document.getElementById('qchengkeji-autoplay-helper');
+                                        if (helperButton) {
+                                            helperButton.remove();
+                                        }
+                                    }).catch(e => {
+                                        utils.log(`[QChengKeji] Error playing video: ${e.message}.`);
+                                        if (e.name === 'NotAllowedError' || e.message.toLowerCase().includes("user didn't interact") || e.message.toLowerCase().includes("interaction")) {
+                                            utils.log('[QChengKeji] Autoplay failed due to user interaction policy. Adding helper button.');
+                                            this.createAutoPlayHelper(video);
+                                        }
+                                    });
                                 }
                             } else {
-                                console.log('No CAPTCHA popup detected');
+                                utils.log('[QChengKeji] Captcha input field is visible but empty. Waiting for input.');
                             }
-                            if (playPromise !== undefined) {
-                                playPromise.then(() => {
-                                    utils.log('[QChengKeji] Video playing.');
-                                    video.muted = false; // Unmute after successful playback
-                                    video.volume = 0.01; // Set desired volume
-                                    utils.log('[QChengKeji] Video unmuted and volume set to 0.01.');
-                                    const helperButton = document.getElementById('qchengkeji-autoplay-helper');
-                                    if (helperButton) {
-                                        helperButton.remove();
-                                    }
-                                }).catch(e => {
-                                    utils.log(`[QChengKeji] Error playing video: ${e.message}.`);
-                                    if (e.name === 'NotAllowedError' || e.message.toLowerCase().includes("user didn't interact") || e.message.toLowerCase().includes("interaction")) {
-                                        utils.log('[QChengKeji] Autoplay failed due to user interaction policy. Adding helper button.');
-                                        this.createAutoPlayHelper(video);
-                                    }
-                                });
-                            }
+
                         } else if (!video.paused && !video.muted && video.volume !== 0.01) {
                             // Ensure volume is set if video is already playing and not muted
                             video.volume = 0.01;
