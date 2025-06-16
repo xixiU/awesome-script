@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         视频左右键快进/回退
+// @name         ifly视频左右键快进/回退
 // @namespace    http://tampermonkey.net/
 // @version      1.0
 // @description  使用左右键控制ifly.21tb.com视频快进/回退10秒
