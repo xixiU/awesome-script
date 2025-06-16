@@ -3,7 +3,7 @@
 // @namespace    https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js
 // @version      1.7
 // @description  导出当前页或所有页的查询结果为CSV或Excel文件，支持生成导出mysql的insert语句
-// @author       rongjie.Yuan
+// @author       yuan
 // @match        https://jws.jiduprod.com/*
 // @downloadURL  https://jidudev.com/rongjie-awesome/awesome-script/-/blob/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js
 // @updateURL    https://jidudev.com/rongjie-awesome/awesome-script/-/raw/master/JWS%20Data%20Exporter/JWS_Data_Exporter.js

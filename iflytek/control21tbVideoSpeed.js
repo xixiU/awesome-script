@@ -3,7 +3,9 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.0
 // @description  使用左右键控制ifly.21tb.com视频快进/回退10秒
-// @author       You
+// @author       yuan
+// @downloadURL  https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/iflytek/control21tbVideoSpeed.js
+// @updateURL    https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/iflytek/control21tbVideoSpeed.js
 // @match        *://ifly.21tb.com/*
 // @grant        none
 // ==/UserScript==
