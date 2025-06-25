@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.5.8.7
+// @version      0.5.8.8
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -136,9 +136,15 @@
                 if ($(this).css("background-color") !== "rgb(204, 197, 197)" &&
                     $(this).find("span").text() !== "[100%]") {
                     hasNextVideo = true;
-                    $(this).trigger("click");
-                    utils.log("切换到下一个视频");
-                    return false;
+                    let nextVideoLink = $(this).find("a").attr("href");
+                    if (nextVideoLink) {
+                        window.location.href = nextVideoLink;
+                        utils.log("切换到下一个视频");
+                        return false;
+                    } else {
+                        utils.log("未找到下一个视频的链接");
+                        return true;
+                    }
                 }
             });
 
