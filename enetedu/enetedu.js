@@ -79,7 +79,7 @@
                     if (video.length > 0) {
                         const videoElement = video[0];
                         videoElement.play(); // 使用原生play方法
-                        videoElement.volume = 0.01;
+                        videoElement.muted = true
                         try {
                             videoElement.playbackRate = speed;
                             utils.log(`视频开始播放，音量设置为1%，播放速度${speed}倍`);
@@ -206,7 +206,7 @@
                         }
 
                         // 设置音量和播放速度
-                        video.volume = 0.01;
+                        video.muted = true;
                         try {
                             if (video.playbackRate !== liveSpeed) {
                                 video.playbackRate = liveSpeed;
@@ -499,8 +499,8 @@
                                 const playPromise = video.play();
                                 if (playPromise !== undefined) {
                                     playPromise.then(() => {
-                                        video.volume = 0.01; // Set desired volume
-                                        utils.log('[QChengKeji] Video unmuted and volume set to 0.01.');
+                                        video.muted = true; // Set desired volume
+                                        utils.log('[QChengKeji] Video muted');
                                         const helperButton = document.getElementById('qchengkeji-autoplay-helper');
                                         if (helperButton) {
                                             helperButton.remove();
@@ -514,10 +514,10 @@
                                     });
                                 }
                             }
-                        } else if (!video.paused && !video.muted && video.volume !== 0.01) {
+                        } else if (!video.paused && !video.muted) {
                             // Ensure volume is set if video is already playing and not muted
-                            video.volume = 0.01;
-                            utils.log('[QChengKeji] set video volume 0.01');
+                            video.muted = true;
+                            utils.log('[QChengKeji] set video volume muted');
                         }
 
                         if (video.ended || video.currentTime / video.duration > 0.95) {
@@ -806,7 +806,7 @@
                             video.play().then(() => {
                                 // 播放成功后，设置实际音量
                                 video.muted = false;
-                                video.volume = 0.01;
+                                video.muted = true;
                                 utils.log('视频开始播放');
                             }).catch(err => {
                                 utils.log(`自动播放失败: ${err.message} `);
@@ -825,8 +825,8 @@
                         }
 
                         // 确保音量设置正确
-                        if (!video.muted && video.volume !== 0.01) {
-                            video.volume = 0.01;
+                        if (!video.muted) {
+                            video.muted = true;
                         }
 
                         // 输出当前状态
@@ -862,7 +862,7 @@
                 const video = document.querySelector('#video-Player video');
                 if (video) {
                     video.muted = false;
-                    video.volume = 0.01;
+                    video.muted = true;
                     video.play().then(() => {
                         helper.remove();
                         utils.log('用户触发播放成功');
