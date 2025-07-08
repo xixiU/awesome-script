@@ -1,0 +1,307 @@
+{
+  "name": "developJar",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "uploadJar",
+        "options": {
+          "binaryData": true
+        }
+      },
+      "id": "3f3ad7e9-9188-4502-aa8f-03310648aef5",
+      "name": "Webhook Upload",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        100
+      ],
+      "webhookId": "71112d55-f154-4229-ba8a-144381526f0e"
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署中\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/FUNh5Z4LCzTJPHP6/304fdd\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
+      },
+      "id": "304fdd6e-2715-4349-8182-8bc5f81949fc",
+      "name": "飞书通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        900,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "python",
+        "pythonCode": "# 从 URL query 参数中获取我们自己传递的 \"fileName\" 字段\nquery_params = item.get(\"json\", {}).get(\"query\")\nfile_name = query_params.get(\"fileName\")\n\n# 新的、更清晰的错误检查\nif not file_name:\n    raise ValueError(f\"无法从 URL Query 参数中找到 fileName 字段。收到的 Query 为: {query_params}\")\n\n# 检查二进制数据是否存在，如果不存在也给出警告（但流程继续）\nbinary_data = item.get(\"binary\")\nif not binary_data:\n    raise ValueError(\"警告: 未在输入中找到二进制文件数据(binary property)。后续文件操作节点可能会失败。\")\n\n\n# 定义你的文件部署映射\nfile_map = {\n    \"ts-service-5.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/ts-service-inner/ts-service-5.0\",\n        \"port\":9191,\n    },\n    \"aicourt-monitor-service-1.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-monitor-service-1.0\",\n        \"port\":7901,\n    },\n    \"aicourt-video-service-1.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-video-service-1.0\",\n        \"port\":7902,\n    }\n}\n\nif file_name not in file_map:\n    raise ValueError(f\"不支持的文件名: {file_name}。请在 Code 节点的 file_map 中添加配置。\")\n\nconfig = file_map[file_name]\ntarget_dir = config[\"targetDir\"]\nservice_port = config[\"port\"] \nrestart_script = f\"{target_dir}/restartup.sh\"\n\ntempFileName = binary_data.get(\"data\",{}).get(\"fileName\")\nreturn {\n    \"fileName\": file_name,\n    \"targetDir\": target_dir,\n    \"restartScript\": restart_script,\n    \"tempFilePath\": f\"/tmp/{tempFileName}\",\n    \"tempFileName\" :tempFileName,\n    \"port\": service_port,\n    \"binary\": binary_data\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        100
+      ],
+      "id": "8f9ce983-32f8-4e96-9e9e-f2669738f43c",
+      "name": "路径转换",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "path": "/tmp",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        360,
+        100
+      ],
+      "id": "10f7a99a-11b6-4da3-9c96-d94abb1fc8aa",
+      "name": "上传到服务器",
+      "credentials": {
+        "sshPassword": {
+          "id": "UKxFN3HfhhfB4p2G",
+          "name": "SSH Password account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "=#!/bin/bash\nset -e\n\n# 从 n8n 获取我们准备好的所有变量\n# 文件的【最终正确名】\nFINAL_FILE={{ $('路径转换').item.json.fileName }}\n# 文件在 /tmp 目录下的【临时随机名】\nTEMP_FILE_NAME={{ $('路径转换').item.json.tempFileName}}\n# 部署的目标目录\nDIR={{ $('路径转换').item.json.targetDir }}\n\n# 临时文件的完整路径\nTEMP_FILE_PATH=\"/tmp/$TEMP_FILE_NAME\"\n\n# --- 核心操作开始 ---\n\n# 1. 移动到目标目录\ncd \"$DIR\"\n\n# 2. 创建备份目录\nmkdir -p backup\n\n# 3. 如果目标位置已存在同名文件（旧版本），则备份它\nif [ -f \"$FINAL_FILE\" ]; then\n  cp \"$FINAL_FILE\" \"backup/$FINAL_FILE.$(date +%Y%m%d%H%M%S)\"\nfi\n\n# 4. 将临时文件移动到当前目录，并【重命名】为最终的正确名字\n# 这是最关键的一步！\nmv \"$TEMP_FILE_PATH\" \"./$FINAL_FILE\"\n\n# 5. （可选）给新文件设置正确的权限\n# chmod 644 \"$FINAL_FILE\""
+      },
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        540,
+        100
+      ],
+      "id": "c0d21d6d-b34e-43e3-905d-a4a3f86501bf",
+      "name": "ssh备份并替换",
+      "credentials": {
+        "sshPassword": {
+          "id": "UKxFN3HfhhfB4p2G",
+          "name": "SSH Password account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "=# 部署的目标目录 \nDIR={{ $('路径转换').item.json.targetDir }}\n# 1. 移动到目标目录\ncd \"$DIR\"\nJAVA_BIN_DIR=/usr/java/jdk1.8.0_361/bin/java\nexport PATH=$JAVA_BIN_DIR:$PATH\nbash -l -c \"cd {{ $('路径转换').item.json.targetDir }} && bash {{ $('路径转换').item.json.restartScript }}\"\n\n"
+      },
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        720,
+        100
+      ],
+      "id": "5ee19807-521c-4a9a-bf38-4cd11cb6c23b",
+      "name": "重启服务",
+      "credentials": {
+        "sshPassword": {
+          "id": "UKxFN3HfhhfB4p2G",
+          "name": "SSH Password account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "python",
+        "pythonCode": "import socket\nimport time\n\n# 配置项\nhost = \"host.docker.internal\"  # 部署目标主机，内网情况多数为 localhost\nport = _(\"路径转换\").item.json.port\n\ntimeout_seconds = 1 * 10  # 最长探活时间（5分钟）\ninterval_seconds = 3  # 探活轮询间隔\n\ndef check_port(host, port, timeout=2):\n    try:\n        with socket.create_connection((host, port), timeout=timeout):\n            return True\n    except Exception:\n        return False\n\nstart_time = time.time()\nconnected = False\n\nwhile time.time() - start_time < timeout_seconds:\n    if check_port(host, port):\n        connected = True\n        break\n    time.sleep(interval_seconds)\n\nif connected:\n    return {\n        \"json\": {\n            \"status\": \"ok\",\n            \"port\": port,\n            \"message\": f\"{host}:{port} 探活成功\"\n        }\n    }\nelse:\n    return {\n        \"json\": {\n            \"status\": \"fail\",\n            \"port\": port,\n            \"message\": f\"{host}:{port} 在 {timeout_seconds} 秒内无法连接\"\n        }\n    }"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        100
+      ],
+      "id": "8cd155aa-94d0-49a8-abca-3f48d94596d4",
+      "name": "部署探活"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ffa7cd60-4918-467a-afb3-d6e30b96bf0c",
+              "leftValue": "status ",
+              "rightValue": "\"ok\"",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1230,
+        100
+      ],
+      "id": "4c1060c7-2079-451f-93e2-946368a3125f",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署成功\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/FUNh5Z4LCzTJPHP6/304fdd\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
+      },
+      "id": "cd3cfcb2-3b82-4dc8-b3d8-5325fabe8ddf",
+      "name": "探活成功通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署失败，请手动检查\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/FUNh5Z4LCzTJPHP6/304fdd\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
+      },
+      "id": "72c69bd7-8cc6-40cd-88e9-6ce8e19823c9",
+      "name": "探活失败通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        220
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Upload": {
+      "main": [
+        [
+          {
+            "node": "路径转换",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "路径转换": {
+      "main": [
+        [
+          {
+            "node": "上传到服务器",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "上传到服务器": {
+      "main": [
+        [
+          {
+            "node": "ssh备份并替换",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ssh备份并替换": {
+      "main": [
+        [
+          {
+            "node": "重启服务",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "重启服务": {
+      "main": [
+        [
+          {
+            "node": "飞书通知",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "飞书通知": {
+      "main": [
+        [
+          {
+            "node": "部署探活",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "部署探活": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "探活成功通知",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "探活失败通知",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "cda361eb-1a97-4675-9f0a-56f5c8957d27",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "951f0a4d6734d3561dee532781de3d1e6cf9fcf2d87e4e086789513737936e65"
+  },
+  "id": "FUNh5Z4LCzTJPHP6",
+  "tags": []
+}

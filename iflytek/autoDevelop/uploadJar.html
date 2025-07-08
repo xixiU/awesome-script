@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>智慧法庭JAR 包部署上传</title>
+	<style>
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			height: 100vh;
+			margin: 0;
+			background-color: #f4f7f9;
+		}
+
+		.upload-container {
+			background: #ffffff;
+			padding: 30px 40px;
+			border-radius: 12px;
+			box-shadow: 0 8px meditative0px rgba(0, 0, 0, 0.1);
+			width: 100%;
+			max-width: 500px;
+			text-align: center;
+		}
+
+		h1 {
+			color: #333;
+			margin-bottom: 25px;
+			font-weight: 600;
+		}
+
+		#uploadForm {
+			display: flex;
+			flex-direction: column;
+			gap: 20px;
+		}
+
+		.file-input-wrapper {
+			border: 2px dashed #d0d7e0;
+			padding: 25px;
+			border-radius: 8px;
+			cursor: pointer;
+			transition: background-color 0.2s, border-color 0.2s;
+		}
+
+		.file-input-wrapper:hover {
+			background-color: #f8f9fa;
+			border-color: #007bff;
+		}
+
+		#jarFile {
+			display: none;
+		}
+
+		#file-name-display {
+			color: #555;
+			margin-top: 10px;
+			font-style: italic;
+		}
+
+		#uploadButton {
+			background-color: #007bff;
+			color: white;
+			border: none;
+			padding: 12px 15px;
+			border-radius: 8px;
+			cursor: pointer;
+			font-size: 16px;
+			font-weight: 500;
+			transition: background-color 0.2s, opacity 0.2s;
+			opacity: 0.6;
+			pointer-events: none;
+			/* Initially disabled */
+		}
+
+		#uploadButton.enabled {
+			opacity: 1;
+			pointer-events: auto;
+		}
+
+		#uploadButton:hover.enabled {
+			background-color: #0056b3;
+		}
+
+		#statusMessage {
+			margin-top: 20px;
+			font-size: 1em;
+			font-weight: 500;
+			min-height: 20px;
+		}
+
+		.status-success {
+			color: #28a745;
+		}
+
+		.status-error {
+			color: #dc3545;
+		}
+
+		/* --- Circular Progress Bar Styles --- */
+		.progress-ring {
+			position: relative;
+			width: 120px;
+			height: 120px;
+			margin: 20px auto;
+		}
+
+		.progress-ring__svg {
+			transform: rotate(-90deg);
+			/* Start from the top */
+		}
+
+		.progress-ring__track,
+		.progress-ring__circle {
+			fill: transparent;
+			stroke-width: 10;
+		}
+
+		.progress-ring__track {
+			stroke: #e6e6e6;
+		}
+
+		.progress-ring__circle {
+			stroke: #007bff;
+			stroke-linecap: round;
+			/* Rounded ends */
+			transition: stroke-dashoffset 0.35s;
+		}
+
+		.progress-ring__text {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 1.5em;
+			font-weight: 600;
+			color: #0056b3;
+		}
+
+		/* --- Hide/Show Logic --- */
+		.hidden {
+			display: none;
+		}
+	</style>
+</head>
+
+<body>
+
+	<div class="upload-container">
+		<h1>智慧法庭研发184 JAR包部署上传</h1>
+
+		<div id="form-container">
+			<form id="uploadForm">
+				<label for="jarFile" class="file-input-wrapper">
+					<div>点击此处选择或拖拽文件,当前支持:ts-service、aicourt-monitor、aicourt-video部署</div>
+					<div id="file-name-display">未选择任何文件</div>
+				</label>
+				<input type="file" id="jarFile" accept=".jar" required>
+				<button type="submit" id="uploadButton">上传文件</button>
+			</form>
+		</div>
+
+		<div id="progress-container" class="hidden">
+			<div class="progress-ring">
+				<svg class="progress-ring__svg" width="120" height="120">
+					<circle class="progress-ring__track" r="50" cx="60" cy="60" />
+					<circle class="progress-ring__circle" id="progress-ring-circle" r="50" cx="60" cy="60" />
+				</svg>
+				<div class="progress-ring__text" id="progress-text">0%</div>
+			</div>
+		</div>
+
+		<div id="statusMessage"></div>
+	</div>
+
+	<script>
+		document.addEventListener('DOMContentLoaded', () => {
+			// DOM Elements
+			const uploadForm = document.getElementById('uploadForm');
+			const jarFileInput = document.getElementById('jarFile');
+			const uploadButton = document.getElementById('uploadButton');
+			const statusMessage = document.getElementById('statusMessage');
+			const fileNameDisplay = document.getElementById('file-name-display');
+			const formContainer = document.getElementById('form-container');
+			const progressContainer = document.getElementById('progress-container');
+			const progressCircle = document.getElementById('progress-ring-circle');
+			const progressText = document.getElementById('progress-text');
+
+			// Config
+			const N8N_WEBHOOK_BASE_URL = 'http://172.31.160.184:5678/webhook/uploadJar';
+			const radius = progressCircle.r.baseVal.value;
+			const circumference = 2 * Math.PI * radius;
+			progressCircle.style.strokeDasharray = `${circumference} ${circumference}`;
+			progressCircle.style.strokeDashoffset = circumference;
+
+			function setProgress(percent) {
+				const offset = circumference - (percent / 100) * circumference;
+				progressCircle.style.strokeDashoffset = offset;
+				progressText.textContent = `${percent}%`;
+			}
+
+			jarFileInput.addEventListener('change', () => {
+				if (jarFileInput.files.length > 0) {
+					fileNameDisplay.textContent = `已选择: ${jarFileInput.files[0].name}`;
+					uploadButton.classList.add('enabled');
+				} else {
+					fileNameDisplay.textContent = '未选择任何文件';
+					uploadButton.classList.remove('enabled');
+				}
+			});
+
+			uploadForm.addEventListener('submit', (event) => {
+				event.preventDefault();
+				const file = jarFileInput.files[0];
+				if (!file) {
+					showStatus('请先选择一个 JAR 文件！', 'error');
+					return;
+				}
+
+				// --- UI Orchestration ---
+				formContainer.classList.add('hidden');
+				progressContainer.classList.remove('hidden');
+				statusMessage.textContent = '正在上传...';
+				statusMessage.className = '';
+				setProgress(0);
+
+				// --- Use XMLHttpRequest for Progress Events ---
+				const xhr = new XMLHttpRequest();
+				const fileName = file.name;
+				const fullUrl = `${N8N_WEBHOOK_BASE_URL}?fileName=${encodeURIComponent(fileName)}`;
+
+				// Upload progress
+				xhr.upload.addEventListener('progress', (e) => {
+					if (e.lengthComputable) {
+						const percentComplete = Math.round((e.loaded / e.total) * 100);
+						setProgress(percentComplete);
+					}
+				});
+
+				// Upload finished (successfully or not)
+				xhr.addEventListener('load', () => {
+					setProgress(100); // Ensure it hits 100%
+					if (xhr.status >= 200 && xhr.status < 300) {
+						// Wait a moment so user can see 100%
+						setTimeout(() => {
+							progressContainer.classList.add('hidden');
+							formContainer.classList.remove('hidden');
+							uploadForm.reset();
+							fileNameDisplay.textContent = '未选择任何文件';
+							uploadButton.classList.remove('enabled');
+							showStatus('已成功上传，请等待机器部署。', 'success');
+						}, 500);
+					} else {
+						handleUploadError(`上传失败: 服务器返回错误 ${xhr.status}. ${xhr.responseText}`);
+					}
+				});
+
+				// Network or other errors
+				xhr.addEventListener('error', () => {
+					handleUploadError('上传出错: 请检查网络连接或n8n CORS配置。');
+				});
+
+				xhr.open('POST', fullUrl, true);
+				xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+				xhr.send(file);
+			});
+
+			function handleUploadError(message) {
+				progressContainer.classList.add('hidden');
+				formContainer.classList.remove('hidden');
+				showStatus(message, 'error');
+			}
+
+			function showStatus(message, type) {
+				statusMessage.textContent = message;
+				statusMessage.className = ''; // Reset class
+				if (type === 'success') {
+					statusMessage.classList.add('status-success');
+				} else if (type === 'error') {
+					statusMessage.classList.add('status-error');
+				}
+			}
+		});
+	</script>
+
+</body>
+
+</html>
