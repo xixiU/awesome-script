@@ -23,6 +23,7 @@
     unsafeWindow.fetch = function (url, options) {
         const requestUrl = (url instanceof Request) ? url.url : url;
         if (requestUrl.includes(targetUrlPath) && (options?.method?.toUpperCase() === 'GET' || options?.method === undefined)) {
+            console.log('【人脸识别API】已经自动跳过人脸识别');
             return originalFetch.apply(this, arguments).then(response => response.clone().json().then(data => new Response(JSON.stringify({ ...data, state: 1 }), { status: response.status, statusText: response.statusText, headers: response.headers })).catch(() => response));
         }
         return originalFetch.apply(this, arguments);
@@ -85,8 +86,16 @@
         overlay.addEventListener('click', () => {
             console.log('【播放器API】接收到“用户授权”点击，正在激活播放器...');
             try {
-                if (typeof player.setVolume === 'function') player.setVolume(0);
-                if (typeof player.play === 'function') player.play();
+                if (typeof player.setVolume === 'function') {
+                    player.setVolume(0);
+                    console.log('【播放器API】已经设置静音');
+                }
+                
+
+                if (typeof player.play === 'function') {
+                    player.play();
+                    console.log('【播放器API】已经开始播放');
+                }
 
                 setInterval(() => {
                     const currentPlayer = unsafeWindow.bjyV;
