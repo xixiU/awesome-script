@@ -19,6 +19,33 @@
     let isCourseCompleted = false;   // 当前课程是否已被确认为“完成”状态
 
     // ===================================================================================
+    // 【新增功能】破解“单课程播放”限制 (补丁模块)
+    // ===================================================================================
+    // 网站会定时检查服务器上是否有其他课程在播放，如果有，则会暂停当前视频。
+    // 我们通过重写这个检查函数，让它“撒谎”说当前课程就是正在播放的课程，从而绕过此限制。
+    const patcherInterval = setInterval(() => {
+        // 检查目标函数是否已在window对象上定义
+        if (typeof unsafeWindow.GetCoursePlayCourseware === 'function') {
+            // 一旦发现函数，立即清除轮询，防止重复执行
+            clearInterval(patcherInterval);
+
+            console.log('【破解模块】轮询成功，检测到“单课程播放”限制函数，准备重写...');
+
+            // 重写该函数，让它“撒谎”
+            unsafeWindow.GetCoursePlayCourseware = function (userId, titleId) {
+                console.log('【破解模块】已拦截“单课程播放”检查，返回当前课程ID以绕过限制。');
+                // 直接返回当前页面的课程ID，使 (服务器返回的ID == 当前ID) 的判断恒成立
+                return titleId;
+            };
+        }
+    }, 200); // 每 200 毫秒检查一次
+
+    // 添加一个安全超时，以防网站结构变化导致无限轮询
+    setTimeout(() => {
+        clearInterval(patcherInterval);
+    }, 10000); // 10秒后自动停止
+
+    // ===================================================================================
     // 功能一：API请求拦截 (处理人脸识别 & 监听课程完成)
     // ===================================================================================
     const faceIdUrlPath = '/Exercise/FaceAuth/GetQRCodeScanResult';
@@ -69,17 +96,6 @@
                         Object.defineProperty(this, 'response', { value: JSON.stringify(modifiedResponse), writable: true });
                     } catch (e) { }
                 }
-                // // b. 监听课程完成日志
-                // if (this._url?.includes(completionLogUrl) && !isCourseCompleted) {
-                //     try {
-                //         const data = JSON.parse(this.responseText);
-                //         if (data.status === 1) {
-                //             console.log('【网络监听】(XHR)检测到课程完成信号，准备切换！');
-                //             isCourseCompleted = true; // 设置完成标志
-                //             // setTimeout(playNextVideo, 1500); // 切换下一课
-                //         }
-                //     } catch (e) { }
-                // }
             }
             // 确保原始的回调函数（如果存在）也能被执行
             originalOnReadyStateChange?.apply(this, arguments);
@@ -97,43 +113,34 @@
         const playerWrap = document.querySelector('.bplayer-wrap');
         if (typeof player !== 'object' || player === null || !playerWrap) return;
 
+        // 一旦检测到播放器，立即设置状态为已初始化，防止重复执行
         isPlayerInitialized = true;
+        console.log('【播放器控制】检测到播放器对象，启动智能控制逻辑...');
 
-        // --- 新增：将核心的自动播放逻辑提取为独立函数 ---
         const activateAutoPlay = () => {
             console.log('【播放器控制】正在激活自动播放功能...');
-
             try {
-                // 设置静音
                 if (typeof player.setVolume === 'function') {
                     player.setVolume(0);
                     console.log('【播放器控制】已设置静音');
                 }
-
-                // 确保播放
                 if (typeof player.play === 'function') {
                     player.play();
                     console.log('【播放器控制】已触发播放');
                 }
-
-                // 启动一个定时器，持续检查并防止视频暂停
                 setInterval(() => {
                     const currentPlayer = unsafeWindow.bjyV;
-                    // 只有在课程未被标记为“完成”时，才执行防暂停逻辑
                     if (currentPlayer && !isCourseCompleted) {
-                        // 使用两种方式检查暂停状态以提高兼容性
                         const isPaused = (typeof currentPlayer.isPaused === 'function' && currentPlayer.isPaused()) || currentPlayer.paused === true;
                         if (isPaused) {
                             console.log('【播放器控制】检测到视频暂停，尝试恢复播放...');
                             currentPlayer.play?.();
                         }
                     }
-                }, 3000); // 每3秒检查一次
-
+                }, 3000);
             } catch (error) {
                 console.error('【播放器控制】激活自动播放时发生错误:', error);
             } finally {
-                // 如果蒙层存在于页面上，则移除它
                 const existingOverlay = document.getElementById('gm-unlock-overlay');
                 if (existingOverlay) {
                     existingOverlay.remove();
@@ -141,28 +148,37 @@
             }
         };
 
+        // --- 智能轮询逻辑 ---
+        let attempts = 0;
+        const maxAttempts = 8; // 最多尝试8次 (8 * 250ms = 2秒)
+        const pollInterval = setInterval(() => {
+            const currentPlayer = unsafeWindow.bjyV; // 每次都获取最新的播放器状态
 
-        // 检查播放器当前是否已暂停
-        if (player.paused) {
-            // 1. 如果视频是暂停的，创建并显示蒙层，等待用户交互
-            console.log('【播放器控制】视频处于暂停状态，创建交互蒙层。');
+            // 成功条件：视频已经在播放了
+            if (currentPlayer && !currentPlayer.paused) {
+                clearInterval(pollInterval);
+                console.log('【播放器控制】轮询成功：视频已自动播放。直接进入自动学习模式。');
+                activateAutoPlay();
+                return;
+            }
 
-            const overlay = document.createElement('div');
-            overlay.id = 'gm-unlock-overlay';
-            Object.assign(overlay.style, { position: 'fixed', top: '0', left: '0', right: '0', bottom: '0', backgroundColor: 'rgba(0, 0, 0, 0.8)', color: 'white', zIndex: '2147483647', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', fontSize: '32px', fontWeight: 'bold', fontFamily: 'sans-serif', cursor: 'pointer', userSelect: 'none', textAlign: 'center', padding: '20px', lineHeight: '1.5' });
-            overlay.innerHTML = '▶ 点击屏幕任意位置以开始自动学习<br><small style="font-size: 18px; font-weight: normal;">(此为浏览器安全策略要求，仅需一次)</small>';
+            // 失败/超时条件
+            attempts++;
+            if (attempts >= maxAttempts) {
+                clearInterval(pollInterval);
+                console.log('【播放器控制】轮询超时：视频仍处于暂停状态。尝试自动触发点击逻辑。');
 
-            // 2. 为蒙层添加点击事件，点击后调用激活函数
-            overlay.addEventListener('click', activateAutoPlay, { once: true });
+                // 创建一个临时的、不可见的蒙层
+                const tempOverlay = document.createElement('div');
+                tempOverlay.id = 'gm-unlock-overlay'; // id需要匹配，以便activateAutoPlay可以移除它
 
-            // 3. 将蒙层添加到页面
-            document.body.appendChild(overlay);
+                // 绑定激活函数
+                tempOverlay.addEventListener('click', activateAutoPlay, { once: true });
 
-        } else {
-            // 4. 如果视频已经在播放，则无需用户交互，直接调用激活函数
-            console.log('【播放器控制】视频已在播放，直接激活自动静音和防暂停逻辑。');
-            activateAutoPlay();
-        }
+                // **用代码代替用户点击**
+                tempOverlay.click();
+            }
+        }, 250); // 每250毫秒检查一次
     };
 
     const playNextVideo = () => {
