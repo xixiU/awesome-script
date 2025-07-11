@@ -93,29 +93,45 @@
                         "conversation_id": "",
                         "user": "abc-123"
                     };
+
                     GM_xmlhttpRequest({
-                        method: "POST", url: API_URL,
-                        headers: { "Content-Type": "application/json" },
+                        method: "POST",
+                        url: API_URL,
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
                         data: JSON.stringify(payload),
                         onload: (response) => {
                             if (response.status >= 200 && response.status < 300) {
                                 try {
-                                    const responseText = response.responseText;
-                                    const match = responseText.match(/data:\s*({.*})/);
-                                    if (match && match[1]) {
-                                        const apiResult = JSON.parse(match[1]);
-                                        const answerText = apiResult.answer;
-                                        const answerJsonMatch = answerText.match(/{[\s\S]*}/);
-                                        if (answerJsonMatch) { resolve(JSON.parse(answerJsonMatch[0])); return; }
-                                    }
-                                    reject('无法从API响应中解析出JSON答案');
-                                } catch (e) { reject('解析API响应失败: ' + e.message); }
-                            } else { reject(`API请求失败, 状态码: ${response.status}`); }
+                                    const data = JSON.parse(response.responseText);
+
+                                    // 提取原始 answer 字符串
+                                    let answerStr = data.answer || "";
+
+                                    // 去除 Markdown 包裹 ```json ... ```
+                                    answerStr = answerStr.replace(/^```json/, "")
+                                        .replace(/^```/, "")
+                                        .replace(/```$/, "")
+                                        .trim();
+
+                                    // 解析 JSON 格式答案
+                                    const parsed = JSON.parse(answerStr);
+
+                                    // 返回标准结构：{ type: "...", ans: [...] }
+                                    resolve(parsed);
+                                } catch (e) {
+                                    reject("解析失败: " + e.message + "，原始返回: " + response.responseText);
+                                }
+                            } else {
+                                reject("代理返回失败状态码: " + response.status);
+                            }
                         },
-                        onerror: (error) => reject('API请求错误: ' + (error ? error.statusText : '未知错误'))
+                        onerror: (err) => reject("代理请求失败: " + (err?.statusText || '未知错误'))
                     });
                 });
             }
+
 
             async function startAnsweringProcess() {
                 if (isRunning) return;
@@ -137,7 +153,8 @@
                         const questionData = extractQuestionData(el);
                         if (!questionData) { updateStatus(`第 ${count} 题: 无法识别题型，已跳过`); await delay(1000); continue; }
                         updateStatus(`第 ${count} 题: 已提取，请求答案...`);
-                        updateStatus(`${JSON.stringify(questionData)}`)
+                        updateStatus(JSON.stringify(questionData));
+                        // console.log(`${JSON.stringify(questionData)}`)
                         const answerData = await fetchAnswer(questionData);
                         updateStatus(`第 ${count} 题: 收到答案 "${answerData.ans}"`);
                         selectAnswer(el, questionData.typeClass, answerData);
@@ -165,21 +182,31 @@
             }
 
             function selectAnswer(el, typeClass, answerData) {
+                const answers = Array.isArray(answerData.ans)
+                    ? answerData.ans.map(a => a.trim().toUpperCase())
+                    : String(answerData.ans).split(',').map(a => a.trim().toUpperCase());
+
                 if (typeClass === 'SINGLE' || typeClass === 'MULTIPLE') {
-                    const answers = answerData.ans.split(',').map(a => a.trim().toUpperCase());
+                    const optionInputs = el.querySelectorAll('.question-options li input');
                     for (const ans of answers) {
                         const index = ans.charCodeAt(0) - 'A'.charCodeAt(0);
-                        const optionInputs = el.querySelectorAll('.question-options li input');
-                        if (optionInputs[index]) optionInputs[index].click();
-                        else throw new Error(`找不到选项 ${ans}`);
+                        if (optionInputs[index]) {
+                            optionInputs[index].click();
+                        } else {
+                            throw new Error(`找不到选项 ${ans}`);
+                        }
                     }
                 } else if (typeClass === 'JUDGMENT') {
-                    const ans = String(answerData.ans).toLowerCase();
+                    const ans = answers[0].toLowerCase(); // true / false
                     const inputEl = el.querySelector(`input[value="${ans}"]`);
-                    if (inputEl) inputEl.click();
-                    else throw new Error(`找不到判断题选项 ${ans}`);
+                    if (inputEl) {
+                        inputEl.click();
+                    } else {
+                        throw new Error(`找不到判断题选项 ${ans}`);
+                    }
                 }
             }
+
         }
     }
 
