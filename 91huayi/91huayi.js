@@ -69,17 +69,7 @@
                         Object.defineProperty(this, 'response', { value: JSON.stringify(modifiedResponse), writable: true });
                     } catch (e) { }
                 }
-                // b. 监听课程完成日志
-                if (this._url?.includes(completionLogUrl) && !isCourseCompleted) {
-                    try {
-                        const data = JSON.parse(this.responseText);
-                        if (data.status === 1) {
-                            console.log('【网络监听】(XHR)检测到课程完成信号，准备切换！');
-                            isCourseCompleted = true; // 设置完成标志
-                            setTimeout(playNextVideo, 1500); // 切换下一课
-                        }
-                    } catch (e) { }
-                }
+
             }
             // 确保原始的回调函数（如果存在）也能被执行
             originalOnReadyStateChange?.apply(this, arguments);
