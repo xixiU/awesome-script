@@ -22,7 +22,6 @@
     // 功能一：API请求拦截 (处理人脸识别 & 监听课程完成)
     // ===================================================================================
     const faceIdUrlPath = '/Exercise/FaceAuth/GetQRCodeScanResult';
-    const completionLogUrl = '/exercise/ExerciseCourse/AddCourseWarePlayTraceLog';
 
     // 1. 拦截 Fetch API
     const originalFetch = unsafeWindow.fetch;
@@ -40,23 +39,6 @@
                     // 创建并返回一个新的、被修改过的响应
                     return new Response(JSON.stringify(data), { status: response.status, statusText: response.statusText, headers: response.headers });
                 }).catch(() => response); // 如果响应不是JSON，则返回原始响应
-            });
-        }
-
-        // b. 新增：监听课程完成日志 (只读响应)
-        if (requestUrl.includes(completionLogUrl)) {
-            return originalFetch.apply(this, arguments).then(response => {
-                const responseClone = response.clone();
-                responseClone.json().then(data => {
-                    // 检查响应状态，并确保这是本课程第一次被标记为完成
-                    if (data.status === 1 && !isCourseCompleted) {
-                        console.log('【网络监听】(Fetch)检测到课程完成信号，准备切换！');
-                        isCourseCompleted = true; // 设置完成标志，防止重复触发
-                        setTimeout(playNextVideo, 1500); // 稍作延时后切换到下一课
-                    }
-                }).catch(() => { }); // 忽略非JSON格式的响应
-                // 将原始响应返回给页面，确保不影响页面正常逻辑
-                return response;
             });
         }
 
@@ -152,6 +134,7 @@
         } else {
             // 直接触发静音
             overlay.click();
+            overlay.remove();
         }
 
     };
@@ -162,7 +145,7 @@
         let nextVideoItem = null;
         for (const item of listItems) {
             const button = item.querySelector('button');
-            if (button && button.textContent.trim() === '学习中') {
+            if (button && (button.textContent.trim() === '学习中' || button.textContent.trim() === '未学习')) {
                 nextVideoItem = item;
                 break;
             }
