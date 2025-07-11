@@ -69,7 +69,17 @@
                         Object.defineProperty(this, 'response', { value: JSON.stringify(modifiedResponse), writable: true });
                     } catch (e) { }
                 }
-
+                // // b. 监听课程完成日志
+                // if (this._url?.includes(completionLogUrl) && !isCourseCompleted) {
+                //     try {
+                //         const data = JSON.parse(this.responseText);
+                //         if (data.status === 1) {
+                //             console.log('【网络监听】(XHR)检测到课程完成信号，准备切换！');
+                //             isCourseCompleted = true; // 设置完成标志
+                //             // setTimeout(playNextVideo, 1500); // 切换下一课
+                //         }
+                //     } catch (e) { }
+                // }
             }
             // 确保原始的回调函数（如果存在）也能被执行
             originalOnReadyStateChange?.apply(this, arguments);
@@ -88,49 +98,71 @@
         if (typeof player !== 'object' || player === null || !playerWrap) return;
 
         isPlayerInitialized = true;
-        const overlay = document.createElement('div');
-        overlay.id = 'gm-unlock-overlay';
-        Object.assign(overlay.style, { position: 'fixed', top: '0', left: '0', right: '0', bottom: '0', backgroundColor: 'rgba(0, 0, 0, 0.8)', color: 'white', zIndex: '2147483647', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', fontSize: '32px', fontWeight: 'bold', fontFamily: 'sans-serif', cursor: 'pointer', userSelect: 'none', textAlign: 'center', padding: '20px', lineHeight: '1.5' });
-        overlay.innerHTML = '▶ 点击屏幕任意位置以开始自动学习<br><small style="font-size: 18px; font-weight: normal;">(此为浏览器安全策略要求，仅需一次)</small>';
 
-        overlay.addEventListener('click', () => {
-            console.log('【播放器API】接收到“用户授权”点击，正在激活播放器...');
+        // --- 新增：将核心的自动播放逻辑提取为独立函数 ---
+        const activateAutoPlay = () => {
+            console.log('【播放器控制】正在激活自动播放功能...');
 
             try {
+                // 设置静音
                 if (typeof player.setVolume === 'function') {
                     player.setVolume(0);
-                    console.log('【播放器API】已经设置静音');
+                    console.log('【播放器控制】已设置静音');
                 }
 
+                // 确保播放
                 if (typeof player.play === 'function') {
                     player.play();
-                    player.setSpeed(2.0)
-                    console.log('【播放器API】已经开始播放');
+                    console.log('【播放器控制】已触发播放');
                 }
+
+                // 启动一个定时器，持续检查并防止视频暂停
                 setInterval(() => {
                     const currentPlayer = unsafeWindow.bjyV;
                     // 只有在课程未被标记为“完成”时，才执行防暂停逻辑
                     if (currentPlayer && !isCourseCompleted) {
+                        // 使用两种方式检查暂停状态以提高兼容性
                         const isPaused = (typeof currentPlayer.isPaused === 'function' && currentPlayer.isPaused()) || currentPlayer.paused === true;
                         if (isPaused) {
+                            console.log('【播放器控制】检测到视频暂停，尝试恢复播放...');
                             currentPlayer.play?.();
-                            currentPlayer.setSpeed?.(2.0);
                         }
                     }
-                }, 3000);
-            } finally {
-                overlay.remove();
-            }
-        }, { once: true });
-        if (player.paused) {
-            // 3. 将蒙层添加到页面body
-            document.body.appendChild(overlay);
-        } else {
-            // 直接触发静音
-            overlay.click();
-            overlay.remove();
-        }
+                }, 3000); // 每3秒检查一次
 
+            } catch (error) {
+                console.error('【播放器控制】激活自动播放时发生错误:', error);
+            } finally {
+                // 如果蒙层存在于页面上，则移除它
+                const existingOverlay = document.getElementById('gm-unlock-overlay');
+                if (existingOverlay) {
+                    existingOverlay.remove();
+                }
+            }
+        };
+
+
+        // 检查播放器当前是否已暂停
+        if (player.paused) {
+            // 1. 如果视频是暂停的，创建并显示蒙层，等待用户交互
+            console.log('【播放器控制】视频处于暂停状态，创建交互蒙层。');
+
+            const overlay = document.createElement('div');
+            overlay.id = 'gm-unlock-overlay';
+            Object.assign(overlay.style, { position: 'fixed', top: '0', left: '0', right: '0', bottom: '0', backgroundColor: 'rgba(0, 0, 0, 0.8)', color: 'white', zIndex: '2147483647', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', fontSize: '32px', fontWeight: 'bold', fontFamily: 'sans-serif', cursor: 'pointer', userSelect: 'none', textAlign: 'center', padding: '20px', lineHeight: '1.5' });
+            overlay.innerHTML = '▶ 点击屏幕任意位置以开始自动学习<br><small style="font-size: 18px; font-weight: normal;">(此为浏览器安全策略要求，仅需一次)</small>';
+
+            // 2. 为蒙层添加点击事件，点击后调用激活函数
+            overlay.addEventListener('click', activateAutoPlay, { once: true });
+
+            // 3. 将蒙层添加到页面
+            document.body.appendChild(overlay);
+
+        } else {
+            // 4. 如果视频已经在播放，则无需用户交互，直接调用激活函数
+            console.log('【播放器控制】视频已在播放，直接激活自动静音和防暂停逻辑。');
+            activateAutoPlay();
+        }
     };
 
     const playNextVideo = () => {
