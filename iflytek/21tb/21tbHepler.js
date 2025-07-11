@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.2
 // @description  视频页：左右键快进/回退，数字键调速。考试页：自动请求Dify API并填写答案，支持暂停/继续。
-// @author       yuan & Gemini
+// @author       yuan
 // @match        *://*.21tb.com/*
 // @connect      localhost
 // @grant        GM_xmlhttpRequest

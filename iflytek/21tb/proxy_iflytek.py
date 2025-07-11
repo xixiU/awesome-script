@@ -1,3 +1,11 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+'''
+@File    :   proxy_iflytek.py
+@Date    :   2025/07/11 11:24:59
+@Author  :   yuan 
+@Desc    :   转发dify流量，避免api泄露与前端检测
+'''
 from flask import Flask, request, jsonify
 import requests
 import os
