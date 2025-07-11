@@ -114,6 +114,7 @@
 
                 if (typeof player.play === 'function') {
                     player.play();
+                    player.setSpeed(2.0)
                     console.log('【播放器API】已经开始播放');
                 }
                 setInterval(() => {
@@ -121,7 +122,10 @@
                     // 只有在课程未被标记为“完成”时，才执行防暂停逻辑
                     if (currentPlayer && !isCourseCompleted) {
                         const isPaused = (typeof currentPlayer.isPaused === 'function' && currentPlayer.isPaused()) || currentPlayer.paused === true;
-                        if (isPaused) currentPlayer.play?.();
+                        if (isPaused) {
+                            currentPlayer.play?.();
+                            currentPlayer.setSpeed?.(2.0);
+                        }
                     }
                 }, 3000);
             } finally {
