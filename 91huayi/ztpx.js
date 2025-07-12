@@ -188,8 +188,8 @@
                         }
                     }
 
-                    console.log(`【课程切换】找到目标课程: "${clickableTitle.textContent.trim()}"。设置锁并准备点击...`);
-                    GM_setValue(nextVideoLockKey, { locked: true, owner: tabId, timestamp: Date.now() });
+                    // console.log(`【课程切换】找到目标课程: "${clickableTitle.textContent.trim()}"。设置锁并准备点击...`);
+                    // GM_setValue(nextVideoLockKey, { locked: true, owner: tabId, timestamp: Date.now() });
 
                     isPlayerInitialized = false;
                     isCourseCompleted = false;
@@ -200,8 +200,8 @@
             }
         }
         if (!foundAndClicked) {
-            console.log('【课程切换】所有课程均已学习完毕或被锁定，5秒后自动关闭页面...');
-            setTimeout(() => { window.close(); }, 5000);
+            console.log('【课程切换】所有课程均已学习完毕或被锁定，20秒后自动关闭页面...');
+            setTimeout(() => { window.close(); }, 20000);
         }
     };
 
