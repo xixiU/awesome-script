@@ -183,20 +183,10 @@
         }, 250); // 每250毫秒检查一次
     };
 
+    const lockPrefix = 'video_lock_';
+
     // 这你要选择最后一个，可以进行多开学习
     const playNextVideo = () => {
-        const lockPrefix = 'video_lock_';
-
-        // 1. 释放当前页面的锁
-        const currentUrl = window.location.href;
-        const currentVideoIdMatch = currentUrl.match(/courseware_id=([a-f0-9\-]+)/);
-        if (currentVideoIdMatch && currentVideoIdMatch[1]) {
-            const currentVideoLockKey = lockPrefix + currentVideoIdMatch[1];
-            GM_setValue(currentVideoLockKey, null); // 使用null来表示释放锁
-            console.log(`【课程切换】已释放当前视频 (${currentVideoIdMatch[1]}) 的锁。`);
-        }
-
-        // 2. 寻找并切换到下一个未锁定的视频
         console.log("【课程切换】开始寻找下一个可学习的课程...");
         const listItems = document.querySelectorAll('.listGroup .listItem');
         let foundAndClicked = false;
@@ -214,22 +204,29 @@
                     const nextVideoLockKey = lockPrefix + nextVideoId;
                     const lock = GM_getValue(nextVideoLockKey, null);
 
-                    // 检查锁是否存在
                     if (lock) {
                         console.log(`【课程切换】课程 "${clickableTitle.textContent.trim()}" 已被其他页面锁定，跳过...`);
-                        continue; // 跳过这个视频，检查下一个
+                        continue;
                     }
 
-                    // 找到未锁定的视频，锁定并点击
-                    console.log(`【课程切换】找到目标课程: "${clickableTitle.textContent.trim()}"。设置锁并准备点击...`);
-                    GM_setValue(nextVideoLockKey, { locked: true }); // 设置一个简单的锁
+                    // 找到了下一个可学习的视频，现在可以安全地释放当前页面的锁
+                    const currentUrl = window.location.href;
+                    const currentVideoIdMatch = currentUrl.match(/courseware_id=([a-f0-9\-]+)/);
+                    if (currentVideoIdMatch && currentVideoIdMatch[1]) {
+                        const currentVideoLockKey = lockPrefix + currentVideoIdMatch[1];
+                        GM_setValue(currentVideoLockKey, null);
+                        console.log(`【课程切换】已释放当前视频 (${currentVideoIdMatch[1]}) 的锁。`);
+                    }
 
-                    // 在点击切换到新页面前，重置所有状态标志
+                    // 锁定并点击下一个视频
+                    console.log(`【课程切换】找到目标课程: "${clickableTitle.textContent.trim()}"。设置锁并准备点击...`);
+                    GM_setValue(nextVideoLockKey, { locked: true });
+
                     isPlayerInitialized = false;
                     isCourseCompleted = false;
                     clickableTitle.click();
                     foundAndClicked = true;
-                    break; // 找到并点击后，退出循环
+                    break;
                 }
             }
         }
@@ -238,6 +235,33 @@
             console.log('【课程切换】所有课程均已学习完毕或被锁定，5秒后自动关闭页面...');
             setTimeout(() => { window.close(); }, 5000);
         }
+    };
+
+    // 新增：页面加载时检查锁
+    const checkLockOnLoad = () => {
+        const currentUrl = window.location.href;
+        if (!currentUrl.includes('BJYCoursePlay')) {
+            // 如果不是播放页面，则不需要检查锁
+            return true;
+        }
+
+        const currentVideoIdMatch = currentUrl.match(/courseware_id=([a-f0-9\-]+)/);
+        if (currentVideoIdMatch && currentVideoIdMatch[1]) {
+            const videoId = currentVideoIdMatch[1];
+            const lockKey = lockPrefix + videoId;
+            const lock = GM_getValue(lockKey, null);
+
+            if (lock) {
+                console.log(`【锁检查】当前视频 (${videoId}) 已被其他页面锁定。立即尝试切换到下一个视频。`);
+                playNextVideo();
+                return false; // 返回false表示页面已被锁定，不应继续初始化播放器
+            } else {
+                console.log(`【锁检查】当前视频 (${videoId}) 未被锁定。本页面将获取锁并开始学习。`);
+                GM_setValue(lockKey, { locked: true });
+                return true; // 返回true表示可以继续
+            }
+        }
+        return true; // 如果URL中没有视频ID，则正常继续
     };
 
 
@@ -289,8 +313,12 @@
     });
 
     window.addEventListener('DOMContentLoaded', () => {
-        console.log('【终极学习助手 v2.8】脚本已启动，开始监视页面...');
-        mainObserver.observe(document.body, { childList: true, subtree: true, attributes: true });
+        console.log('【终极学习助手 v3.0】脚本已启动，开始监视页面...');
+
+        if (checkLockOnLoad()) {
+            // 只有在当前页面未被锁定时，才启动常规的监视逻辑
+            mainObserver.observe(document.body, { childList: true, subtree: true, attributes: true });
+        }
     });
 
 })();
