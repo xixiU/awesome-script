@@ -1,5 +1,5 @@
 // 课程列表页
-function listNeedLLearn() {
+function listNeedLearn() {
     const listItems = document.querySelectorAll('.itemList .contentItem .type .ready');
     let nextVideoItem = 0;
     for (const item of listItems) {
