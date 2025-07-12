@@ -181,6 +181,7 @@
         }, 250); // 每250毫秒检查一次
     };
 
+    // 这你要选择最后一个，可以进行多开学习
     const playNextVideo = () => {
         console.log("【课程切换】开始寻找下一个 '学习中' 的课程...");
         const listItems = document.querySelectorAll('.listGroup .listItem');
@@ -189,7 +190,7 @@
             const button = item.querySelector('button');
             if (button && (button.textContent.trim() === '学习中' || button.textContent.trim() === '未学习')) {
                 nextVideoItem = item;
-                break;
+                // break;
             }
         }
 
