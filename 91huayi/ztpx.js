@@ -252,9 +252,27 @@
             const lock = GM_getValue(lockKey, null);
 
             if (lock) {
-                console.log(`【锁检查】当前视频 (${videoId}) 已被其他页面锁定。立即尝试切换到下一个视频。`);
-                playNextVideo();
-                return false; // 返回false表示页面已被锁定，不应继续初始化播放器
+                console.log(`【锁检查】当前视频 (${videoId}) 已被其他页面锁定。将等待课程列表加载后尝试切换...`);
+
+                // 使用MutationObserver等待课程列表加载
+                const listObserver = new MutationObserver((mutations, observer) => {
+                    if (document.querySelector('.listGroup')) {
+                        console.log('【锁检查】课程列表已加载，现在尝试切换到下一个视频。');
+                        playNextVideo();
+                        observer.disconnect(); // 完成任务后断开观察
+                    }
+                });
+
+                listObserver.observe(document.body, { childList: true, subtree: true });
+
+                // 安全超时，以防列表永远不出现
+                setTimeout(() => {
+                    listObserver.disconnect();
+                    console.log('【锁检查】等待课程列表超时，将直接尝试切换。');
+                    playNextVideo();
+                }, 10000); // 10秒超时
+
+                return false; // 阻止主观察者启动
             } else {
                 console.log(`【锁检查】当前视频 (${videoId}) 未被锁定。本页面将获取锁并开始学习。`);
                 GM_setValue(lockKey, { locked: true });
