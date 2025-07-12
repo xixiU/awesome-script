@@ -9,6 +9,7 @@
 // @grant        window.close
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_addValueChangeListener
 // @run-at       document-start
 // ==/UserScript==
 
@@ -20,66 +21,51 @@
     let isPlayerInitialized = false; // 播放器是否已初始化并设置了轮询
     let isCourseCompleted = false;   // 当前课程是否已被确认为“完成”状态
 
+    const tabId = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    const LOCK_EXPIRE_MS = 80 * 60 * 1000; // 锁过期时间 80分钟 
+
     // ===================================================================================
     // 【新增功能】破解“单课程播放”限制 (补丁模块)
     // ===================================================================================
-    // 网站会定时检查服务器上是否有其他课程在播放，如果有，则会暂停当前视频。
-    // 我们通过重写这个检查函数，让它“撒谎”说当前课程就是正在播放的课程，从而绕过此限制。
     const patcherInterval = setInterval(() => {
-        // 检查目标函数是否已在window对象上定义
         if (typeof unsafeWindow.GetCoursePlayCourseware === 'function') {
-            // 一旦发现函数，立即清除轮询，防止重复执行
             clearInterval(patcherInterval);
-
             console.log('【破解模块】轮询成功，检测到“单课程播放”限制函数，准备重写...');
-
-            // 重写该函数，让它“撒谎”
             unsafeWindow.GetCoursePlayCourseware = function (userId, titleId) {
                 console.log('【破解模块】已拦截“单课程播放”检查，返回当前课程ID以绕过限制。');
-                // 直接返回当前页面的课程ID，使 (服务器返回的ID == 当前ID) 的判断恒成立
                 return titleId;
             };
         }
-    }, 200); // 每 200 毫秒检查一次
+    }, 200);
 
-    // 添加一个安全超时，以防网站结构变化导致无限轮询
     setTimeout(() => {
         clearInterval(patcherInterval);
-    }, 10000); // 10秒后自动停止
+    }, 10000);
 
     // ===================================================================================
     // 功能一：API请求拦截 (处理人脸识别 & 监听课程完成)
     // ===================================================================================
     const faceIdUrlPath = '/Exercise/FaceAuth/GetQRCodeScanResult';
 
-    // 1. 拦截 Fetch API
     const originalFetch = unsafeWindow.fetch;
     unsafeWindow.fetch = function (url, options) {
         const requestUrl = (url instanceof Request) ? url.url : url;
-
-        // a. 处理人脸识别 (修改响应)
         if (requestUrl.includes(faceIdUrlPath) && (options?.method?.toUpperCase() === 'GET' || options?.method === undefined)) {
             console.log('【API拦截】(Fetch)检测到人脸识别请求，修改state=1...');
             return originalFetch.apply(this, arguments).then(response => {
-                // 克隆响应以允许我们读取它，同时让浏览器也能正常接收
                 const responseClone = response.clone();
                 return responseClone.json().then(data => {
-                    data.state = 1; // 修改关键状态
-                    // 创建并返回一个新的、被修改过的响应
+                    data.state = 1;
                     return new Response(JSON.stringify(data), { status: response.status, statusText: response.statusText, headers: response.headers });
-                }).catch(() => response); // 如果响应不是JSON，则返回原始响应
+                }).catch(() => response);
             });
         }
-
-        // 对于所有其他请求，正常执行
         return originalFetch.apply(this, arguments);
     };
 
-    // 2. 拦截 XMLHttpRequest
     const originalOpen = XMLHttpRequest.prototype.open;
     const originalSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function (method, url) {
-        // 保存请求的url和method，以便在send和onreadystatechange中可以访问
         this._method = method;
         this._url = url;
         return originalOpen.apply(this, arguments);
@@ -87,9 +73,7 @@
     XMLHttpRequest.prototype.send = function () {
         const originalOnReadyStateChange = this.onreadystatechange;
         this.onreadystatechange = function () {
-            // 当请求完成且成功时
             if (this.readyState === 4 && this.status === 200) {
-                // a. 处理人脸识别
                 if (this._url?.includes(faceIdUrlPath)) {
                     try {
                         console.log('【API拦截】(XHR)检测到人脸识别请求，修改state=1...');
@@ -99,12 +83,10 @@
                     } catch (e) { }
                 }
             }
-            // 确保原始的回调函数（如果存在）也能被执行
             originalOnReadyStateChange?.apply(this, arguments);
         };
         return originalSend.apply(this, arguments);
     };
-
 
     // ===================================================================================
     // 功能二：播放器状态管理与智能切换
@@ -114,8 +96,6 @@
         const player = unsafeWindow.bjyV;
         const playerWrap = document.querySelector('.bplayer-wrap');
         if (typeof player !== 'object' || player === null || !playerWrap) return;
-
-        // 一旦检测到播放器，立即设置状态为已初始化，防止重复执行
         isPlayerInitialized = true;
         console.log('【播放器控制】检测到播放器对象，启动智能控制逻辑...');
 
@@ -150,42 +130,30 @@
             }
         };
 
-        // --- 智能轮询逻辑 ---
         let attempts = 0;
-        const maxAttempts = 8; // 最多尝试8次 (8 * 250ms = 2秒)
+        const maxAttempts = 8;
         const pollInterval = setInterval(() => {
-            const currentPlayer = unsafeWindow.bjyV; // 每次都获取最新的播放器状态
-
-            // 成功条件：视频已经在播放了
+            const currentPlayer = unsafeWindow.bjyV;
             if (currentPlayer && !currentPlayer.paused) {
                 clearInterval(pollInterval);
                 console.log('【播放器控制】轮询成功：视频已自动播放。直接进入自动学习模式。');
                 activateAutoPlay();
                 return;
             }
-
-            // 失败/超时条件
             attempts++;
             if (attempts >= maxAttempts) {
                 clearInterval(pollInterval);
                 console.log('【播放器控制】轮询超时：视频仍处于暂停状态。尝试自动触发点击逻辑。');
-
-                // 创建一个临时的、不可见的蒙层
                 const tempOverlay = document.createElement('div');
-                tempOverlay.id = 'gm-unlock-overlay'; // id需要匹配，以便activateAutoPlay可以移除它
-
-                // 绑定激活函数
+                tempOverlay.id = 'gm-unlock-overlay';
                 tempOverlay.addEventListener('click', activateAutoPlay, { once: true });
-
-                // **用代码代替用户点击**
                 tempOverlay.click();
             }
-        }, 250); // 每250毫秒检查一次
+        }, 250);
     };
 
     const lockPrefix = 'video_lock_';
 
-    // 这你要选择最后一个，可以进行多开学习
     const playNextVideo = () => {
         console.log("【课程切换】开始寻找下一个可学习的课程...");
         const listItems = document.querySelectorAll('.listGroup .listItem');
@@ -204,23 +172,24 @@
                     const nextVideoLockKey = lockPrefix + nextVideoId;
                     const lock = GM_getValue(nextVideoLockKey, null);
 
-                    if (lock) {
+                    if (lock && Date.now() - (lock.timestamp || 0) < LOCK_EXPIRE_MS) {
                         console.log(`【课程切换】课程 "${clickableTitle.textContent.trim()}" 已被其他页面锁定，跳过...`);
                         continue;
                     }
 
-                    // 找到了下一个可学习的视频，现在可以安全地释放当前页面的锁
                     const currentUrl = window.location.href;
                     const currentVideoIdMatch = currentUrl.match(/courseware_id=([a-f0-9\-]+)/);
                     if (currentVideoIdMatch && currentVideoIdMatch[1]) {
                         const currentVideoLockKey = lockPrefix + currentVideoIdMatch[1];
-                        GM_setValue(currentVideoLockKey, null);
-                        console.log(`【课程切换】已释放当前视频 (${currentVideoIdMatch[1]}) 的锁。`);
+                        const currentLock = GM_getValue(currentVideoLockKey);
+                        if (currentLock && currentLock.owner === tabId) {
+                            GM_setValue(currentVideoLockKey, null);
+                            console.log(`【课程切换】已释放当前视频 (${currentVideoIdMatch[1]}) 的锁。`);
+                        }
                     }
 
-                    // 锁定并点击下一个视频
                     console.log(`【课程切换】找到目标课程: "${clickableTitle.textContent.trim()}"。设置锁并准备点击...`);
-                    GM_setValue(nextVideoLockKey, { locked: true });
+                    GM_setValue(nextVideoLockKey, { locked: true, owner: tabId, timestamp: Date.now() });
 
                     isPlayerInitialized = false;
                     isCourseCompleted = false;
@@ -230,18 +199,15 @@
                 }
             }
         }
-
         if (!foundAndClicked) {
             console.log('【课程切换】所有课程均已学习完毕或被锁定，5秒后自动关闭页面...');
             setTimeout(() => { window.close(); }, 5000);
         }
     };
 
-    // 新增：页面加载时检查锁
     const checkLockOnLoad = () => {
         const currentUrl = window.location.href;
         if (!currentUrl.includes('BJYCoursePlay')) {
-            // 如果不是播放页面，则不需要检查锁
             return true;
         }
 
@@ -251,90 +217,65 @@
             const lockKey = lockPrefix + videoId;
             const lock = GM_getValue(lockKey, null);
 
-            if (lock) {
-                console.log(`【锁检查】当前视频 (${videoId}) 已被其他页面锁定。将等待课程列表加载后尝试切换...`);
-
-                // 使用MutationObserver等待课程列表加载
+            if (lock && lock.owner !== tabId && Date.now() - (lock.timestamp || 0) < LOCK_EXPIRE_MS) {
+                console.log(`【锁检查】当前视频 (${videoId}) 已被其他页面锁定。将等待课程列表加载后尝试切换${JSON.stringify(lock)}...`);
                 const listObserver = new MutationObserver((mutations, observer) => {
                     if (document.querySelector('.listGroup')) {
                         console.log('【锁检查】课程列表已加载，现在尝试切换到下一个视频。');
                         playNextVideo();
-                        observer.disconnect(); // 完成任务后断开观察
+                        observer.disconnect();
                     }
                 });
 
                 listObserver.observe(document.body, { childList: true, subtree: true });
 
-                // 安全超时，以防列表永远不出现
                 setTimeout(() => {
                     listObserver.disconnect();
                     console.log('【锁检查】等待课程列表超时，将直接尝试切换。');
                     playNextVideo();
-                }, 10000); // 10秒超时
+                }, 10000);
 
-                return false; // 阻止主观察者启动
+                return false;
             } else {
-                console.log(`【锁检查】当前视频 (${videoId}) 未被锁定。本页面将获取锁并开始学习。`);
-                GM_setValue(lockKey, { locked: true });
-                return true; // 返回true表示可以继续
+                console.log(`【锁检查】当前视频 (${videoId}) 未被锁定或锁已过期。本页面将获取锁并开始学习。`);
+                GM_setValue(lockKey, { locked: true, owner: tabId, timestamp: Date.now() });
+                return true;
             }
         }
-        return true; // 如果URL中没有视频ID，则正常继续
+        return true;
     };
-
 
     // ===================================================================================
     // 功能三：处理所有弹窗（人脸识别 & 课程评价）
     // ===================================================================================
     const handlePopups = () => {
-        // 1. 优先处理人脸识别弹窗
         const facePopup = document.querySelector('.popup_box[style*="display: block"]');
         if (facePopup) {
             const continueButton = facePopup.querySelector('button[onclick="ContinueLearning()"]');
             if (continueButton) continueButton.click();
-            return; // 处理完人脸识别后，暂时不处理其他弹窗，等待页面响应
+            return;
         }
 
-        // 2. 处理课程评价弹窗（作为备用完成信号）
         const ratingPopup = document.querySelector('.box_item_pj');
-        // 只有在弹窗可见，且课程未被网络请求标记为完成时，此逻辑才生效
         if (ratingPopup && ratingPopup.offsetHeight > 0 && !isCourseCompleted) {
             console.log('【课程评价】检测到可见的评价弹窗 (作为备用信号)，标记课程已结束。');
-            isCourseCompleted = true; // 设置完成标志
-
-            // // 自动打5星
-            // ratingPopup.querySelectorAll('.pj_box_pj dl').forEach(section => {
-            //     const stars = section.querySelectorAll('dd i');
-            //     if (stars.length > 0) stars[stars.length - 1].click();
-            // });
-
-            // // 自动提交
-            // const submitButton = ratingPopup.querySelector('.btn_box_pj button');
-            // if (submitButton) {
-            //     console.log('【课程评价】自动提交5星好评...');
-            //     submitButton.click();
-            // }
-
-            // 提交后，稍作等待，然后播放下一课
+            isCourseCompleted = true;
             console.log('【课程评价】处理完毕，准备在2秒后播放下一课...');
             setTimeout(playNextVideo, 2000);
         }
     };
 
-
     // ===================================================================================
     // 主执行逻辑：MutationObserver持续监视页面变化
     // ===================================================================================
     const mainObserver = new MutationObserver(() => {
-        initializePlayerControl(); // 负责播放器初始化
-        handlePopups();             // 统一处理所有弹窗
+        initializePlayerControl();
+        handlePopups();
     });
 
     window.addEventListener('DOMContentLoaded', () => {
         console.log('【终极学习助手 v3.0】脚本已启动，开始监视页面...');
-
         if (checkLockOnLoad()) {
-            // 只有在当前页面未被锁定时，才启动常规的监视逻辑
             mainObserver.observe(document.body, { childList: true, subtree: true, attributes: true });
         }
     });
