@@ -8,6 +8,7 @@
 // @grant        unsafeWindow
 // @grant        window.close
 // @grant        GM_setValue
+// @grant        GM_deleteValue
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
 // @run-at       document-start
@@ -183,7 +184,8 @@
                         const currentVideoLockKey = lockPrefix + currentVideoIdMatch[1];
                         const currentLock = GM_getValue(currentVideoLockKey);
                         if (currentLock && currentLock.owner === tabId) {
-                            GM_setValue(currentVideoLockKey, null);
+                            // GM_setValue(currentVideoLockKey, null);
+                            GM_deleteValue(currentVideoLockKey);
                             console.log(`【课程切换】已释放当前视频 (${currentVideoIdMatch[1]}) 的锁。`);
                         }
                     }
