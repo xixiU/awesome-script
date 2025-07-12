@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         终极学习助手 
 // @namespace    http://tampermonkey.net/
-// @version      2.9
+// @version      3.0
 // @description  过拦截课程完成API请求，实现更精准的自动切换下一课功能，兼容所有场景。
 // @author       Your Name
 // @match        *://ztpx.91huayi.com/*
 // @grant        unsafeWindow
 // @grant        window.close
+// @grant        GM_setValue
+// @grant        GM_getValue
 // @run-at       document-start
 // ==/UserScript==
 
@@ -183,30 +185,57 @@
 
     // 这你要选择最后一个，可以进行多开学习
     const playNextVideo = () => {
-        console.log("【课程切换】开始寻找下一个 '学习中' 的课程...");
+        const lockPrefix = 'video_lock_';
+
+        // 1. 释放当前页面的锁
+        const currentUrl = window.location.href;
+        const currentVideoIdMatch = currentUrl.match(/courseware_id=([a-f0-9\-]+)/);
+        if (currentVideoIdMatch && currentVideoIdMatch[1]) {
+            const currentVideoLockKey = lockPrefix + currentVideoIdMatch[1];
+            GM_setValue(currentVideoLockKey, null); // 使用null来表示释放锁
+            console.log(`【课程切换】已释放当前视频 (${currentVideoIdMatch[1]}) 的锁。`);
+        }
+
+        // 2. 寻找并切换到下一个未锁定的视频
+        console.log("【课程切换】开始寻找下一个可学习的课程...");
         const listItems = document.querySelectorAll('.listGroup .listItem');
-        let nextVideoItem = null;
+        let foundAndClicked = false;
+
         for (const item of listItems) {
             const button = item.querySelector('button');
-            if (button && (button.textContent.trim() === '学习中' || button.textContent.trim() === '未学习')) {
-                nextVideoItem = item;
-                // break;
+            const clickableTitle = item.querySelector('.text[onclick]');
+
+            if (button && clickableTitle && (button.textContent.trim() === '学习中' || button.textContent.trim() === '未学习')) {
+                const onclickAttr = clickableTitle.getAttribute('onclick');
+                const match = onclickAttr.match(/VideoPlay\('([^']+)'/);
+
+                if (match && match[1]) {
+                    const nextVideoId = match[1];
+                    const nextVideoLockKey = lockPrefix + nextVideoId;
+                    const lock = GM_getValue(nextVideoLockKey, null);
+
+                    // 检查锁是否存在
+                    if (lock) {
+                        console.log(`【课程切换】课程 "${clickableTitle.textContent.trim()}" 已被其他页面锁定，跳过...`);
+                        continue; // 跳过这个视频，检查下一个
+                    }
+
+                    // 找到未锁定的视频，锁定并点击
+                    console.log(`【课程切换】找到目标课程: "${clickableTitle.textContent.trim()}"。设置锁并准备点击...`);
+                    GM_setValue(nextVideoLockKey, { locked: true }); // 设置一个简单的锁
+
+                    // 在点击切换到新页面前，重置所有状态标志
+                    isPlayerInitialized = false;
+                    isCourseCompleted = false;
+                    clickableTitle.click();
+                    foundAndClicked = true;
+                    break; // 找到并点击后，退出循环
+                }
             }
         }
 
-        if (nextVideoItem) {
-            const clickableTitle = nextVideoItem.querySelector('.text[onclick]');
-            if (clickableTitle) {
-                console.log(`【课程切换】找到目标课程: "${clickableTitle.textContent.trim()}"。准备点击...`);
-                // 在点击切换到新页面前，重置所有状态标志，为新课程的脚本运行做准备
-                isPlayerInitialized = false;
-                isCourseCompleted = false;
-                clickableTitle.click();
-            } else {
-                console.log("【课程切换】错误：找到了'学习中'的课程行，但未找到可点击的标题。");
-            }
-        } else {
-            console.log('【课程切换】所有课程均已学习完毕，5秒后自动关闭页面...');
+        if (!foundAndClicked) {
+            console.log('【课程切换】所有课程均已学习完毕或被锁定，5秒后自动关闭页面...');
             setTimeout(() => { window.close(); }, 5000);
         }
     };
