@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         ztpx终极学习助手 (网络监听版)
+// @name         终极学习助手 
 // @namespace    http://tampermonkey.net/
 // @version      2.8
 // @description  [网络监听] 通过拦截课程完成API请求，实现更精准的自动切换下一课功能，兼容所有场景。
