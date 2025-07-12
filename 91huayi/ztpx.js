@@ -171,8 +171,12 @@
                 if (match && match[1]) {
                     const nextVideoId = match[1];
                     const nextVideoLockKey = lockPrefix + nextVideoId;
-                    const lock = GM_getValue(nextVideoLockKey, null);
+                    const lock = GM_getValue(nextVideoLockKey);
 
+                    if (lock == null) {
+                        console.log(`【课程切换】课程 "${clickableTitle.textContent.trim()}" 已经学习过，跳过...`);
+                        continue;
+                    }
                     if (lock && Date.now() - (lock.timestamp || 0) < LOCK_EXPIRE_MS) {
                         console.log(`【课程切换】课程 "${clickableTitle.textContent.trim()}" 已被其他页面锁定，跳过...`);
                         continue;
@@ -184,8 +188,8 @@
                         const currentVideoLockKey = lockPrefix + currentVideoIdMatch[1];
                         const currentLock = GM_getValue(currentVideoLockKey);
                         if (currentLock && currentLock.owner === tabId) {
-                            // GM_setValue(currentVideoLockKey, null);
-                            GM_deleteValue(currentVideoLockKey);
+                            GM_setValue(currentVideoLockKey, null);
+                            // GM_deleteValue(currentVideoLockKey);
                             console.log(`【课程切换】已释放当前视频 (${currentVideoIdMatch[1]}) 的锁。`);
                         }
                     }
