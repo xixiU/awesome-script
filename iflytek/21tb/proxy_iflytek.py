@@ -38,15 +38,15 @@ def test():
     data = {
         "inputs":{ "role": "科大讯飞公司的规章制度专家", "ability": "保密" },
         "query": """{ "题型": "单选题", "题目": "1. 违反《中华人民共和国保守国家秘密法》的规定，（ ）泄露国家秘密，情节严重的，依照刑法有关规定追究刑事责任。", "选项": [ "A. 故意", "B. 故意或过失", "C. 过失" ] }""",
-        "response_mode": "streaming",
-        "conversation_id": "1c7e55fb-1ba2-4e10-81b5-30addcea2276",
-        "user": "abc-123"
+        "response_mode": "blocking",
+        "conversation_id": "",
+        "user": "test-123"
     }
 
     response = requests.post(DIFY_API_URL, headers=headers, data=json.dumps(data))
-    print(response.text)
+    print(response.json()['answer'])
 
     return 
 if __name__ == "__main__":
-    test()
-    # app.run(host="0.0.0.0", port=5005, debug=True)
+    # test()
+    app.run(host="0.0.0.0", port=5005, debug=True)
