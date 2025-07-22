@@ -87,7 +87,7 @@
             function fetchAnswer(questionData) {
                 return new Promise((resolve, reject) => {
                     const payload = {
-                        "inputs": {},
+                        "inputs": { "role": "科大讯飞公司的规章制度专家", "ability": "保密" },
                         "query": JSON.stringify(questionData),
                         "response_mode": "blocking",
                         "conversation_id": "",

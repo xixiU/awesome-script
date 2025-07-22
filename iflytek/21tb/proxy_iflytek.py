@@ -9,6 +9,7 @@
 from flask import Flask, request, jsonify
 import requests
 import os
+import json
 app = Flask(__name__)
 
 # 替换为你自己的 Dify API 地址和 KEY
@@ -16,13 +17,15 @@ DIFY_API_URL = "https://dify.iflytek.com/v1/chat-messages"
 DIFY_API_KEY = os.getenv("DIFY_API_KEY", "")  # ⚠️ 请妥善保管，勿暴露给前端！
 if not len(DIFY_API_KEY):
     SystemExit("请配置DIFY_API_KEY")
-@app.route("/proxy/dify", methods=["POST"])
-def proxy_dify():
-    try:
-        headers = {
+
+headers = {
             "Authorization": DIFY_API_KEY,
             "Content-Type": "application/json"
         }
+@app.route("/proxy/dify", methods=["POST"])
+def proxy_dify():
+    try:
+        
 
         resp = requests.post(DIFY_API_URL, headers=headers, json=request.get_json(), timeout=10)
         print(resp.json())
@@ -31,5 +34,19 @@ def proxy_dify():
         return jsonify({"error": str(e)}), 500
 
 
+def test():
+    data = {
+        "inputs":{ "role": "科大讯飞公司的规章制度专家", "ability": "保密" },
+        "query": """{ "题型": "单选题", "题目": "1. 违反《中华人民共和国保守国家秘密法》的规定，（ ）泄露国家秘密，情节严重的，依照刑法有关规定追究刑事责任。", "选项": [ "A. 故意", "B. 故意或过失", "C. 过失" ] }""",
+        "response_mode": "streaming",
+        "conversation_id": "1c7e55fb-1ba2-4e10-81b5-30addcea2276",
+        "user": "abc-123"
+    }
+
+    response = requests.post(DIFY_API_URL, headers=headers, data=json.dumps(data))
+    print(response.text)
+
+    return 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5005, debug=True)
+    test()
+    # app.run(host="0.0.0.0", port=5005, debug=True)
