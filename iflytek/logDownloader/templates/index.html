@@ -15,6 +15,7 @@
             min-height: 100vh;
             background-color: #f4f7f9;
             margin: 0;
+            padding: 20px 0;
         }
 
         .container {
@@ -67,6 +68,31 @@
 
         .date-group .form-group {
             flex: 1;
+        }
+
+        .actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .clear-link {
+            color: #007bff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .clear-link:hover {
+            text-decoration: underline;
         }
 
         button {
@@ -160,6 +186,14 @@
                     <input type="date" id="end_date" name="end_date">
                 </div>
             </div>
+
+            <div class="actions">
+                <label class="remember-me">
+                    <input type="checkbox" id="rememberMe">
+                    记住信息
+                </label>
+                <a href="#" id="clearLink" class="clear-link">清除已存信息</a>
+            </div>
             <button type="submit" id="submitBtn">
                 <span id="btn-text">下载日志</span>
                 <span id="spinner" class="spinner" style="display: none;"></span>
@@ -169,16 +203,89 @@
     </div>
 
     <script>
+        // === DOM 元素引用 ===
         const logForm = document.getElementById('logForm');
         const submitBtn = document.getElementById('submitBtn');
         const btnText = document.getElementById('btn-text');
         const spinner = document.getElementById('spinner');
         const statusDiv = document.getElementById('status');
+        const rememberMeCheckbox = document.getElementById('rememberMe');
+        const clearLink = document.getElementById('clearLink');
+        const passwordInput = document.getElementById('password');
 
+        // 定义一个用于 localStorage 的 key
+        const STORAGE_KEY = 'logDownloaderCredentials';
+
+        // === 功能函数 ===
+
+        /**
+         * 页面加载时，加载已保存的数据
+         */
+        function loadSavedData() {
+            const savedData = localStorage.getItem(STORAGE_KEY);
+            if (savedData) {
+                const data = JSON.parse(savedData);
+                document.getElementById('hostname').value = data.hostname || '';
+                document.getElementById('service_port').value = data.service_port || '';
+                document.getElementById('username').value = data.username || '';
+                document.getElementById('password').value = data.password || '';
+                document.getElementById('ssh_port').value = data.ssh_port || '';
+                rememberMeCheckbox.checked = true; // 如果有数据，默认勾选“记住我”
+            }
+        }
+
+        /**
+         * 保存数据到 localStorage
+         */
+        function saveData() {
+            const dataToSave = {
+                hostname: document.getElementById('hostname').value,
+                service_port: document.getElementById('service_port').value,
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value,
+                ssh_port: document.getElementById('ssh_port').value,
+            };
+            // 保存数据
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+        }
+
+        /**
+         * 从 localStorage 清除数据
+         */
+        function clearSavedData() {
+            localStorage.removeItem(STORAGE_KEY);
+            // 清空表单
+            logForm.reset();
+            document.getElementById('username').value = 'root'; // 保留默认值
+            document.getElementById('ssh_port').value = '22';
+            statusDiv.textContent = '已清除保存的信息。';
+            statusDiv.className = 'status-success';
+            setTimeout(() => statusDiv.textContent = '', 3000); // 3秒后清除提示
+        }
+
+        // === 事件监听 ===
+
+        // 页面加载完成后立即执行
+        document.addEventListener('DOMContentLoaded', loadSavedData);
+
+        // 清除链接的点击事件
+        clearLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            clearSavedData();
+        });
+
+        // 表单提交事件
         logForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            // 禁用按钮并显示加载动画
+            // --- 保存或清除数据 ---
+            if (rememberMeCheckbox.checked) {
+                saveData();
+            } else {
+                localStorage.removeItem(STORAGE_KEY);
+            }
+
+            // --- 按钮状态和API请求 (逻辑不变) ---
             submitBtn.disabled = true;
             btnText.textContent = '处理中...';
             spinner.style.display = 'inline-block';
@@ -196,11 +303,8 @@
                 });
 
                 if (response.ok) {
-                    // 如果响应成功，说明是文件流
                     statusDiv.textContent = '成功！正在准备下载...';
                     statusDiv.className = 'status-success';
-
-                    // 从 Content-Disposition 头获取文件名
                     const disposition = response.headers.get('Content-Disposition');
                     let filename = 'download.tar.gz';
                     if (disposition && disposition.indexOf('attachment') !== -1) {
@@ -210,8 +314,6 @@
                             filename = matches[1].replace(/['"]/g, '');
                         }
                     }
-
-                    // 创建 Blob 对象并触发下载
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -222,19 +324,17 @@
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
+                    passwordInput.value = ''; // 下载成功后清空密码输入框
 
                 } else {
-                    // 如果响应失败，说明是JSON格式的错误信息
                     const errorData = await response.json();
                     statusDiv.textContent = `错误: ${errorData.error || '未知错误'}`;
                     statusDiv.className = 'status-error';
                 }
             } catch (error) {
-                // 网络或其他 fetch 错误
                 statusDiv.textContent = `请求失败: ${error.message}`;
                 statusDiv.className = 'status-error';
             } finally {
-                // 恢复按钮状态
                 submitBtn.disabled = false;
                 btnText.textContent = '下载日志';
                 spinner.style.display = 'none';
