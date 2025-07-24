@@ -71,17 +71,39 @@ def get_logs_as_archive(hostname, ssh_port, username, password, service_port, st
         if not log_files_to_pack:
             raise Exception("在指定日期范围内未找到任何日志文件")
 
-        archive_name = f"log_archive_{hostname}_{time.strftime('%Y%m%d%H%M%S')}.tar.gz"
+        # archive_name = f"log_archive_{hostname}_{time.strftime('%Y%m%d%H%M%S')}.tar.gz"
+        # remote_archive_path = f"/tmp/{archive_name}"
+        # log_files_str = " ".join(f"'{f}'" for f in log_files_to_pack)
+
+        # tar_command = f"tar -czf {remote_archive_path} -C {service_base_path} {log_files_str}"
+        # output, err, status = execute_command(client, tar_command)
+        # if status != 0:
+        #     raise Exception(f"远程打包失败: {err}")
+
+        # # 创建一个本地临时文件来接收远程压缩包
+        # temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.tar.gz')
+        # sftp = client.open_sftp()
+        # sftp.get(remote_archive_path, temp_file.name)
+        # sftp.close()
+        # temp_file.close()
+
+        archive_name = f"log_archive_{hostname}_{time.strftime('%Y%m%d%H%M%S')}.zip"
         remote_archive_path = f"/tmp/{archive_name}"
         log_files_str = " ".join(f"'{f}'" for f in log_files_to_pack)
 
-        tar_command = f"tar -czf {remote_archive_path} -C {service_base_path} {log_files_str}"
-        output, err, status = execute_command(client, tar_command)
+        # zip 命令没有类似 tar 的 -C 参数，所以我们先 cd 到目标目录再执行 zip
+        # -q 参数表示静默模式，减少不必要的输出
+        zip_command = f"cd {service_base_path} && zip -q {remote_archive_path} {log_files_str}"
+        output, err, status = execute_command(client, zip_command)
+        
+        # 检查 zip 命令的退出状态码
         if status != 0:
-            raise Exception(f"远程打包失败: {err}")
+            # zip 的常见错误码12表示“nothing to do”，这里我们不视其为致命错误
+            # 其他错误则认为是失败
+            if status != 12:
+                 raise Exception(f"远程打包失败: {err}")
 
-        # 创建一个本地临时文件来接收远程压缩包
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.tar.gz')
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         sftp = client.open_sftp()
         sftp.get(remote_archive_path, temp_file.name)
         sftp.close()

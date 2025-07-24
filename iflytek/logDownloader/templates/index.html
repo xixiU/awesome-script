@@ -324,7 +324,6 @@
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
-                    passwordInput.value = ''; // 下载成功后清空密码输入框
 
                 } else {
                     const errorData = await response.json();
