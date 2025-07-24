@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理服务器配置</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #f4f7f9;
+            color: #333;
+            margin: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: #fff;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1,
+        h2 {
+            text-align: center;
+        }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            color: white;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+
+        .btn-danger {
+            background-color: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        td.actions {
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .form-container {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        #toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header-actions">
+            <h1>服务器配置管理</h1>
+            <a href="/" class="btn btn-secondary">返回主页</a>
+        </div>
+
+        <table id="server-table">
+            <thead>
+                <tr>
+                    <th>备注</th>
+                    <th>IP 地址</th>
+                    <th>用户名</th>
+                    <th>SSH 端口</th>
+                    <th class="actions">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+        <button id="add-new-btn" class="btn btn-primary" style="margin-top: 20px;">添加新服务器</button>
+
+        <div id="form-container" class="form-container">
+            <h2 id="form-title">添加新服务器</h2>
+            <form id="server-form">
+                <input type="hidden" id="original-ip" name="original-ip">
+                <div class="form-group">
+                    <label for="ip">服务器IP地址 (Key, 不可修改)</label>
+                    <input type="text" id="ip" name="ip" required>
+                </div>
+                <div class="form-group">
+                    <label for="remarks">备注信息 (不填则默认为IP)</label>
+                    <input type="text" id="remarks" name="remarks">
+                </div>
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <input type="text" id="username" name="username" value="root" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <label for="ssh_port">SSH端口</label>
+                    <input type="number" id="ssh_port" name="ssh_port" value="22" required>
+                </div>
+                <button type="submit" class="btn btn-primary">保存</button>
+                <button type="button" id="cancel-btn" class="btn btn-secondary">取消</button>
+            </form>
+        </div>
+    </div>
+    <div id="toast"></div>
+
+    <script>
+        const serverTableBody = document.querySelector('#server-table tbody');
+        const formContainer = document.getElementById('form-container');
+        const serverForm = document.getElementById('server-form');
+        const formTitle = document.getElementById('form-title');
+        const addNewBtn = document.getElementById('add-new-btn');
+        const cancelBtn = document.getElementById('cancel-btn');
+        const ipInput = document.getElementById('ip');
+        const originalIpInput = document.getElementById('original-ip');
+        const toast = document.getElementById('toast');
+
+        let serversData = {};
+
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => { toast.classList.remove('show'); }, 3000);
+        }
+
+        function renderTable() {
+            serverTableBody.innerHTML = '';
+            const sortedServers = Object.values(serversData).sort((a, b) => a.ip.localeCompare(b.ip));
+            sortedServers.forEach(server => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                <td>${server.remarks}</td>
+                <td>${server.ip}</td>
+                <td>${server.username}</td>
+                <td>${server.ssh_port}</td>
+                <td class="actions">
+                    <button class="btn btn-primary btn-sm" onclick="editServer('${server.ip}')">编辑</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteServer('${server.ip}')">删除</button>
+                </td>
+            `;
+                serverTableBody.appendChild(row);
+            });
+        }
+
+        async function loadServers() {
+            // 从模板中直接加载初始数据，避免一次额外请求
+            serversData = {};
+            {% for server in servers %}
+            serversData['{{ server.ip }}'] = {
+                ip: '{{ server.ip }}',
+                remarks: '{{ server.remarks }}',
+                username: '{{ server.username }}',
+                password: '{{ server.password }}',
+                ssh_port: '{{ server.ssh_port }}'
+            };
+            {% endfor %}
+            renderTable();
+        }
+
+        function showForm(mode = 'add', serverIp = null) {
+            serverForm.reset();
+            if (mode === 'add') {
+                formTitle.textContent = '添加新服务器';
+                ipInput.disabled = false;
+                originalIpInput.value = '';
+            } else {
+                formTitle.textContent = '编辑服务器';
+                const server = serversData[serverIp];
+                ipInput.value = server.ip;
+                ipInput.disabled = true; // IP作为Key，不允许编辑
+                originalIpInput.value = server.ip;
+                document.getElementById('remarks').value = server.remarks;
+                document.getElementById('username').value = server.username;
+                document.getElementById('password').value = server.password;
+                document.getElementById('ssh_port').value = server.ssh_port;
+            }
+            formContainer.style.display = 'block';
+        }
+
+        addNewBtn.addEventListener('click', () => showForm('add'));
+        cancelBtn.addEventListener('click', () => formContainer.style.display = 'none');
+
+        serverForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(serverForm);
+            const data = Object.fromEntries(formData.entries());
+            const isEditing = !!data['original-ip'];
+            const url = isEditing ? `/api/servers/${data['original-ip']}` : '/api/servers';
+            const method = isEditing ? 'PUT' : 'POST';
+
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message);
+                formContainer.style.display = 'none';
+                // 重新加载页面以显示最新数据
+                window.location.reload();
+            } else {
+                showToast(`错误: ${result.error}`);
+            }
+        });
+
+        async function editServer(ip) {
+            showForm('edit', ip);
+        }
+
+
+
+        async function deleteServer(ip) {
+            if (!confirm(`确定要删除服务器 ${ip} 的配置吗？`)) return;
+            const response = await fetch(`/api/servers/${ip}`, { method: 'DELETE' });
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message);
+                // 重新加载页面以显示最新数据
+                window.location.reload();
+            } else {
+                showToast(`错误: ${result.error}`);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadServers);
+    </script>
+</body>
+
+</html>

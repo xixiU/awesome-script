@@ -1,0 +1,10 @@
+{
+    "172.31.160.184": {
+        "original-ip": "",
+        "ip": "172.31.160.184",
+        "remarks": "研发-184",
+        "username": "root",
+        "password": "Zhft@2024_AICourt",
+        "ssh_port": "22"
+    }
+}

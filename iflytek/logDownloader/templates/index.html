@@ -8,18 +8,17 @@
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             background-color: #f4f7f9;
             margin: 0;
-            padding: 20px 0;
         }
 
         .container {
-            background-color: #fff;
+            background: #fff;
             padding: 30px 40px;
             border-radius: 8px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
@@ -44,21 +43,45 @@
             color: #555;
         }
 
-        input[type="text"],
-        input[type="password"],
-        input[type="number"],
-        input[type="date"] {
+        input,
+        select {
             width: 100%;
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
             box-sizing: border-box;
-            transition: border-color 0.2s;
         }
 
-        input:focus {
-            border-color: #007bff;
-            outline: none;
+        .server-select-group {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .server-select-group select {
+            flex-grow: 1;
+        }
+
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            color: white;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            font-size: 14px;
+            padding: 11px 15px;
+            white-space: nowrap;
         }
 
         .date-group {
@@ -66,55 +89,14 @@
             gap: 20px;
         }
 
-        .date-group .form-group {
-            flex: 1;
-        }
-
-        .actions {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            font-size: 14px;
-        }
-
-        .remember-me {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-        }
-
-        .clear-link {
-            color: #007bff;
-            text-decoration: none;
-            cursor: pointer;
-        }
-
-        .clear-link:hover {
-            text-decoration: underline;
-        }
-
-        button {
-            width: 100%;
-            padding: 12px;
-            background-color: #007bff;
-            color: white;
-            border: none;
+        .flash-error {
+            padding: 15px;
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
             border-radius: 4px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        button:hover {
-            background-color: #0056b3;
-        }
-
-        button:disabled {
-            background-color: #a0cffa;
-            cursor: not-allowed;
+            margin-bottom: 20px;
+            text-align: center;
         }
 
         #status {
@@ -155,135 +137,64 @@
 <body>
     <div class="container">
         <h1>服务端日志下载工具</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
         <form id="logForm">
             <div class="form-group">
-                <label for="hostname">服务器IP地址</label>
-                <input type="text" id="hostname" name="hostname" placeholder="例如: 172.31.160.184" required>
+                <label for="server_ip">选择服务器</label>
+                <div class="server-select-group">
+                    <select id="server_ip" name="server_ip" required>
+                        <option value="">--请选择一个服务器--</option>
+                        {% for server in servers %}
+                        <option value="{{ server.ip }}">{{ server.remarks }} ({{ server.ip }})</option>
+                        {% endfor %}
+                    </select>
+                    <a href="/manage" class="btn btn-secondary">配置管理</a>
+                </div>
             </div>
             <div class="form-group">
                 <label for="service_port">服务运行端口</label>
                 <input type="number" id="service_port" name="service_port" placeholder="例如: 9191" required>
             </div>
-            <div class="form-group">
-                <label for="username">服务器账号</label>
-                <input type="text" id="username" name="username" value="root" required>
-            </div>
-            <div class="form-group">
-                <label for="password">服务器密码</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-            <div class="form-group">
-                <label for="ssh_port">SSH端口</label>
-                <input type="number" id="ssh_port" name="ssh_port" value="22" required>
-            </div>
             <div class="date-group">
                 <div class="form-group">
-                    <label for="start_date">起始时间 (不填则为当天)</label>
-                    <input type="date" id="start_date" name="start_date">
+                    <label for="start_date">起始时间</label>
+                    <input type="date" id="start_date" name="start_date" required>
                 </div>
                 <div class="form-group">
-                    <label for="end_date">结束时间 (不填则为当天)</label>
-                    <input type="date" id="end_date" name="end_date">
+                    <label for="end_date">结束时间</label>
+                    <input type="date" id="end_date" name="end_date" required>
                 </div>
             </div>
-
-            <div class="actions">
-                <label class="remember-me">
-                    <input type="checkbox" id="rememberMe">
-                    记住信息
-                </label>
-                <a href="#" id="clearLink" class="clear-link">清除已存信息</a>
-            </div>
-            <button type="submit" id="submitBtn">
+            <button type="submit" class="btn btn-primary" id="submitBtn" style="width: 100%;">
                 <span id="btn-text">下载日志</span>
                 <span id="spinner" class="spinner" style="display: none;"></span>
             </button>
         </form>
         <div id="status"></div>
     </div>
-
     <script>
-        // === DOM 元素引用 ===
+        // 自动填充当天的日期
+        document.addEventListener('DOMContentLoaded', function () {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('start_date').value = today;
+            document.getElementById('end_date').value = today;
+        });
         const logForm = document.getElementById('logForm');
-        const submitBtn = document.getElementById('submitBtn');
         const btnText = document.getElementById('btn-text');
         const spinner = document.getElementById('spinner');
         const statusDiv = document.getElementById('status');
-        const rememberMeCheckbox = document.getElementById('rememberMe');
-        const clearLink = document.getElementById('clearLink');
-        const passwordInput = document.getElementById('password');
-
-        // 定义一个用于 localStorage 的 key
-        const STORAGE_KEY = 'logDownloaderCredentials';
-
-        // === 功能函数 ===
-
-        /**
-         * 页面加载时，加载已保存的数据
-         */
-        function loadSavedData() {
-            const savedData = localStorage.getItem(STORAGE_KEY);
-            if (savedData) {
-                const data = JSON.parse(savedData);
-                document.getElementById('hostname').value = data.hostname || '';
-                document.getElementById('service_port').value = data.service_port || '';
-                document.getElementById('username').value = data.username || '';
-                document.getElementById('password').value = data.password || '';
-                document.getElementById('ssh_port').value = data.ssh_port || '';
-                rememberMeCheckbox.checked = true; // 如果有数据，默认勾选“记住我”
-            }
-        }
-
-        /**
-         * 保存数据到 localStorage
-         */
-        function saveData() {
-            const dataToSave = {
-                hostname: document.getElementById('hostname').value,
-                service_port: document.getElementById('service_port').value,
-                username: document.getElementById('username').value,
-                password: document.getElementById('password').value,
-                ssh_port: document.getElementById('ssh_port').value,
-            };
-            // 保存数据
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
-        }
-
-        /**
-         * 从 localStorage 清除数据
-         */
-        function clearSavedData() {
-            localStorage.removeItem(STORAGE_KEY);
-            // 清空表单
-            logForm.reset();
-            document.getElementById('username').value = 'root'; // 保留默认值
-            document.getElementById('ssh_port').value = '22';
-            statusDiv.textContent = '已清除保存的信息。';
-            statusDiv.className = 'status-success';
-            setTimeout(() => statusDiv.textContent = '', 3000); // 3秒后清除提示
-        }
-
-        // === 事件监听 ===
-
-        // 页面加载完成后立即执行
-        document.addEventListener('DOMContentLoaded', loadSavedData);
-
-        // 清除链接的点击事件
-        clearLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            clearSavedData();
-        });
 
         // 表单提交事件
         logForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-
-            // --- 保存或清除数据 ---
-            if (rememberMeCheckbox.checked) {
-                saveData();
-            } else {
-                localStorage.removeItem(STORAGE_KEY);
-            }
 
             // --- 按钮状态和API请求 (逻辑不变) ---
             submitBtn.disabled = true;
@@ -296,7 +207,7 @@
             const data = Object.fromEntries(formData.entries());
 
             try {
-                const response = await fetch('/api/download_logs', {
+                const response = await fetch('/download_logs', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data),

@@ -1,22 +1,44 @@
 import os
 import time
 import tempfile
+import json
+
 from datetime import date, timedelta
-from flask import Flask, request, jsonify, render_template, send_file
+from flask import Flask, request, render_template, send_file, flash, redirect, url_for, jsonify
 
 import paramiko
 
 # --- 创建 Flask 应用 ---
 app = Flask(__name__)
+app.secret_key = 'a_super_secret_key_for_flash_messages'
+CONFIG_DIR = 'configs'
+SERVERS_CONFIG_FILE = os.path.join(CONFIG_DIR, 'servers.json')
 
-# --- 核心日志下载逻辑 (之前已优化) ---
+def load_servers():
+    """从 servers.json 加载服务器配置"""
+    if not os.path.exists(SERVERS_CONFIG_FILE):
+        return {}
+    try:
+        with open(SERVERS_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return {}
+
+def save_servers(servers_data):
+    """将服务器配置保存到 servers.json"""
+    # 确保 config 目录存在
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(SERVERS_CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(servers_data, f, indent=4, ensure_ascii=False)
+
+# --- 核心日志下载逻辑 ---
 def execute_command(client, command):
     """一个辅助函数，用于执行命令并返回标准输出和错误"""
     stdin, stdout, stderr = client.exec_command(command)
     exit_status = stdout.channel.recv_exit_status()
     return stdout.read().decode('utf-8').strip(), stderr.read().decode('utf-8').strip(), exit_status
 
-def get_logs_as_archive(hostname, ssh_port, username, password, service_port, start_date_str=None, end_date_str=None):
+def get_logs_as_archive(hostname, ssh_port, username, password, service_port:int, start_date_str=None, end_date_str=None):
     """
     【Web后端专用版】
     此版本不直接下载文件到本地，而是将远程打包的日志流式传输到服务器的一个临时文件中，
@@ -121,55 +143,134 @@ def get_logs_as_archive(hostname, ssh_port, username, password, service_port, st
 
 
 # --- Flask 路由定义 ---
-
 @app.route('/')
 def index():
-    """渲染主页面"""
-    return render_template('index.html')
+    """渲染主页，并传入服务器列表"""
+    servers = load_servers()
+    # 传递排序后的服务器列表给模板，按备注排序
+    sorted_servers = sorted(servers.values(), key=lambda x: x['remarks'])
+    return render_template('index.html', servers=sorted_servers)
 
-@app.route('/api/download_logs', methods=['POST'])
-def api_download_logs():
-    """处理日志下载请求的API"""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "无效的请求"}), 400
+@app.route('/manage')
+def manage_page():
+    """渲染服务器配置管理页面"""
+    servers = load_servers()
+    # 传递排序后的服务器列表给模板，按IP排序
+    sorted_servers = sorted(servers.values(), key=lambda x: x['ip'])
+    return render_template('manage.html', servers=sorted_servers)
 
-    # 从请求中获取参数
-    hostname = data.get('hostname')
-    ssh_port = int(data.get('ssh_port', 22))
-    username = data.get('username')
-    password = data.get('password')
-    service_port = int(data.get('service_port'))
-    start_date = data.get('start_date')
-    end_date = data.get('end_date')
+@app.route('/download_logs', methods=['POST'])
+def download_logs():
+    form_data = request.get_json()
+    
+    service_port_str = str(form_data.get('service_port', ''))
+    if not service_port_str or not service_port_str.isdigit():
+        return "'服务运行端口' 不能为空且必须是纯数字"
+    servers = load_servers()
 
-    # 参数校验
-    if not all([hostname, username, password, service_port]):
-        return jsonify({"error": "缺少必要参数：服务器IP, 用户名, 密码, 服务端口"}), 400
-
+    server_ip = form_data.get('server_ip')
+    if not server_ip or server_ip not in servers:
+        flash("错误: 请选择一个有效的服务器配置。", "error")
+        return redirect(url_for('index'))
+    
+    server_config = servers[server_ip]
     local_temp_file_path = None
     try:
-        # 调用核心函数获取日志
+        # service_port 从已保存的配置中获取，不再从 form 中获取
+        service_port = int(service_port_str)
+        
         local_temp_file_path, download_filename = get_logs_as_archive(
-            hostname, ssh_port, username, password, service_port, start_date, end_date
+            hostname=server_config['ip'],
+            ssh_port=int(server_config['ssh_port']),
+            username=server_config['username'],
+            password=server_config['password'],
+            service_port=service_port, # 使用配置中的端口
+            start_date_str=form_data.get('start_date'),
+            end_date_str=form_data.get('end_date')
         )
         
-        # 使用 send_file 将文件作为附件发送给浏览器
+        # 打印日志确认文件已生成
+        print(f"临时文件已生成: {local_temp_file_path}")
+        print(f"下载文件名: {download_filename}")
+
         return send_file(
             local_temp_file_path,
             as_attachment=True,
             download_name=download_filename
         )
-
     except Exception as e:
-        # 如果发生任何错误，返回一个JSON错误信息
-        app.logger.error(f"操作失败: {e}")
-        return jsonify({"error": str(e)}), 500
-
+        print(e)
+        flash(f"操作失败: {e}", "error")
+        return redirect(url_for('index'))
     finally:
-        # 确保无论成功与否，都删除本地服务器上的临时文件
         if local_temp_file_path and os.path.exists(local_temp_file_path):
+            print(f"临时文件已清理: {local_temp_file_path}")
             os.remove(local_temp_file_path)
+
+def validate_server_data(data):
+    if not data:
+        return "无效的请求: 缺少JSON数据或Content-Type不正确"
+    
+    """用于校验服务器数据的辅助函数"""
+    ip = data.get('ip')
+    
+    if not ip:
+        return "IP地址不能为空"
+    ssh_port_str = str(data.get('ssh_port', ''))
+    if not ssh_port_str or not ssh_port_str.isdigit():
+        return "'服务运行端口' 不能为空且必须是纯数字"
+    return None
+
+
+@app.route('/api/servers', methods=['POST'])
+def add_server():
+    """添加一个新的服务器配置"""
+    data = request.json
+
+    if not data:
+        return jsonify({"success": False, "error": "无效的请求: 缺少JSON数据或Content-Type不正确"}), 400
+    
+    error = validate_server_data(data)
+    if error:
+        return jsonify({"success": False, "error": error}), 400
+
+    servers = load_servers()
+    ip = data.get('ip')
+    if not ip:
+        return jsonify({"success": False, "error": "IP地址不能为空"}), 400
+    if ip in servers:
+        return jsonify({"success": False, "error": f"IP地址 {ip} 已存在"}), 409
+    
+    # 如果备注为空，则默认使用IP地址作为备注
+    if not data.get('remarks'):
+        data['remarks'] = ip
+        
+    servers[ip] = data
+    save_servers(servers)
+    return jsonify({"success": True, "message": "添加成功"})
+
+@app.route('/api/servers/<server_ip>', methods=['PUT'])
+def update_server(server_ip):
+    """更新一个已有的服务器配置"""
+    data = request.json
+    servers = load_servers()
+    if server_ip not in servers:
+        return jsonify({"success": False, "error": "未找到要更新的服务器"}), 404
+    
+    # 更新数据
+    servers[server_ip] = data
+    save_servers(servers)
+    return jsonify({"success": True, "message": "更新成功"})
+
+@app.route('/api/servers/<server_ip>', methods=['DELETE'])
+def delete_server(server_ip):
+    """删除一个服务器配置"""
+    servers = load_servers()
+    if server_ip in servers:
+        del servers[server_ip]
+        save_servers(servers)
+        return jsonify({"success": True, "message": "删除成功"})
+    return jsonify({"success": False, "error": "未找到要删除的服务器"}), 404
 
 
 # --- 启动服务器 ---
