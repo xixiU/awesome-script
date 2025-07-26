@@ -65,6 +65,7 @@
         constructor() {
             this.playInterval = null;
             this.lastForceReportTime = 0; // 新增：上次强制上报时间
+            this.lastLogTime = 0; // 新增：上次打印视频进度日志的时间
         }
 
         // 初始化视频播放
@@ -116,7 +117,7 @@
 
                             // 禁用 GetQuestion 函数
                             if (typeof iframeWindow.GetQuestion === 'function') {
-                                iframeWindow.GetQuestion = function(course_id, courseware_id) {
+                                iframeWindow.GetQuestion = function (course_id, courseware_id) {
                                     utils.log("拦截并禁用 iframe 中的 GetQuestion 函数，返回空问题列表。");
                                     return { code: 0, list: [], count: 0 };
                                 };
@@ -128,7 +129,7 @@
                             let originalRecordDuration = null;
                             if (typeof iframeWindow.RecordDuration === 'function') {
                                 originalRecordDuration = iframeWindow.RecordDuration;
-                                iframeWindow.RecordDuration = function(start, end) {
+                                iframeWindow.RecordDuration = function (start, end) {
                                     utils.log(`拦截 iframe 中的 RecordDuration，阻止页面原有上报。原始调用参数: start=${start}, end=${end}`);
                                 };
                             } else {
@@ -136,7 +137,7 @@
                             }
 
                             // 强制定时上报
-                            const forceReportInterval = 30; // 每10秒强制上报一次
+                            const forceReportInterval = 10; // 每10秒强制上报一次
                             setInterval(() => {
                                 if (iframeWindow.h5_player && !iframeWindow.h5_player.paused() && !iframeWindow.h5_player.ended && originalRecordDuration) {
                                     const currentTime = iframeWindow.h5_player.getCurrentTime();
@@ -215,12 +216,13 @@
             if (currentTime >= duration) {
                 this.handleVideoComplete();
             } else {
-                this.checkCurrentProgress();
+                // 每3秒打印一次视频进度日志
+                if (currentTime - this.lastLogTime >= 3) {
+                    utils.log(`当前视频进度: ${currentTime}s/${duration}s，播放速度: ${video.playbackRate}倍`);
+                    this.lastLogTime = currentTime;
+                    this.checkCurrentProgress();
+                }
             }
-            // 移除原有的 checkCurrentProgress() 调用，因为上报逻辑已独立处理
-            utils.log(`当前视频进度: ${currentTime}s/${duration}s，播放速度: ${video.playbackRate}倍`);
-            // 确保 checkCurrentProgress 不再被调用
-            // this.checkCurrentProgress(); // 这一行应该被移除或注释掉
         }
 
         // 处理视频完成
@@ -246,10 +248,6 @@
                 clearInterval(this.playInterval);
                 utils.log("所有视频播放完成");
             }
-            // 5s输出一次播放进度
-            setTimeout(() => {
-                utils.log(`视频播放中，当前时间: ${Math.ceil(video.currentTime)}s`);
-            }, 5000);
         }
 
         // 检查当前进度
