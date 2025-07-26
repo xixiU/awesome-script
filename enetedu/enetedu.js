@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.6.0
+// @version      0.6.1
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -44,6 +44,10 @@
             console.log(`[自动刷课] ${new Date().toLocaleTimeString()} - ${message}`);
         },
 
+        error(message) {
+            console.error(`[自动刷课] ${new Date().toLocaleTimeString()} - ${message}`);
+        },
+
         isLivePage() {
             return window.location.href.includes('huiyi.enetedu.com/liveWacth');
         },
@@ -60,6 +64,7 @@
     class VideoController {
         constructor() {
             this.playInterval = null;
+            this.lastForceReportTime = 0; // 新增：上次强制上报时间
         }
 
         // 初始化视频播放
@@ -99,12 +104,94 @@
 
         // 监听视频进度
         initProgressMonitor() {
+            // 针对 onlinenew.enetedu.com 页面，增强学习逻辑
+            if (window.location.href.includes('onlinenew.enetedu.com')) {
+                const iframeElement = $(".classcenter-chapter1 iframe")[0];
+
+                if (iframeElement) {
+                    const enhanceIframeLogic = () => {
+                        const iframeWindow = iframeElement.contentWindow;
+                        if (iframeWindow) {
+                            utils.log("成功获取 iframe 的 contentWindow，开始增强学习逻辑。");
+
+                            // 禁用 GetQuestion 函数
+                            if (typeof iframeWindow.GetQuestion === 'function') {
+                                iframeWindow.GetQuestion = function(course_id, courseware_id) {
+                                    utils.log("拦截并禁用 iframe 中的 GetQuestion 函数，返回空问题列表。");
+                                    return { code: 0, list: [], count: 0 };
+                                };
+                            } else {
+                                utils.error("iframeWindow.GetQuestion 函数未找到，可能无法禁用课程问题弹出。");
+                            }
+
+                            // 保存原始 RecordDuration 并覆盖
+                            let originalRecordDuration = null;
+                            if (typeof iframeWindow.RecordDuration === 'function') {
+                                originalRecordDuration = iframeWindow.RecordDuration;
+                                iframeWindow.RecordDuration = function(start, end) {
+                                    utils.log(`拦截 iframe 中的 RecordDuration，阻止页面原有上报。原始调用参数: start=${start}, end=${end}`);
+                                };
+                            } else {
+                                utils.error("iframeWindow.RecordDuration 函数未找到，无法拦截原有上报。");
+                            }
+
+                            // 强制定时上报
+                            const forceReportInterval = 30; // 每10秒强制上报一次
+                            setInterval(() => {
+                                if (iframeWindow.h5_player && !iframeWindow.h5_player.paused() && !iframeWindow.h5_player.ended && originalRecordDuration) {
+                                    const currentTime = iframeWindow.h5_player.getCurrentTime();
+                                    if (typeof currentTime === 'number' && currentTime > 0) {
+                                        // 只有当当前时间比上次上报时间有显著增加时才上报，或者发生大跳跃时
+                                        if (currentTime - this.lastForceReportTime >= forceReportInterval || currentTime > this.lastForceReportTime + 60) {
+                                            utils.log(`强制上报进度: 从 ${this.lastForceReportTime.toFixed(0)}s 到 ${currentTime.toFixed(0)}s`);
+                                            originalRecordDuration(this.lastForceReportTime, currentTime);
+                                            this.lastForceReportTime = currentTime;
+                                        }
+                                    }
+                                }
+                            }, forceReportInterval * 1000);
+
+                            // 监听 h5_player 的 seeked 事件进行拖拽上报
+                            let checkH5PlayerInterval = setInterval(() => {
+                                if (iframeWindow.h5_player && originalRecordDuration) {
+                                    iframeWindow.h5_player.on('seeked', () => {
+                                        const currentTime = iframeWindow.h5_player.getCurrentTime();
+                                        utils.log(`检测到拖拽 (seeked 事件)，立即上报进度到 ${currentTime.toFixed(0)}s`);
+                                        originalRecordDuration(this.lastForceReportTime, currentTime);
+                                        this.lastForceReportTime = currentTime;
+                                    });
+                                    clearInterval(checkH5PlayerInterval); // 停止轮询
+                                }
+                            }, 1000); // 每秒检查一次
+                        } else {
+                            utils.error("iframe.contentWindow 在 onload 事件后仍未就绪，无法增强学习逻辑。");
+                        }
+                    };
+
+                    // 监听 iframe 的 load 事件
+                    iframeElement.onload = enhanceIframeLogic;
+
+                    // 如果 iframe 已经加载完成，手动触发增强逻辑
+                    // 检查 readyState 是为了确保 contentDocument 已经解析完毕
+                    if (iframeElement.contentWindow && iframeElement.contentWindow.document.readyState === 'complete') {
+                        utils.log("iframe 似乎已加载完成，立即触发增强逻辑。");
+                        enhanceIframeLogic();
+                    }
+                } else {
+                    utils.error("未找到 .classcenter-chapter1 iframe 元素，无法增强学习逻辑。");
+                }
+            }
+
+            // 原始的视频进度监听逻辑，确保即使 iframe 增强失败，视频播放和倍速设置仍能工作
             setTimeout(() => {
                 try {
                     const iframe = $(".classcenter-chapter1 iframe").contents();
-                    iframe.find("video").on("timeupdate", this.handleVideoProgress.bind(this));
+                    const video = iframe.find("video");
+                    if (video.length > 0) {
+                        video.on("timeupdate", this.handleVideoProgress.bind(this));
+                    }
                 } catch (err) {
-                    utils.log(`进度监控初始化失败: ${err.message}`);
+                    utils.log(`主视频进度监控初始化失败: ${err.message}`);
                 }
             }, 8000);
         }
@@ -130,7 +217,10 @@
             } else {
                 this.checkCurrentProgress();
             }
+            // 移除原有的 checkCurrentProgress() 调用，因为上报逻辑已独立处理
             utils.log(`当前视频进度: ${currentTime}s/${duration}s，播放速度: ${video.playbackRate}倍`);
+            // 确保 checkCurrentProgress 不再被调用
+            // this.checkCurrentProgress(); // 这一行应该被移除或注释掉
         }
 
         // 处理视频完成
