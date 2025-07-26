@@ -305,6 +305,9 @@
             if (allComplete && nextVideoFound) {
                 $(".buttonmore-red").trigger("click");
                 utils.log("课程完成，返回目录");
+                utils.log("所有视频播放完成");
+                console.log('【课程切换】所有课程均已学习完毕或被锁定，10秒后自动关闭页面...');
+                setTimeout(() => { window.close(); }, 10000);
             }
         }
     }
