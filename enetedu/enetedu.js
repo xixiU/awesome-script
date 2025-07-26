@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.6.1
+// @version      0.6.2
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -254,14 +254,31 @@
         checkCurrentProgress() {
             let nextVideoFound = false;
             let allComplete = true;
+            // 获取当前页面的完整URL
+            const currentFullUrl = window.location.href;
 
             $(".classcenter-chapter2 ul li").each(function () {
-                const isCurrentVideo = $(this).css("background-color") === "rgb(204, 197, 197)";
-                const isComplete = $(this).find("span").text() === "[100%]";
+                const $this = $(this);
+                const onclickAttr = $this.attr('onclick');
+                let isCurrentVideo = $this.css("background-color") === "rgb(204, 197, 197)";
+
+                // 新增分支逻辑：如果onclick属性包含当前网址的路径部分，也认为是当前章节
+                if (onclickAttr && onclickAttr.includes('location.href=')) {
+                    const onclickUrlPart = onclickAttr.match(/location\.href='([^']+)'/);
+                    if (onclickUrlPart && onclickUrlPart[1]) {
+                        const relativePath = onclickUrlPart[1].replace(/&/g, '&'); // 替换 & 为 &
+                        const fullOnclickUrl = new URL(relativePath, window.location.origin).href; // 构建完整的onclick URL
+                        if (currentFullUrl === fullOnclickUrl) {
+                            isCurrentVideo = true;
+                        }
+                    }
+                }
+
+                const isComplete = $this.find("span").text() === "[100%]";
                 if (isCurrentVideo && isComplete && !nextVideoFound) {
                     nextVideoFound = true;
                 } else if (!isCurrentVideo && !isComplete && nextVideoFound) {
-                    $(this).trigger("click");
+                    $this.trigger("click");
                     utils.log("当前视频已完成，切换到下一个");
                     nextVideoFound = false;
                     allComplete = false;
