@@ -22,124 +22,6 @@
 (function () {
     'use strict';
 
-    // const tsUrlRegex = /\.ts$/;
-
-    // const originalOpen = XMLHttpRequest.prototype.open;
-    // XMLHttpRequest.prototype.open = function (method, url, ...args) {
-    //     this._requestUrl = url;
-    //     return originalOpen.call(this, method, url, ...args);
-    // };
-
-    // const originalSend = XMLHttpRequest.prototype.send;
-    // XMLHttpRequest.prototype.send = function (...args) {
-    //     if (this._requestUrl && tsUrlRegex.test(this._requestUrl)) {
-    //         console.log('[自动刷课] 成功拦截 TS 请求:', this._requestUrl);
-
-    //         // 模拟空响应
-    //         this.readyState = 4;
-    //         this.status = 200;
-    //         this.statusText = 'OK';
-    //         this.response = new ArrayBuffer(0);
-    //         this.responseText = '';
-
-    //         // 触发回调
-    //         setTimeout(() => {
-    //             if (typeof this.onreadystatechange === 'function') this.onreadystatechange();
-    //             if (typeof this.onload === 'function') this.onload();
-    //             if (typeof this.onloadend === 'function') this.onloadend();
-    //         }, 0);
-    //         return;
-    //     }
-    //     console.log('[自动刷课] 成功拦截 TS 请求:', this._requestUrl);
-
-    //     return originalSend.apply(this, args);
-    // };
-    // // 确保 unsafeWindow 可用
-    // if (typeof unsafeWindow === 'undefined') {
-    //     console.error('[自动刷课] unsafeWindow 不可用，无法拦截原生请求。');
-    // } else {
-    //     const tsUrlRegex = /^https:\/\/hcdn\.enetedu\.com\/conv\/cdnfile\/video\/.*\.gv\.ts$/;
-
-    //     // --- 拦截 fetch API ---
-    //     if (typeof unsafeWindow.fetch === 'function') {
-    //         const originalFetch = unsafeWindow.fetch;
-    //         unsafeWindow.fetch = function (input, init) {
-    //             let url = '';
-    //             if (typeof input === 'string') {
-    //                 url = input;
-    //             } else if (input instanceof unsafeWindow.Request) {
-    //                 url = input.url;
-    //             }
-
-    //             if (url && tsUrlRegex.test(url)) {
-    //                 console.log(`[自动刷课] 拦截到 fetch 视频请求: ${url}，已模拟响应。`);
-    //                 // 返回一个解析为伪造 Response 对象的 Promise
-    //                 return Promise.resolve(new unsafeWindow.Response(new ArrayBuffer(0), {
-    //                     status: 200,
-    //                     statusText: 'OK',
-    //                     headers: { 'Content-Length': '0' }
-    //                 }));
-    //             }
-    //             // 对于所有其他请求，正常处理
-    //             return originalFetch.apply(this, arguments);
-    //         };
-    //     }
-
-    //     // --- 拦截 XMLHttpRequest ---
-    //     const originalXHR = unsafeWindow.XMLHttpRequest;
-
-    //     function InterceptedXHR() {
-    //         const xhr = new originalXHR(); // 创建一个真实的 XHR 实例
-    //         let requestUrl = null;
-
-    //         // 代理 open 方法以捕获 URL
-    //         const originalOpen = xhr.open;
-    //         xhr.open = function (method, url, ...args) {
-    //             requestUrl = url;
-    //             return originalOpen.apply(this, [method, url, ...args]);
-    //         };
-
-    //         // 代理 send 方法以决定是模拟还是继续
-    //         const originalSend = xhr.send;
-    //         xhr.send = function (...args) {
-    //             if (requestUrl && tsUrlRegex.test(requestUrl)) {
-    //                 console.log(`[自动刷课] 拦截到 XMLHttpRequest 视频请求: ${requestUrl}，已模拟响应。`);
-
-    //                 // 在 XHR 实例('this')上定义属性，以模拟成功的响应
-    //                 Object.defineProperties(this, {
-    //                     response: { value: new ArrayBuffer(0), writable: true },
-    //                     responseText: { value: '', writable: true },
-    //                     status: { value: 200, writable: true },
-    //                     statusText: { value: 'OK', writable: true },
-    //                     readyState: { value: XMLHttpRequest.DONE, writable: true } // XMLHttpRequest.DONE 的值是 4
-    //                 });
-
-    //                 // 异步触发事件以模拟请求完成
-    //                 setTimeout(() => {
-    //                     if (typeof this.onreadystatechange === 'function') {
-    //                         try { this.onreadystatechange(); } catch (e) { console.error('[自动刷课] onreadystatechange 回调出错:', e); }
-    //                     }
-    //                     if (typeof this.onload === 'function') {
-    //                         try { this.onload(); } catch (e) { console.error('[自动刷课] onload 回调出错:', e); }
-    //                     }
-    //                     if (typeof this.onloadend === 'function') {
-    //                         try { this.onloadend(); } catch (e) { console.error('[自动刷课] onloadend 回调出错:', e); }
-    //                     }
-    //                 }, 10); // 使用一个小的延迟来模仿异步行为
-
-    //                 return; // 阻止原始的 send() 调用
-    //             }
-
-    //             // 对于不匹配的 URL，正常处理
-    //             return originalSend.apply(this, args);
-    //         };
-
-    //         return xhr;
-    //     }
-    //     // 将原生的 XMLHttpRequest 替换为我们的拦截版本
-    //     unsafeWindow.XMLHttpRequest = InterceptedXHR;
-    // }
-
     // 普通课程倍速
     const speed = 2.0;
     // 直播课程倍速
@@ -273,9 +155,6 @@
             if (!hasNextVideo) {
                 clearInterval(this.playInterval);
                 utils.log("所有视频播放完成");
-                console.log('【课程切换】所有课程均已学习完毕或被锁定，10秒后自动关闭页面...');
-                setTimeout(() => { window.close(); }, 10000);
-
             }
             // 5s输出一次播放进度
             setTimeout(() => {
