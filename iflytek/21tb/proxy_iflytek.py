@@ -28,7 +28,7 @@ def proxy_dify():
         
 
         resp = requests.post(DIFY_API_URL, headers=headers, json=request.get_json(), timeout=10)
-        print(resp.json())
+        print(resp.json()['answer'])
         return resp.json(), resp.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
