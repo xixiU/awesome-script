@@ -247,6 +247,8 @@
             if (!hasNextVideo) {
                 clearInterval(this.playInterval);
                 utils.log("所有视频播放完成");
+                console.log('【课程切换】所有课程均已学习完毕或被锁定，5秒后自动关闭页面...');
+                setTimeout(() => { window.close(); }, 5000);
             }
         }
 
@@ -420,7 +422,7 @@
             if (allComplete && nextVideoFound) {
                 utils.log("页面元素检测：所有视频播放完成");
                 console.log('【课程切换】所有课程均已学习完毕或被锁定，10秒后自动关闭页面...');
-                setTimeout(() => { window.close(); }, 10000);
+                setTimeout(() => { window.close(); }, 2000);
             }
         }
 
@@ -452,11 +454,11 @@
                     return false;
                 }
             });
-
+            utils.log(`nextVideoFound:${nextVideoFound}`);
             if (!nextVideoFound) {
                 utils.log("所有视频播放完成");
-                console.log('【课程切换】所有课程均已学习完毕或被锁定，10秒后自动关闭页面...');
-                setTimeout(() => { window.close(); }, 10000);
+                console.log('【课程切换】所有课程均已学习完毕或被锁定，5秒后自动关闭页面...');
+                setTimeout(() => { window.close(); }, 5000);
             }
         }
     }
