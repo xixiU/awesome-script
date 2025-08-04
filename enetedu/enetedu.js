@@ -227,31 +227,31 @@
         }
 
         // 处理视频完成
-        handleVideoComplete() {
-            let hasNextVideo = false;
-            $(".classcenter-chapter2 ul li").each(function () {
-                if (($(this).css("background-color") !== "rgb(204, 197, 197)" || $(this).css("background-color") !== "#ccc5c5") &&
-                    $(this).find("span").text() !== "[100%]") {
-                    hasNextVideo = true;
-                    let nextVideoLink = $(this).find("a").attr("href");
-                    if (nextVideoLink) {
-                        window.location.href = nextVideoLink;
-                        utils.log("切换到下一个视频");
-                        return false;
-                    } else {
-                        utils.log("未找到下一个视频的链接");
-                        return true;
-                    }
-                }
-            });
+        // handleVideoComplete() {
+        //     let hasNextVideo = false;
+        //     $(".classcenter-chapter2 ul li").each(function () {
+        //         if (($(this).css("background-color") !== "rgb(204, 197, 197)" || $(this).css("background-color") !== "#ccc5c5") &&
+        //             $(this).find("span").text() !== "[100%]") {
+        //             hasNextVideo = true;
+        //             let nextVideoLink = $(this).find("a").attr("href");
+        //             if (nextVideoLink) {
+        //                 window.location.href = nextVideoLink;
+        //                 utils.log("切换到下一个视频");
+        //                 return false;
+        //             } else {
+        //                 utils.log("未找到下一个视频的链接");
+        //                 return true;
+        //             }
+        //         }
+        //     });
 
-            if (!hasNextVideo) {
-                clearInterval(this.playInterval);
-                utils.log("所有视频播放完成");
-                console.log('【课程切换】所有课程均已学习完毕或被锁定，5秒后自动关闭页面...');
-                setTimeout(() => { window.close(); }, 5000);
-            }
-        }
+        //     if (!hasNextVideo) {
+        //         clearInterval(this.playInterval);
+        //         utils.log("所有视频播放完成");
+        //         console.log('【课程切换】所有课程均已学习完毕或被锁定，5秒后自动关闭页面...');
+        //         setTimeout(() => { window.close(); }, 5000);
+        //     }
+        // }
 
         // 检查当前进度
         checkCurrentProgress() {
