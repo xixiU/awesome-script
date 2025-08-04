@@ -230,7 +230,7 @@
         handleVideoComplete() {
             let hasNextVideo = false;
             $(".classcenter-chapter2 ul li").each(function () {
-                if ($(this).css("background-color") !== "rgb(204, 197, 197)" &&
+                if (($(this).css("background-color") !== "rgb(204, 197, 197)" || $(this).css("background-color") !== "#ccc5c5") &&
                     $(this).find("span").text() !== "[100%]") {
                     hasNextVideo = true;
                     let nextVideoLink = $(this).find("a").attr("href");
