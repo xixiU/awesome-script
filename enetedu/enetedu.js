@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.6.2.2
+// @version      0.6.2.5
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频。优先使用接口检测学习进度，页面元素检测作为兜底。
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -383,14 +383,14 @@
             }
         }
 
-        // 通过页面元素检测进度（兜底逻辑）
-        checkProgressByElement() {
-            let nextVideoFound = false;
-            let allComplete = true;
-            // 获取当前页面的完整URL
+        // 收集视频元素信息
+        collectVideoElements() {
             const currentFullUrl = window.location.href;
+            const videoElements = [];
+            let currentVideoIndex = -1;
+            let currentVideoComplete = false;
 
-            $(".classcenter-chapter2 ul li").each(function () {
+            $(".classcenter-chapter2 ul li").each(function (index) {
                 const $this = $(this);
                 const onclickAttr = $this.attr('onclick');
                 let isCurrentVideo = $this.css("background-color") === "rgb(204, 197, 197)" || $this.css("background-color") === "#ccc5c5";
@@ -406,60 +406,104 @@
                     }
                 }
                 const isComplete = $this.find("span").text() === "[100%]";
-                utils.log(`isCurrentVideo:${isCurrentVideo},isComplete:${isComplete},nextVideoFound:${nextVideoFound}`);
 
-                if (isCurrentVideo && isComplete && !nextVideoFound) {
-                    nextVideoFound = true;
-                } else if (!isCurrentVideo && !isComplete && nextVideoFound) {
-                    $this.trigger("click");
-                    utils.log("页面元素检测：当前视频已完成，切换到下一个");
-                    nextVideoFound = false;
-                    allComplete = false;
-                    return false;
+                videoElements.push({
+                    element: $this,
+                    isCurrent: isCurrentVideo,
+                    isComplete: isComplete,
+                    index: index
+                });
+
+                // 记录当前视频信息
+                if (isCurrentVideo) {
+                    currentVideoIndex = index;
+                    currentVideoComplete = isComplete;
                 }
+
+                utils.log(`视频${index}: 当前=${isCurrentVideo}, 完成=${isComplete}`);
             });
 
-            if (allComplete && nextVideoFound) {
-                utils.log("页面元素检测：所有视频播放完成");
-                console.log('【课程切换】所有课程均已学习完毕或被锁定，10秒后自动关闭页面...');
-                setTimeout(() => { window.close(); }, 2000);
+            return {
+                videoElements: videoElements,
+                currentVideoIndex: currentVideoIndex,
+                currentVideoComplete: currentVideoComplete
+            };
+        }
+
+        // 处理视频切换逻辑
+        handleVideoSwitch(source = 'unknown') {
+            const { videoElements, currentVideoIndex, currentVideoComplete } = this.collectVideoElements();
+
+            // 检查是否找到当前视频
+            if (currentVideoIndex === -1) {
+                utils.log(`${source}：未找到当前选中的视频`);
+                return;
             }
+
+            // 如果是页面元素检测，需要检查当前视频是否完成
+            if (source === '页面元素检测') {
+                if (!currentVideoComplete) {
+                    utils.log(`${source}：当前视频未完成，继续学习`);
+                    return;
+                }
+                utils.log(`${source}：当前视频已完成，寻找下一个未完成的视频`);
+            } else {
+                // 接口检测：已经确认当前视频完成，直接寻找下一个
+                utils.log(`${source}：接口已确认当前视频完成，寻找下一个未完成的视频`);
+            }
+
+            // 寻找下一个未完成的视频
+            let nextIncompleteVideoIndex = -1;
+
+            if (source === '接口检测') {
+                // 接口检测：从当前视频的下一个开始寻找，跳过当前视频（因为接口已确认完成）
+                for (let i = currentVideoIndex + 1; i < videoElements.length; i++) {
+                    if (!videoElements[i].isComplete) {
+                        nextIncompleteVideoIndex = i;
+                        break;
+                    }
+                }
+                // 如果从当前视频后面没找到，再从开头找（处理循环情况）
+                if (nextIncompleteVideoIndex === -1) {
+                    for (let i = 0; i < currentVideoIndex; i++) {
+                        if (!videoElements[i].isComplete) {
+                            nextIncompleteVideoIndex = i;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // 页面元素检测：从开头寻找第一个未完成的视频
+                for (let i = 0; i < videoElements.length; i++) {
+                    if (!videoElements[i].isComplete) {
+                        nextIncompleteVideoIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if (nextIncompleteVideoIndex !== -1) {
+                // 找到下一个未完成的视频，点击切换
+                const nextVideo = videoElements[nextIncompleteVideoIndex];
+                nextVideo.element.trigger("click");
+                utils.log(`${source}：切换到下一个未完成的视频 (索引: ${nextIncompleteVideoIndex})`);
+            } else {
+                // 所有视频都已完成
+                utils.log(`${source}：所有视频播放完成`);
+                const closeDelay = source === '页面元素检测' ? 2000 : 5000;
+                console.log(`【课程切换】所有课程均已学习完毕或被锁定，${closeDelay / 1000}秒后自动关闭页面...`);
+                setTimeout(() => { window.close(); }, closeDelay);
+            }
+        }
+
+        // 通过页面元素检测进度（兜底逻辑）
+        checkProgressByElement() {
+            this.handleVideoSwitch('页面元素检测');
         }
 
         // 切换到下一个视频
         switchToNextVideo() {
-            let nextVideoFound = false;
-            const currentFullUrl = window.location.href;
-
-            $(".classcenter-chapter2 ul li").each(function () {
-                const $this = $(this);
-                const onclickAttr = $this.attr('onclick');
-                let isCurrentVideo = $this.css("background-color") === "rgb(204, 197, 197)" || $this.css("background-color") === "#ccc5c5";
-
-                if (onclickAttr && onclickAttr.includes('location.href=')) {
-                    const onclickUrlPart = onclickAttr.match(/location\.href='([^']+)'/);
-                    if (onclickUrlPart && onclickUrlPart[1]) {
-                        const relativePath = onclickUrlPart[1].replace(/&/g, '&');
-                        if (currentFullUrl.includes(relativePath)) {
-                            isCurrentVideo = true;
-                        }
-                    }
-                }
-
-                if (isCurrentVideo && !nextVideoFound) {
-                    nextVideoFound = true;
-                } else if (!isCurrentVideo && nextVideoFound) {
-                    $this.trigger("click");
-                    utils.log("切换到下一个视频");
-                    return false;
-                }
-            });
-            utils.log(`nextVideoFound:${nextVideoFound}`);
-            if (!nextVideoFound) {
-                utils.log("所有视频播放完成");
-                console.log('【课程切换】所有课程均已学习完毕或被锁定，5秒后自动关闭页面...');
-                setTimeout(() => { window.close(); }, 5000);
-            }
+            this.handleVideoSwitch('接口检测');
         }
     }
 
