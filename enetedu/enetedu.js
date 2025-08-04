@@ -217,7 +217,7 @@
                 this.handleVideoComplete();
             } else {
                 // 每3秒打印一次视频进度日志
-                if (currentTime - this.lastLogTime >= 3) {
+                if (currentTime - this.lastLogTime >= 5) {
                     utils.log(`当前视频进度: ${currentTime}s/${duration}s，播放速度: ${video.playbackRate}倍`);
                     this.lastLogTime = currentTime;
                     this.checkCurrentProgress();
