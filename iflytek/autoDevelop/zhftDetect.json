@@ -1,0 +1,90 @@
+{
+  "name": "zhftDetect",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "zftdDetect",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a99d966e-bdf5-4187-9eca-d71e862af5b8",
+      "name": "Webhook Upload",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -860,
+        340
+      ],
+      "webhookId": "71112d55-f154-4229-ba8a-144381526f0e"
+    },
+    {
+      "parameters": {
+        "command": "=PORT=9191  # 监听端口号\nJAR_NAME=\"ts-service-5.0.jar\"\nPID=\"\"\n\n# 查找所有监听该端口的 PID（可能多个）\nPORT_PIDS=$(lsof -ti :$PORT)\n\n# 遍历端口相关 PID，匹配是否运行了目标 JAR\nfor p in $PORT_PIDS; do\n    CMDLINE=$(ps -p $p -o args=)\n    if echo \"$CMDLINE\" | grep -q \"$JAR_NAME\"; then\n        PID=$p\n        # echo \"Found matching PID $PID from port $PORT with JAR: $JAR_NAME\"\n        break\n    fi\ndone\n\n# 输出最近一次启动时间\nif [ -n \"$PID\" ]; then\n    #echo \"✅ 找到 PID: $PID，对应 JAR: $JAR_NAME\"\n\n\n    # 获取启动时间原始格式（如 Thu Jul 25 15:23:01 2025）\n    RAW_TIME=$(ps -p $PID -o lstart=)\n\n    # 转换为标准格式 yyyy-MM-dd HH:mm:ss\n    # 注意：需要 GNU date 支持\n    FORMATTED_TIME=$(date -d \"$RAW_TIME\" \"+%Y-%m-%d %H:%M:%S\" 2>/dev/null)\n\n    if [ -n \"$FORMATTED_TIME\" ]; then\n        echo \" $FORMATTED_TIME\"\n    else\n        echo \"⚠️ 无法格式化时间（当前系统可能是 macOS 或非 GNU date）\"\n        echo \"$RAW_TIME\"\n    fi\nelse\n    echo \"\"\nfi"
+      },
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        340
+      ],
+      "id": "f302d807-3206-4012-beae-b77752abafff",
+      "name": "ssh操作",
+      "credentials": {
+        "sshPassword": {
+          "id": "UKxFN3HfhhfB4p2G",
+          "name": "SSH Password account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.stdout }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -420,
+        340
+      ],
+      "id": "e27960bb-d499-4392-b80c-2a5b304adc6a",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Upload": {
+      "main": [
+        [
+          {
+            "node": "ssh操作",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ssh操作": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "fff381fa-68ee-446a-8666-e33617751013",
+  "meta": {
+    "instanceId": "951f0a4d6734d3561dee532781de3d1e6cf9fcf2d87e4e086789513737936e65"
+  },
+  "id": "felrcRtwU7LNuIhT",
+  "tags": []
+}
