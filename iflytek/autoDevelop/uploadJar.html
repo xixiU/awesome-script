@@ -11,16 +11,17 @@
 			display: flex;
 			justify-content: center;
 			align-items: center;
-			height: 100vh;
+			min-height: 100vh;
 			margin: 0;
 			background-color: #f4f7f9;
+			padding: 20px;
 		}
 
 		.upload-container {
 			background: #ffffff;
 			padding: 30px 40px;
 			border-radius: 12px;
-			box-shadow: 0 8px meditative0px rgba(0, 0, 0, 0.1);
+			box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
 			width: 100%;
 			max-width: 500px;
 			text-align: center;
@@ -30,6 +31,39 @@
 			color: #333;
 			margin-bottom: 25px;
 			font-weight: 600;
+		}
+
+		/* 部署时间显示区域样式 */
+		.deployment-info {
+			background: #f8f9fa;
+			border: 1px solid #e9ecef;
+			border-radius: 8px;
+			padding: 15px;
+			margin-bottom: 25px;
+			text-align: left;
+		}
+
+		.deployment-info h3 {
+			color: #495057;
+			margin: 0 0 10px 0;
+			font-size: 16px;
+			font-weight: 600;
+		}
+
+		.deployment-time {
+			color: #007bff;
+			font-weight: 500;
+			font-size: 14px;
+		}
+
+		.deployment-loading {
+			color: #6c757d;
+			font-style: italic;
+		}
+
+		.deployment-error {
+			color: #dc3545;
+			font-size: 14px;
 		}
 
 		#uploadForm {
@@ -156,6 +190,12 @@
 	<div class="upload-container">
 		<h1>智慧法庭研发184 JAR包部署上传</h1>
 
+		<!-- 部署时间信息显示区域 -->
+		<div class="deployment-info">
+			<h3>智慧法庭</h3>
+			<div id="deploymentTime" class="deployment-loading">正在获取部署时间...</div>
+		</div>
+
 		<div id="form-container">
 			<form id="uploadForm">
 				<label for="jarFile" class="file-input-wrapper">
@@ -192,13 +232,69 @@
 			const progressContainer = document.getElementById('progress-container');
 			const progressCircle = document.getElementById('progress-ring-circle');
 			const progressText = document.getElementById('progress-text');
+			const deploymentTime = document.getElementById('deploymentTime');
 
 			// Config
 			const N8N_WEBHOOK_BASE_URL = 'http://172.31.160.184:5678/webhook/uploadJar';
+			const DEPLOYMENT_STATUS_URL = 'http://172.31.160.184:5678/webhook/zftdDetect';
 			const radius = progressCircle.r.baseVal.value;
 			const circumference = 2 * Math.PI * radius;
 			progressCircle.style.strokeDasharray = `${circumference} ${circumference}`;
 			progressCircle.style.strokeDashoffset = circumference;
+
+			// 获取部署时间函数
+			async function fetchDeploymentTime() {
+				try {
+					const response = await fetch(DEPLOYMENT_STATUS_URL, {
+						method: 'GET',
+					});
+
+					if (!response.ok) {
+						throw new Error(`HTTP error! status: ${response.status}`);
+					}
+
+					// 获取纯文本格式的部署时间
+					const deploymentTimeText = await response.text();
+
+					// 检查返回的文本是否为空或无效
+					if (deploymentTimeText && deploymentTimeText.trim()) {
+						deploymentTime.textContent = `上次部署时间: ${deploymentTimeText.trim()}`;
+						deploymentTime.className = 'deployment-time';
+					} else {
+						deploymentTime.textContent = '暂无部署时间信息';
+						deploymentTime.className = 'deployment-time';
+					}
+				} catch (error) {
+					console.error('获取部署时间失败:', error);
+					deploymentTime.textContent = '获取部署时间失败，请检查网络连接';
+					deploymentTime.className = 'deployment-error';
+				}
+			}
+
+			// 自动刷新部署时间的定时器
+			let deploymentRefreshTimer = null;
+
+			// 启动自动刷新
+			function startAutoRefresh() {
+				// 立即获取一次
+				fetchDeploymentTime();
+
+				// 设置定时器，每10秒刷新一次
+				deploymentRefreshTimer = setInterval(() => {
+					fetchDeploymentTime();
+				}, 10000); // 10秒 = 10000毫秒
+			}
+
+			// 停止自动刷新
+			function stopAutoRefresh() {
+				if (deploymentRefreshTimer) {
+					clearInterval(deploymentRefreshTimer);
+					deploymentRefreshTimer = null;
+				}
+			}
+
+			// 页面加载时启动自动刷新
+			startAutoRefresh();
 
 			function setProgress(percent) {
 				const offset = circumference - (percent / 100) * circumference;
