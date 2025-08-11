@@ -705,7 +705,11 @@
                         }
 
                         // 输出播放状态
-                        utils.log(`直播播放中 - 速度: ${video.playbackRate}倍, 音量: ${video.volume}`);
+                        utils.log(`直播播放中-当前视频进度: ${video.currentTime}s/${video.duration}s，播放速度: ${video.playbackRate}倍`);
+                        if (video.currentTime > 0.95 * video.duration) {
+                            console.log('【课程切换】当前直播课程学习进度达到95%，5秒后自动关闭页面...');
+                            setTimeout(() => { window.close(); }, 5000);
+                        }
                     }
                 } catch (err) {
                     utils.log(`直播控制出错: ${err.message}`);
