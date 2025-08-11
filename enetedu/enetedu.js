@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.6.2.5
-// @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频。优先使用接口检测学习进度，页面元素检测作为兜底。
+// @version      0.6.2.7
+// @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频。优先使用接口检测学习进度，页面元素检测作为兜底。已移除tab切换时视频自动停止的限制。
 // @author       Praglody,vampirehA
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
 // @match        huiyi.enetedu.com/liveWacth/*
 // @match        *.smartedu.cn/p/course/*
+// @match        szh.enetedu.com/*
 // @match        bwgl.qchengkeji.com/user/node?nodeId=*
 // @grant        unsafeWindow
 // @grant        window.close
@@ -14,13 +15,175 @@
 // @run-at       document-start
 // @require      https://cdn.bootcss.com/jquery/3.2.1/jquery.min.js
 // @license MIT
-// @thanks        https://update.greasyfork.org/scripts/497263/%2A2024%E7%89%88%E7%BB%A7%E7%BB%AD%E6%95%99%E8%82%B2%2A%E5%85%A8%E5%9B%BD%E9%AB%98%E6%A0%A1%E6%95%99%E5%B8%88%E7%BD%91%E7%BB%9C%E5%9F%B9%E8%AE%AD%E4%B8%AD%E5%BF%83-%E8%87%AA%E5%8A%A8%E5%88%B7%E8%AF%BE.user.js
+// @thanks        https://update.greasyfork.org/scripts/497263/%2A2024%E7%89%88%E7%BB%AD%E7%BB%AD%E6%95%99%E8%82%B2%2A%E5%85%A8%E5%9B%BD%E9%AB%98%E6%A0%A1%E6%95%99%E5%B8%88%E7%BD%91%E7%BB%9C%E5%9F%B9%E8%AE%AD%E4%B8%AD%E5%BF%83-%E8%87%AA%E5%8A%A8%E5%88%B7%E8%AF%BE.user.js
 // @downloadURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/enetedu/enetedu.js
 // @updateURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/enetedu/enetedu.js
 // ==/UserScript==
 
 (function () {
     'use strict';
+
+    // Tab切换限制移除功能 - 专门针对szh.enetedu.com
+    function removeTabSwitchRestrictions() {
+        if (!window.location.href.includes('szh.enetedu.com')) {
+            return; // 只在szh.enetedu.com网站启用
+        }
+
+        console.log('[Tab限制移除] 开始移除szh.enetedu.com的tab切换限制...');
+
+        // 拦截事件监听器
+        const originalAddEventListener = EventTarget.prototype.addEventListener;
+        const originalRemoveEventListener = EventTarget.prototype.removeEventListener;
+
+        EventTarget.prototype.addEventListener = function (type, listener, options) {
+            if (type === 'visibilitychange' || type === 'beforeunload' || type === 'pagehide') {
+                console.log(`[Tab限制移除] 拦截到${type}事件监听器添加`);
+                return;
+            }
+            return originalAddEventListener.call(this, type, listener, options);
+        };
+
+        EventTarget.prototype.removeEventListener = function (type, listener, options) {
+            if (type === 'visibilitychange' || type === 'beforeunload' || type === 'pagehide') {
+                console.log(`[Tab限制移除] 拦截到${type}事件监听器移除`);
+                return;
+            }
+            return originalRemoveEventListener.call(this, type, listener, options);
+        };
+
+        // 禁用页面可见性API
+        Object.defineProperty(document, 'hidden', {
+            get: function () {
+                return false;
+            },
+            configurable: true
+        });
+
+        Object.defineProperty(document, 'visibilityState', {
+            get: function () {
+                return 'visible';
+            },
+            configurable: true
+        });
+
+        Object.defineProperty(document, 'onvisibilitychange', {
+            get: function () {
+                return null;
+            },
+            set: function () {
+                console.log('[Tab限制移除] 尝试设置onvisibilitychange，已阻止');
+            },
+            configurable: true
+        });
+
+        // 重写BroadcastChannel
+        const originalBroadcastChannel = window.BroadcastChannel;
+        window.BroadcastChannel = function (channelName) {
+            console.log(`[Tab限制移除] 拦截BroadcastChannel创建: ${channelName}`);
+            return {
+                name: channelName,
+                onmessage: null,
+                postMessage: function (message) {
+                    console.log(`[Tab限制移除] 拦截BroadcastChannel消息发送:`, message);
+                },
+                close: function () {
+                    console.log(`[Tab限制移除] 拦截BroadcastChannel关闭`);
+                }
+            };
+        };
+        if (originalBroadcastChannel) {
+            window.BroadcastChannel.prototype = originalBroadcastChannel.prototype;
+        }
+
+        // 拦截特定函数
+        const interceptFunctions = () => {
+            // 拦截xe函数（visibilitychange处理函数）
+            if (typeof window.xe === 'function') {
+                window.xe = function () {
+                    console.log('[Tab限制移除] 拦截xe函数调用，已阻止');
+                    return;
+                };
+            }
+
+            // 拦截ge函数（暂停视频的函数）
+            if (typeof window.ge === 'function') {
+                window.ge = function () {
+                    console.log('[Tab限制移除] 拦截ge函数调用，已阻止');
+                    return;
+                };
+            }
+
+            // 拦截ke函数（BroadcastChannel消息发送函数）
+            if (typeof window.ke === 'function') {
+                window.ke = function (isPlay) {
+                    console.log(`[Tab限制移除] 拦截ke函数调用，参数: ${isPlay}，已阻止`);
+                    return;
+                };
+            }
+
+            // 拦截Je函数（播放开始函数）
+            if (typeof window.Je === 'function') {
+                window.Je = function (t) {
+                    console.log('[Tab限制移除] 拦截Je函数调用，但允许正常播放');
+                    const u = window.u;
+                    const e = u?.value;
+                    const a = u?.value;
+                    if (!(e != null && e.isLoading()) && !(a != null && a.isBuffering())) {
+                        console.log("视频播放开始", "触发接口");
+                        if (typeof window.Ge === 'function') {
+                            window.Ge();
+                        }
+                    }
+                };
+            }
+
+            // 拦截He函数（播放暂停函数）
+            if (typeof window.He === 'function') {
+                window.He = function (t) {
+                    console.log('[Tab限制移除] 拦截He函数调用，但允许正常暂停逻辑');
+                    const u = window.u;
+                    const e = u?.value;
+                    const a = u?.value;
+                    if (!(e != null && e.isLoading()) && !(a != null && a.isBuffering())) {
+                        console.log("播放暂停", "触发接口");
+                        if (typeof window.Y === 'function') {
+                            window.Y();
+                        }
+                    }
+                };
+            }
+        };
+
+        // 拦截视频播放器的暂停方法
+        const interceptVideoPause = () => {
+            if (window.u && window.u.value && typeof window.u.value.pauseVideo === 'function') {
+                window.u.value.pauseVideo = function () {
+                    console.log('[Tab限制移除] 拦截pauseVideo方法调用，已阻止');
+                };
+            }
+
+            const videos = document.querySelectorAll('video');
+            videos.forEach((video, index) => {
+                if (video && typeof video.pause === 'function' && !video._pauseIntercepted) {
+                    video.pause = function () {
+                        console.log(`[Tab限制移除] 拦截视频${index}的pause方法调用，已阻止`);
+                    };
+                    video._pauseIntercepted = true;
+                }
+            });
+        };
+
+        // 定期检查并拦截
+        setInterval(() => {
+            interceptFunctions();
+            interceptVideoPause();
+        }, 1000);
+
+        console.log('[Tab限制移除] 所有限制移除操作已完成！');
+    }
+
+    // 立即执行tab切换限制移除
+    removeTabSwitchRestrictions();
 
     // 普通课程倍速
     const speed = 2.0;
@@ -49,7 +212,15 @@
         },
 
         isLivePage() {
-            return window.location.href.includes('huiyi.enetedu.com/liveWacth');
+            return window.location.href.includes('huiyi.enetedu.com/liveWacth') || isSzhLivePage();
+        },
+
+        isSzhLivePage() {
+            let isSzhLivePage = window.location.href.includes('szh.enetedu.com')
+            if (isSzhLivePage) {
+                liveSpeed = 1.5;
+            }
+            return isSzhLivePage;
         },
 
         isSmartEduPage() {
@@ -270,6 +441,7 @@
             });
         }
 
+        // 从URL中提取域名和第一个路径
         extractDomainWithFirstPath(url) {
             try {
                 const urlObj = new URL(url);
