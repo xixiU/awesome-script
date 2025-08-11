@@ -693,16 +693,6 @@
                             video.play();
                         }
 
-                        Object.defineProperty(video, 'playbackRate', {
-                            set: function (val) {
-                                console.log('阻止外部修改倍速，强制', liveSpeed);
-                                HTMLMediaElement.prototype.__lookupSetter__('playbackRate').call(this, liveSpeed);
-                            },
-                            get: function () {
-                                return HTMLMediaElement.prototype.__lookupGetter__('playbackRate').call(this);
-                            }
-                        });
-
                         // 设置音量和播放速度
                         video.muted = true;
                         try {
