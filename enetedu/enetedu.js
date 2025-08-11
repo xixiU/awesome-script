@@ -212,15 +212,7 @@
         },
 
         isLivePage() {
-            return window.location.href.includes('huiyi.enetedu.com/liveWacth') || isSzhLivePage();
-        },
-
-        isSzhLivePage() {
-            let isSzhLivePage = window.location.href.includes('szh.enetedu.com')
-            if (isSzhLivePage) {
-                liveSpeed = 1.5;
-            }
-            return isSzhLivePage;
+            return window.location.href.includes('huiyi.enetedu.com/liveWacth') || window.location.href.includes('szh.enetedu.com');
         },
 
         isSmartEduPage() {
@@ -700,6 +692,16 @@
                         if (video.paused) {
                             video.play();
                         }
+
+                        Object.defineProperty(video, 'playbackRate', {
+                            set: function (val) {
+                                console.log('阻止外部修改倍速，强制', liveSpeed);
+                                HTMLMediaElement.prototype.__lookupSetter__('playbackRate').call(this, liveSpeed);
+                            },
+                            get: function () {
+                                return HTMLMediaElement.prototype.__lookupGetter__('playbackRate').call(this);
+                            }
+                        });
 
                         // 设置音量和播放速度
                         video.muted = true;
