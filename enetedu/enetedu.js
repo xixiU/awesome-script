@@ -693,12 +693,24 @@
                             video.play();
                         }
 
+
                         // 设置音量和播放速度
                         video.muted = true;
                         try {
+                            
+                            Object.defineProperty(video, 'playbackRate', {
+                                set: function (val) {
+                                    console.log('阻止外部修改倍速，强制', liveSpeed);
+                                    HTMLMediaElement.prototype.__lookupSetter__('playbackRate').call(this, liveSpeed);
+                                },
+                                get: function () {
+                                    return HTMLMediaElement.prototype.__lookupGetter__('playbackRate').call(this);
+                                }
+                            });
+
                             if (video.playbackRate !== liveSpeed) {
                                 video.playbackRate = liveSpeed;
-                                utils.log(`直播播放速度设置为${liveSpeed}倍`);
+                                //utils.log(`直播播放速度设置为${liveSpeed}倍`);
                             }
                         } catch (err) {
                             utils.log(`设置直播播放速度失败: ${err.message}`);
