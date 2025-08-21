@@ -1,19 +1,65 @@
 // ==UserScript==
 // @name         ifly-21tb 增强脚本 (视频控制+自动答题)
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  视频页：左右键快进/回退，数字键调速。考试页：自动请求Dify API并填写答案，支持暂停/继续。
 // @author       yuan
 // @match        *://*.21tb.com/*
 // @connect      localhost
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
 // @downloadURL  https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/iflytek/control21tbVideoSpeed.js
 // @updateURL    https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/iflytek/control21tbVideoSpeed.js
 // ==/UserScript==
 
 (function () {
     'use strict';
+
+    /******************************************************************
+     *
+     * PART 0: 配置管理模块
+     *
+     ******************************************************************/
+
+    // 默认配置
+    const DEFAULT_CONFIG = {
+        role: "科大讯飞公司的规章制度专家",
+        ability: "保密",
+        apiUrl: "http://localhost:5005/proxy/dify"
+    };
+
+    // 获取配置值，如果用户未设置则使用默认值
+    function getConfig(key) {
+        return GM_getValue(key, DEFAULT_CONFIG[key]);
+    }
+
+    // 设置配置值
+    function setConfig(key, value) {
+        GM_setValue(key, value);
+    }
+
+    // 注册设置菜单
+    GM_registerMenuCommand("⚙️ 21tb脚本设置", function () {
+        const role = prompt("请输入角色设定 (role):", getConfig('role'));
+        if (role !== null) {
+            setConfig('role', role);
+        }
+
+        const ability = prompt("请输入能力设定 (ability):", getConfig('ability'));
+        if (ability !== null) {
+            setConfig('ability', ability);
+        }
+
+        const apiUrl = prompt("请输入API地址:", getConfig('apiUrl'));
+        if (apiUrl !== null) {
+            setConfig('apiUrl', apiUrl);
+        }
+
+        alert("设置已保存！");
+    });
 
     /******************************************************************
      *
@@ -28,8 +74,8 @@
             let isPaused = false;
             let isRunning = false;
 
-            // --- 配置信息 (变更 #1: 使用 https) ---
-            const API_URL = "http://localhost:5005/proxy/dify";
+            // --- 配置信息 (使用用户设置或默认值) ---
+            const API_URL = getConfig('apiUrl');
 
             // --- UI界面 ---
             GM_addStyle(`
@@ -43,6 +89,7 @@
                 #pause-exam-btn { background-color: #f44336; display: none; }
                 #pause-exam-btn:hover { background-color: #da190b; }
                 #exam-status { margin-top: 10px; padding: 8px; background-color: #e9e9e9; border-radius: 4px; font-size: 13px; color: #555; text-align: center; min-height: 20px; }
+                #config-info { margin-top: 8px; padding: 6px; background-color: #e3f2fd; border-radius: 4px; font-size: 11px; color: #1976d2; text-align: center; }
             `);
 
             const panel = document.createElement('div');
@@ -54,6 +101,7 @@
                     <button id="pause-exam-btn" class="exam-btn">暂停</button>
                 </div>
                 <div id="exam-status">准备就绪</div>
+                <div id="config-info">角色: ${getConfig('role')} | 能力: ${getConfig('ability')}</div>
             `;
             document.body.appendChild(panel);
 
@@ -87,7 +135,10 @@
             function fetchAnswer(questionData) {
                 return new Promise((resolve, reject) => {
                     const payload = {
-                        "inputs": { "role": "科大讯飞公司的规章制度专家", "ability": "保密" },
+                        "inputs": {
+                            "role": getConfig('role'),
+                            "ability": getConfig('ability')
+                        },
                         "query": JSON.stringify(questionData),
                         "response_mode": "blocking",
                         "conversation_id": "",
