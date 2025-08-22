@@ -188,7 +188,7 @@
     // 普通课程倍速
     const speed = 2.0;
     // 直播课程倍速
-    const liveSpeed = 4.0;
+    const liveSpeed = 5.0;
 
     // 添加 smartedu 速度设置
     const SPEEDS = {
