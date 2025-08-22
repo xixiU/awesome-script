@@ -676,11 +676,14 @@
     class LiveController {
         constructor() {
             this.checkInterval = null;
+            this.originalTimer = null;
+            this.modifiedTimer = null;
         }
 
         init() {
             utils.log('初始化直播控制器');
             this.initLivePlay();
+            this.modifyOriginalReporting();
         }
 
         initLivePlay() {
@@ -693,11 +696,9 @@
                             video.play();
                         }
 
-
                         // 设置音量和播放速度
                         video.muted = true;
                         try {
-                            
                             Object.defineProperty(video, 'playbackRate', {
                                 set: function (val) {
                                     console.log('阻止外部修改倍速，强制', liveSpeed);
@@ -710,7 +711,6 @@
 
                             if (video.playbackRate !== liveSpeed) {
                                 video.playbackRate = liveSpeed;
-                                //utils.log(`直播播放速度设置为${liveSpeed}倍`);
                             }
                         } catch (err) {
                             utils.log(`设置直播播放速度失败: ${err.message}`);
@@ -718,6 +718,7 @@
 
                         // 输出播放状态
                         utils.log(`直播播放中-当前视频进度: ${video.currentTime}s/${video.duration}s，播放速度: ${video.playbackRate}倍`);
+
                         if (video.currentTime > 0.95 * video.duration) {
                             console.log('【课程切换】当前直播课程学习进度达到95%，5秒后自动关闭页面...');
                             setTimeout(() => { window.close(); }, 5000);
@@ -727,6 +728,140 @@
                     utils.log(`直播控制出错: ${err.message}`);
                 }
             }, 5000);
+        }
+
+        modifyOriginalReporting() {
+            // 延迟执行，确保页面完全加载
+            setTimeout(() => {
+                this.findAndModifyOriginalTimer();
+            }, 2000);
+        }
+
+        findAndModifyOriginalTimer() {
+            try {
+                // 查找原有的定时器变量（从index.358ee778.js中看到的J.value）
+                const timerVars = ['J', 'reportTimer', 'progressTimer'];
+                let originalTimer = null;
+                let timerVarName = null;
+
+                for (const varName of timerVars) {
+                    if (window[varName] && typeof window[varName] === 'number') {
+                        originalTimer = window[varName];
+                        timerVarName = varName;
+                        utils.log(`找到原有定时器变量 ${varName}: ${originalTimer}`);
+                        break;
+                    }
+                }
+
+                if (originalTimer) {
+                    // 清除原有定时器
+                    clearInterval(originalTimer);
+                    utils.log(`已清除原有定时器 ${timerVarName}`);
+
+                    // 解释问题：原始上报间隔基于自然时间，不是播放时间
+                    utils.log(`原始问题：上报间隔固定60秒，但播放速度${liveSpeed}倍，导致学习进度与上报时间不匹配`);
+                    utils.log(`解决方案：调整上报间隔为 ${60 / liveSpeed} 秒，让上报频率与播放速度匹配`);
+
+                    // 根据播放速度计算新的上报间隔
+                    const newInterval = this.calculateReportInterval();
+                    utils.log(`根据${liveSpeed}倍速设置新的上报间隔: ${newInterval / 1000}秒`);
+
+                    // 创建新的定时器，调用原有的B函数
+                    this.modifiedTimer = setInterval(() => {
+                        if (typeof window.B === 'function') {
+                            utils.log('调用原有的B函数进行上报');
+                            window.B();
+                        } else {
+                            utils.log('未找到B函数，尝试其他上报方法');
+                            this.tryAlternativeReporting();
+                        }
+                    }, newInterval);
+
+                    // 更新全局变量
+                    if (timerVarName) {
+                        window[timerVarName] = this.modifiedTimer;
+                    }
+
+                    utils.log('已成功修改原有上报定时器');
+                } else {
+                    utils.log('未找到原有定时器，尝试直接创建新的上报定时器');
+                    this.createNewReportingTimer();
+                }
+            } catch (error) {
+                utils.log(`修改原有定时器失败: ${error.message}`);
+                this.createNewReportingTimer();
+            }
+        }
+
+        calculateReportInterval() {
+            // 根据播放速度调整上报间隔
+            // 目标是让上报频率与播放速度匹配
+            // 例如：4倍速时，应该每15秒上报一次（60/4=15）
+
+            const baseInterval = 60000; // 基础间隔1分钟
+
+            // 根据播放速度计算新间隔
+            // 播放速度越快，上报间隔越短
+            const newInterval = Math.max(baseInterval / liveSpeed, 10000); // 最短10秒
+
+            utils.log(`播放速度${liveSpeed}倍，上报间隔调整为${newInterval / 1000}秒 (${baseInterval / 1000}/${liveSpeed})`);
+
+            return newInterval;
+        }
+
+        createNewReportingTimer() {
+            const newInterval = this.calculateReportInterval();
+            utils.log(`创建新的上报定时器，间隔: ${newInterval / 1000}秒`);
+
+            this.modifiedTimer = setInterval(() => {
+                if (typeof window.B === 'function') {
+                    utils.log('调用原有的B函数进行上报');
+                    window.B();
+                } else {
+                    utils.log('未找到B函数，尝试其他上报方法');
+                    this.tryAlternativeReporting();
+                }
+            }, newInterval);
+        }
+
+        tryAlternativeReporting() {
+            // 尝试其他可能的上报方法
+            const alternativeMethods = ['reportProgress', 'createLearningInfo', 'U'];
+
+            for (const methodName of alternativeMethods) {
+                if (typeof window[methodName] === 'function') {
+                    utils.log(`尝试调用 ${methodName} 函数`);
+                    try {
+                        if (methodName === 'U') {
+                            // U函数需要参数
+                            window[methodName]({
+                                k: "site/createLearningInfo",
+                                method: "POST",
+                                disabledSuccess: true
+                            });
+                        } else {
+                            window[methodName]();
+                        }
+                        return;
+                    } catch (error) {
+                        utils.log(`调用 ${methodName} 失败: ${error.message}`);
+                    }
+                }
+            }
+
+            utils.log('未找到可用的上报函数');
+        }
+
+        destroy() {
+            if (this.checkInterval) {
+                clearInterval(this.checkInterval);
+                this.checkInterval = null;
+            }
+            if (this.modifiedTimer) {
+                clearInterval(this.modifiedTimer);
+                this.modifiedTimer = null;
+            }
+            utils.log('直播控制器已销毁');
         }
     }
 
