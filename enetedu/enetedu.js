@@ -782,7 +782,7 @@
                 } catch (err) {
                     utils.log(`直播控制出错: ${err.message}`);
                 }
-            }, 1000);
+            }, 3000);
         }
 
         destroy() {
