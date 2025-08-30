@@ -184,46 +184,201 @@
             // 延迟执行，确保页面完全加载
             setTimeout(() => {
                 try {
-                    // 查找B函数相关的定时器变量
-                    const timerVars = ['J', 'reportTimer', 'progressTimer'];
-                    let originalTimer = null;
-                    let timerVarName = null;
+                    // 方法1: 查找Vue组件中的定时器变量
+                    let foundTimer = false;
 
-                    for (const varName of timerVars) {
-                        if (window[varName] && typeof window[varName] === 'number') {
-                            originalTimer = window[varName];
-                            timerVarName = varName;
-                            console.log(`[Tab限制移除] 找到B函数相关定时器变量 ${varName}: ${originalTimer}`);
-                            break;
+                    // 遍历所有可能的Vue组件实例
+                    const vueInstances = [];
+                    if (window.__VUE_DEVTOOLS_GLOBAL_HOOK__) {
+                        const hook = window.__VUE_DEVTOOLS_GLOBAL_HOOK__;
+                        if (hook.Vue) {
+                            // 查找Vue实例
+                            const findVueInstances = (obj) => {
+                                if (obj && typeof obj === 'object') {
+                                    if (obj._isVue) {
+                                        vueInstances.push(obj);
+                                    }
+                                    for (const key in obj) {
+                                        if (obj.hasOwnProperty(key)) {
+                                            findVueInstances(obj[key]);
+                                        }
+                                    }
+                                }
+                            };
+                            findVueInstances(window);
                         }
                     }
 
-                    if (originalTimer) {
-                        // 清除原有定时器
-                        clearInterval(originalTimer);
-                        console.log(`[Tab限制移除] 已清除B函数定时器 ${timerVarName}`);
-
-                        // 创建新的定时器，继续调用B函数，但间隔改为15秒
-                        const newTimer = setInterval(() => {
-                            if (typeof window.B === 'function') {
-                                console.log('[Tab限制移除] 调用B函数进行上报');
-                                window.B();
+                    // 在Vue实例中查找定时器变量
+                    for (const instance of vueInstances) {
+                        if (instance.$data) {
+                            const data = instance.$data;
+                            if (data.J && typeof data.J === 'number') {
+                                console.log('[Tab限制移除] 在Vue实例中找到J定时器:', data.J);
+                                clearInterval(data.J);
+                                data.J = setInterval(() => {
+                                    if (typeof window.B === 'function') {
+                                        console.log('[Tab限制移除] 调用B函数进行上报');
+                                        window.B();
+                                    }
+                                }, 15000); // 15秒间隔
+                                foundTimer = true;
+                                break;
                             }
-                        }, 15000); // 15秒间隔
-
-                        // 更新全局变量
-                        if (timerVarName) {
-                            window[timerVarName] = newTimer;
                         }
-
-                        console.log('[Tab限制移除] 已成功修改B函数定时器为15秒间隔');
-                    } else {
-                        console.log('[Tab限制移除] 未找到B函数相关定时器');
                     }
+
+                    // 方法2: 直接拦截setInterval调用
+                    if (!foundTimer) {
+                        console.log('[Tab限制移除] 未找到现有定时器，将拦截新的setInterval调用');
+
+                        const originalSetInterval = window.setInterval;
+                        window.setInterval = function (callback, delay, ...args) {
+                            // 检查是否是B函数相关的定时器
+                            if (delay === 60000) { // 60秒间隔
+                                console.log('[Tab限制移除] 拦截到60秒定时器，修改为15秒');
+                                return originalSetInterval.call(this, callback, 15000, ...args);
+                            }
+                            return originalSetInterval.call(this, callback, delay, ...args);
+                        };
+                    }
+
+                    // 方法3: 直接调用B函数并设置新的定时器
+                    if (typeof window.B === 'function') {
+                        console.log('[Tab限制移除] 直接设置B函数定时器为15秒间隔');
+                        setInterval(() => {
+                            console.log('[Tab限制移除] 调用B函数进行上报');
+                            window.B();
+                        }, 15000);
+                    }
+
+                    // 方法4: 使用Object.defineProperty监听全局变量变化
+                    let originalJ = null;
+                    Object.defineProperty(window, 'J', {
+                        get: function () {
+                            return originalJ;
+                        },
+                        set: function (value) {
+                            if (typeof value === 'number' && value > 0) {
+                                console.log('[Tab限制移除] 检测到J变量被设置为定时器:', value);
+                                // 清除原有定时器
+                                if (originalJ) {
+                                    clearInterval(originalJ);
+                                }
+                                // 设置新的定时器
+                                originalJ = setInterval(() => {
+                                    if (typeof window.B === 'function') {
+                                        console.log('[Tab限制移除] 调用B函数进行上报');
+                                        window.B();
+                                    }
+                                }, 15000); // 15秒间隔
+                                console.log('[Tab限制移除] 已修改J定时器为15秒间隔');
+                            } else {
+                                originalJ = value;
+                            }
+                        },
+                        configurable: true
+                    });
+
                 } catch (error) {
                     console.log(`[Tab限制移除] 修改B函数定时器失败: ${error.message}`);
                 }
-            }, 2000);
+            }, 3000);
+        };
+
+        // 优化tab切换时的上报逻辑
+        const optimizeTabSwitchReporting = () => {
+            // 拦截visibilitychange事件处理函数
+            const originalAddEventListener = EventTarget.prototype.addEventListener;
+            EventTarget.prototype.addEventListener = function (type, listener, options) {
+                if (type === 'visibilitychange') {
+                    console.log('[Tab限制移除] 拦截visibilitychange事件监听器');
+                    // 替换为自定义的处理函数
+                    const customListener = function (event) {
+                        console.log('[Tab限制移除] 处理visibilitychange事件');
+                        // 不暂停视频，继续学习时间记录
+                        if (document.visibilityState === 'hidden') {
+                            console.log('[Tab限制移除] 页面隐藏，但继续学习时间记录');
+                            // 不调用ge()函数，避免暂停视频
+                        } else {
+                            console.log('[Tab限制移除] 页面可见，继续学习');
+                        }
+                    };
+                    return originalAddEventListener.call(this, type, customListener, options);
+                }
+                return originalAddEventListener.call(this, type, listener, options);
+            };
+
+            // 拦截Pe函数
+            if (typeof window.Pe === 'function') {
+                const originalPe = window.Pe;
+                window.Pe = function () {
+                    console.log('[Tab限制移除] 拦截Pe函数调用，不暂停视频');
+                    // 不执行原始逻辑，避免暂停视频
+                };
+                console.log('[Tab限制移除] 已拦截Pe函数');
+            }
+
+            // 拦截ge函数
+            if (typeof window.ge === 'function') {
+                const originalGe = window.ge;
+                window.ge = function () {
+                    console.log('[Tab限制移除] 拦截ge函数调用，不暂停视频');
+                    // 不执行原始逻辑，避免暂停视频
+                };
+                console.log('[Tab限制移除] 已拦截ge函数');
+            }
+        };
+
+        // 监听Vue响应式数据变化
+        const watchVueReactiveData = () => {
+            // 监听Vue响应式数据中的定时器变量
+            const originalDefineProperty = Object.defineProperty;
+            Object.defineProperty = function (obj, prop, descriptor) {
+                if (prop === 'J' && descriptor && descriptor.set) {
+                    const originalSetter = descriptor.set;
+                    descriptor.set = function (value) {
+                        if (typeof value === 'number' && value > 0) {
+                            console.log('[Tab限制移除] 检测到Vue响应式数据中J变量被设置为定时器:', value);
+                            // 清除原有定时器
+                            if (this._originalJ) {
+                                clearInterval(this._originalJ);
+                            }
+                            // 设置新的定时器
+                            this._originalJ = setInterval(() => {
+                                if (typeof window.B === 'function') {
+                                    console.log('[Tab限制移除] 调用B函数进行上报');
+                                    window.B();
+                                }
+                            }, 15000); // 15秒间隔
+                            console.log('[Tab限制移除] 已修改Vue响应式数据中的J定时器为15秒间隔');
+                            // 调用原始setter
+                            return originalSetter.call(this, this._originalJ);
+                        }
+                        return originalSetter.call(this, value);
+                    };
+                }
+                return originalDefineProperty.call(this, obj, prop, descriptor);
+            };
+        };
+
+        // 直接替换B函数，确保上报逻辑正确
+        const replaceBFunction = () => {
+            if (typeof window.B === 'function') {
+                const originalB = window.B;
+                window.B = function (...args) {
+                    console.log('[Tab限制移除] 调用B函数进行学习时间上报');
+                    return originalB.apply(this, args);
+                };
+                console.log('[Tab限制移除] 已替换B函数');
+            } else {
+                // 如果B函数不存在，创建一个
+                window.B = function () {
+                    console.log('[Tab限制移除] 创建B函数进行学习时间上报');
+                    // 这里可以添加默认的上报逻辑
+                };
+                console.log('[Tab限制移除] 已创建B函数');
+            }
         };
 
         // 定期检查并拦截
@@ -236,6 +391,21 @@
         setTimeout(() => {
             modifyReportingInterval();
         }, 3000);
+
+        // 延迟执行tab切换时的上报优化
+        setTimeout(() => {
+            optimizeTabSwitchReporting();
+        }, 4000);
+
+        // 延迟执行Vue响应式数据监听
+        setTimeout(() => {
+            watchVueReactiveData();
+        }, 2000);
+
+        // 延迟执行B函数替换
+        setTimeout(() => {
+            replaceBFunction();
+        }, 1000);
 
         console.log('[Tab限制移除] 所有限制移除操作已完成！');
     }
