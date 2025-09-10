@@ -379,7 +379,49 @@
                 };
                 console.log('[Tab限制移除] 已创建B函数');
             }
+
+            // 直接调用B函数进行时间记录上报
+            const createLearningInfoReport = () => {
+                try {
+                    // 获取当前视频信息
+                    const video = document.querySelector('video');
+                    if (!video) {
+                        console.log('[Tab限制移除] 未找到视频元素，跳过上报');
+                        return;
+                    }
+
+                    // 获取当前播放时间
+                    const currentTime = video.currentTime;
+                    const duration = video.duration;
+
+                    if (currentTime <= 0 || duration <= 0) {
+                        console.log('[Tab限制移除] 视频时间无效，跳过上报');
+                        return;
+                    }
+
+                    console.log('[Tab限制移除] 准备调用B函数上报学习时间，当前播放时间:', currentTime);
+
+                    // 直接调用B函数进行上报
+                    if (typeof window.B === 'function') {
+                        window.B();
+                        console.log('[Tab限制移除] 已调用B函数进行学习时间上报');
+                    } else {
+                        console.log('[Tab限制移除] B函数不存在，无法上报');
+                    }
+                } catch (error) {
+                    console.log('[Tab限制移除] 上报过程出错:', error.message);
+                }
+            };
+
+            // 设置定时器直接调用B函数
+            setInterval(() => {
+                createLearningInfoReport();
+            }, 15000); // 15秒间隔
+
+            console.log('[Tab限制移除] 已设置直接调用B函数的定时器');
         };
+
+
 
         // 定期检查并拦截
         setInterval(() => {
