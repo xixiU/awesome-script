@@ -270,7 +270,8 @@
 
     function initializeVideoModule() {
         const interval = setInterval(() => {
-            const video = document.querySelector('div#J_prismPlayer video');
+            // const video = document.querySelector('div#J_prismPlayer video');
+            const video = document.querySelector('video');
             if (video) {
                 clearInterval(interval);
                 console.log('[脚本] 检测到视频播放器，加载视频控制模块。');
