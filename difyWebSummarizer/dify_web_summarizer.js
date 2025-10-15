@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  使用Dify工作流智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
@@ -408,20 +408,31 @@
                 'main',
                 '[role="main"]',
                 '.article-content',
+                '.articalContent',  // 常见拼写错误
+                '.articleContent',
                 '.post-content',
                 '.entry-content',
                 '.content',
                 '.main-content',
                 '.article-body',
                 '.post-body',
+                '.entry-body',
                 '#article',
                 '#content',
                 '.markdown-body',
                 '.news-content',
+                '.newsContent',
                 '.detail-content',
+                '.detailContent',
                 '.rich-text',
                 '.story-body',
-                '.article-text'
+                '.article-text',
+                '.text-content',
+                '.textContent',
+                '[class*="article-content"]',
+                '[class*="post-content"]',
+                '[class*="entry-content"]',
+                '[class*="main-content"]'
             ];
 
             // 需要排除的元素选择器
@@ -457,13 +468,13 @@
 
             // 策略1: 尝试使用常见选择器
             content = this.tryCommonSelectors();
-            if (content && content.length > 200) {
+            if (content && content.length > 100) {
                 return this.cleanText(content);
             }
 
             // 策略2: 使用文本密度算法
             content = this.extractByTextDensity();
-            if (content && content.length > 200) {
+            if (content && content.length > 100) {
                 return this.cleanText(content);
             }
 
@@ -481,7 +492,7 @@
                     elements.forEach(el => {
                         text += this.extractTextFromElement(el) + '\n\n';
                     });
-                    if (text.trim().length > 200) {
+                    if (text.trim().length > 100) {
                         console.log(`[Dify] 使用选择器提取: ${selector}`);
                         return text;
                     }
@@ -516,7 +527,7 @@
                 const text = el.innerText || '';
                 const textLength = text.length;
 
-                if (textLength < 100) return; // 太短的忽略
+                if (textLength < 50) return; // 太短的忽略
 
                 // 计算文本密度分数
                 const linkLength = this.getLinkTextLength(el);
