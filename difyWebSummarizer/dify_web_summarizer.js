@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.0
 // @description  使用Dify工作流智能总结网页内容，支持各类知识型网站
-// @author       You
+// @author       xixiu
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
