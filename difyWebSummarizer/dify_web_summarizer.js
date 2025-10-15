@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  使用Dify工作流智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
@@ -229,10 +229,191 @@
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
             transition: all 0.3s ease;
         }
-        
+
         #dify-settings-btn:hover {
             background: #4b5563;
             transform: scale(1.1);
+        }
+
+        #dify-settings-panel {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 500px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            z-index: 1000001;
+            display: none;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        #dify-settings-panel.show {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        #dify-settings-header {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #dify-settings-header h3 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        #dify-settings-close-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+            transition: background 0.2s;
+        }
+
+        #dify-settings-close-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        #dify-settings-content {
+            padding: 24px;
+        }
+
+        .dify-form-group {
+            margin-bottom: 20px;
+        }
+
+        .dify-form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #374151;
+            font-size: 14px;
+        }
+
+        .dify-form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        .dify-form-group input:focus {
+            outline: none;
+            border-color: #10b981;
+        }
+
+        .dify-form-group input::placeholder {
+            color: #9ca3af;
+        }
+
+        .dify-form-help {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #6b7280;
+            line-height: 1.5;
+        }
+
+        .dify-form-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .dify-btn {
+            flex: 1;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        .dify-btn-primary {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+
+        .dify-btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .dify-btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .dify-btn-secondary:hover {
+            background: #e5e7eb;
+        }
+
+        .dify-success-message {
+            background: #d1fae5;
+            color: #065f46;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            display: none;
+            border-left: 4px solid #10b981;
+        }
+
+        .dify-success-message.show {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .dify-config-status {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-left: 8px;
+        }
+
+        .dify-config-status.configured {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .dify-config-status.not-configured {
+            background: #fee2e2;
+            color: #991b1b;
         }
     `;
 
@@ -519,6 +700,9 @@
             // 创建结果面板
             this.createResultPanel();
 
+            // 创建设置面板
+            this.createSettingsPanel();
+
             // 创建遮罩层
             this.createOverlay();
         }
@@ -558,10 +742,81 @@
             panel.querySelector('#dify-close-btn').addEventListener('click', () => this.hidePanel());
         }
 
+        createSettingsPanel() {
+            const panel = document.createElement('div');
+            panel.id = 'dify-settings-panel';
+            panel.innerHTML = `
+                <div id="dify-settings-header">
+                    <h3>⚙️ Dify API 配置</h3>
+                    <button id="dify-settings-close-btn">×</button>
+                </div>
+                <div id="dify-settings-content">
+                    <div class="dify-success-message" id="dify-save-success">
+                        ✓ 配置已成功保存！
+                    </div>
+                    
+                    <div class="dify-form-group">
+                        <label for="dify-api-url">
+                            Dify 工作流 API 地址
+                            <span class="dify-config-status" id="dify-url-status"></span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="dify-api-url" 
+                            placeholder="https://api.dify.ai/v1/workflows/run"
+                            autocomplete="off"
+                        />
+                        <div class="dify-form-help">
+                            在 Dify 平台的工作流设置中获取 API 端点地址
+                        </div>
+                    </div>
+                    
+                    <div class="dify-form-group">
+                        <label for="dify-api-key">
+                            Dify API Key
+                            <span class="dify-config-status" id="dify-key-status"></span>
+                        </label>
+                        <input 
+                            type="password" 
+                            id="dify-api-key" 
+                            placeholder="app-xxxxxxxxxxxxxxxx"
+                            autocomplete="off"
+                        />
+                        <div class="dify-form-help">
+                            在 Dify 平台的工作流 API 访问页面获取密钥（以 app- 开头）
+                        </div>
+                    </div>
+                    
+                    <div class="dify-form-actions">
+                        <button class="dify-btn dify-btn-secondary" id="dify-cancel-btn">取消</button>
+                        <button class="dify-btn dify-btn-primary" id="dify-save-btn">保存配置</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(panel);
+            this.settingsPanel = panel;
+
+            // 绑定事件
+            panel.querySelector('#dify-settings-close-btn').addEventListener('click', () => this.hideSettingsPanel());
+            panel.querySelector('#dify-cancel-btn').addEventListener('click', () => this.hideSettingsPanel());
+            panel.querySelector('#dify-save-btn').addEventListener('click', () => this.saveSettings());
+
+            // 按 Enter 键保存
+            panel.querySelector('#dify-api-url').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.saveSettings();
+            });
+            panel.querySelector('#dify-api-key').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.saveSettings();
+            });
+        }
+
         createOverlay() {
             const overlay = document.createElement('div');
             overlay.id = 'dify-overlay';
-            overlay.addEventListener('click', () => this.hidePanel());
+            overlay.addEventListener('click', () => {
+                this.hidePanel();
+                this.hideSettingsPanel();
+            });
             document.body.appendChild(overlay);
             this.overlay = overlay;
         }
@@ -638,23 +893,113 @@
         }
 
         showSettings() {
-            const currentApiUrl = CONFIG.difyApiUrl;
-            const currentApiKey = CONFIG.difyApiKey;
+            // 填充当前配置值
+            const urlInput = this.settingsPanel.querySelector('#dify-api-url');
+            const keyInput = this.settingsPanel.querySelector('#dify-api-key');
 
-            const apiUrl = prompt('请输入Dify工作流API地址:', currentApiUrl);
-            if (apiUrl !== null && apiUrl.trim()) {
-                CONFIG.difyApiUrl = apiUrl.trim();
-                GM_setValue('difyApiUrl', apiUrl.trim());
+            urlInput.value = CONFIG.difyApiUrl;
+            keyInput.value = CONFIG.difyApiKey;
+
+            // 隐藏成功消息
+            this.settingsPanel.querySelector('#dify-save-success').classList.remove('show');
+
+            // 更新配置状态标识
+            this.updateConfigStatus();
+
+            // 显示面板
+            this.settingsPanel.classList.add('show');
+            this.overlay.classList.add('show');
+
+            // 聚焦到第一个输入框
+            setTimeout(() => urlInput.focus(), 100);
+        }
+
+        hideSettingsPanel() {
+            this.settingsPanel.classList.remove('show');
+            this.overlay.classList.remove('show');
+        }
+
+        saveSettings() {
+            const urlInput = this.settingsPanel.querySelector('#dify-api-url');
+            const keyInput = this.settingsPanel.querySelector('#dify-api-key');
+            const successMsg = this.settingsPanel.querySelector('#dify-save-success');
+
+            const apiUrl = urlInput.value.trim();
+            const apiKey = keyInput.value.trim();
+
+            // 基本验证
+            if (!apiUrl) {
+                urlInput.focus();
+                urlInput.style.borderColor = '#ef4444';
+                setTimeout(() => {
+                    urlInput.style.borderColor = '';
+                }, 2000);
+                return;
             }
 
-            const apiKey = prompt('请输入Dify API Key:', currentApiKey);
-            if (apiKey !== null && apiKey.trim()) {
-                CONFIG.difyApiKey = apiKey.trim();
-                GM_setValue('difyApiKey', apiKey.trim());
+            if (!apiKey) {
+                keyInput.focus();
+                keyInput.style.borderColor = '#ef4444';
+                setTimeout(() => {
+                    keyInput.style.borderColor = '';
+                }, 2000);
+                return;
             }
 
-            if ((apiUrl !== null && apiUrl.trim()) || (apiKey !== null && apiKey.trim())) {
-                alert('配置已保存！');
+            // 验证 URL 格式
+            try {
+                new URL(apiUrl);
+            } catch (e) {
+                urlInput.focus();
+                urlInput.style.borderColor = '#ef4444';
+                alert('请输入有效的 API 地址（必须以 http:// 或 https:// 开头）');
+                setTimeout(() => {
+                    urlInput.style.borderColor = '';
+                }, 2000);
+                return;
+            }
+
+            // 保存配置
+            CONFIG.difyApiUrl = apiUrl;
+            CONFIG.difyApiKey = apiKey;
+            GM_setValue('difyApiUrl', apiUrl);
+            GM_setValue('difyApiKey', apiKey);
+
+            // 更新状态标识
+            this.updateConfigStatus();
+
+            // 显示成功消息
+            successMsg.classList.add('show');
+
+            // 3秒后自动关闭面板
+            setTimeout(() => {
+                this.hideSettingsPanel();
+                successMsg.classList.remove('show');
+            }, 2000);
+
+            console.log('[Dify] 配置已保存');
+        }
+
+        updateConfigStatus() {
+            const urlStatus = this.settingsPanel.querySelector('#dify-url-status');
+            const keyStatus = this.settingsPanel.querySelector('#dify-key-status');
+
+            // 更新 URL 状态
+            if (CONFIG.difyApiUrl && CONFIG.difyApiUrl !== 'https://api.dify.ai/v1/workflows/run') {
+                urlStatus.textContent = '已配置';
+                urlStatus.className = 'dify-config-status configured';
+            } else {
+                urlStatus.textContent = '未配置';
+                urlStatus.className = 'dify-config-status not-configured';
+            }
+
+            // 更新 Key 状态
+            if (CONFIG.difyApiKey) {
+                keyStatus.textContent = '已配置';
+                keyStatus.className = 'dify-config-status configured';
+            } else {
+                keyStatus.textContent = '未配置';
+                keyStatus.className = 'dify-config-status not-configured';
             }
         }
     }
