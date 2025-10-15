@@ -10,6 +10,8 @@
 // @grant        GM_getValue
 // @connect      *
 // @run-at       document-end
+// @downloadURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/difyWebSummarizer/dify_web_summarizer.js
+// @updateURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/difyWebSummarizer/dify_web_summarizer.js
 // ==/UserScript==
 
 (function () {
