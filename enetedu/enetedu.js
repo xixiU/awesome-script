@@ -3,7 +3,7 @@
 // @namespace    https://onlinenew.enetedu.com/
 // @version      0.6.2.7
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频。优先使用接口检测学习进度，页面元素检测作为兜底。已移除tab切换时视频自动停止的限制。
-// @author       Praglody,vampirehA
+// @author       xixiu
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
 // @match        huiyi.enetedu.com/liveWacth/*
 // @match        *.smartedu.cn/p/course/*
