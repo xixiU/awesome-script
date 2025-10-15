@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  使用Dify工作流智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_registerMenuCommand
 // @connect      *
 // @run-at       document-end
 // @downloadURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/difyWebSummarizer/dify_web_summarizer.js
@@ -34,31 +35,34 @@
     const styles = `
         #dify-summarizer-btn {
             position: fixed;
-            bottom: ${CONFIG.buttonPosition.bottom};
-            right: ${CONFIG.buttonPosition.right};
+            bottom: 80px;
+            right: 20px;
             z-index: 999999;
             padding: 12px 24px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
             border-radius: 25px;
-            cursor: pointer;
+            cursor: move;
             font-size: 14px;
             font-weight: bold;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            transition: all 0.3s ease;
+            transition: box-shadow 0.3s ease;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            user-select: none;
+            touch-action: none;
         }
-        
+
         #dify-summarizer-btn:hover {
-            transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
         }
-        
-        #dify-summarizer-btn:active {
-            transform: translateY(0);
+
+        #dify-summarizer-btn.dragging {
+            cursor: grabbing;
+            opacity: 0.8;
+            transition: none;
         }
-        
+
         #dify-summarizer-btn.loading {
             background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
             cursor: wait;
@@ -211,28 +215,6 @@
         
         #dify-overlay.show {
             display: block;
-        }
-        
-        #dify-settings-btn {
-            position: fixed;
-            bottom: 140px;
-            right: 20px;
-            z-index: 999999;
-            width: 40px;
-            height: 40px;
-            background: #6b7280;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 18px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            transition: all 0.3s ease;
-        }
-
-        #dify-settings-btn:hover {
-            background: #4b5563;
-            transform: scale(1.1);
         }
 
         #dify-settings-panel {
@@ -694,9 +676,6 @@
             // 创建按钮
             this.createButton();
 
-            // 创建设置按钮
-            this.createSettingsButton();
-
             // 创建结果面板
             this.createResultPanel();
 
@@ -711,18 +690,118 @@
             const btn = document.createElement('button');
             btn.id = 'dify-summarizer-btn';
             btn.textContent = '📝 AI总结';
-            btn.addEventListener('click', () => this.handleSummarize());
             document.body.appendChild(btn);
             this.button = btn;
+
+            // 加载保存的位置
+            this.loadButtonPosition();
+
+            // 添加拖拽功能
+            this.makeDraggable(btn);
+
+            // 添加点击事件（需要区分点击和拖拽）
+            let isDragging = false;
+            let dragStartTime = 0;
+
+            btn.addEventListener('mousedown', () => {
+                isDragging = false;
+                dragStartTime = Date.now();
+            });
+
+            btn.addEventListener('mouseup', (e) => {
+                const dragDuration = Date.now() - dragStartTime;
+                // 如果移动时间很短且没有标记为拖拽，则视为点击
+                if (!isDragging && dragDuration < 200) {
+                    this.handleSummarize();
+                }
+            });
         }
 
-        createSettingsButton() {
-            const btn = document.createElement('button');
-            btn.id = 'dify-settings-btn';
-            btn.textContent = '⚙️';
-            btn.title = '配置Dify API';
-            btn.addEventListener('click', () => this.showSettings());
-            document.body.appendChild(btn);
+        loadButtonPosition() {
+            const savedPos = GM_getValue('buttonPosition', null);
+            if (savedPos) {
+                const pos = JSON.parse(savedPos);
+                this.button.style.left = pos.left;
+                this.button.style.top = pos.top;
+                this.button.style.right = 'auto';
+                this.button.style.bottom = 'auto';
+            }
+        }
+
+        saveButtonPosition() {
+            const pos = {
+                left: this.button.style.left,
+                top: this.button.style.top
+            };
+            GM_setValue('buttonPosition', JSON.stringify(pos));
+        }
+
+        makeDraggable(element) {
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            let isDragging = false;
+            const self = this; // 保存 this 引用
+
+            element.addEventListener('mousedown', dragMouseDown);
+
+            function dragMouseDown(e) {
+                // 如果正在加载，不允许拖拽
+                if (element.classList.contains('loading')) return;
+
+                e.preventDefault();
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+
+                document.addEventListener('mouseup', closeDragElement);
+                document.addEventListener('mousemove', elementDrag);
+            }
+
+            const elementDrag = (e) => {
+                e.preventDefault();
+
+                // 计算移动距离
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+
+                // 如果移动距离超过5px，标记为拖拽
+                if (Math.abs(pos1) > 5 || Math.abs(pos2) > 5) {
+                    isDragging = true;
+                    element.classList.add('dragging');
+                }
+
+                // 设置新位置
+                let newTop = element.offsetTop - pos2;
+                let newLeft = element.offsetLeft - pos1;
+
+                // 边界检查
+                const maxX = window.innerWidth - element.offsetWidth;
+                const maxY = window.innerHeight - element.offsetHeight;
+
+                newLeft = Math.max(0, Math.min(newLeft, maxX));
+                newTop = Math.max(0, Math.min(newTop, maxY));
+
+                element.style.top = newTop + 'px';
+                element.style.left = newLeft + 'px';
+                element.style.right = 'auto';
+                element.style.bottom = 'auto';
+            };
+
+            const closeDragElement = () => {
+                document.removeEventListener('mouseup', closeDragElement);
+                document.removeEventListener('mousemove', elementDrag);
+
+                if (isDragging) {
+                    // 保存位置
+                    self.saveButtonPosition();
+
+                    // 延迟移除拖拽状态，避免触发点击
+                    setTimeout(() => {
+                        element.classList.remove('dragging');
+                        isDragging = false;
+                    }, 100);
+                }
+            };
         }
 
         createResultPanel() {
@@ -1005,15 +1084,40 @@
     }
 
     // ==================== 初始化 ====================
+    let uiManager = null;
+
     function init() {
         // 等待页面加载完成
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
-                new UIManager();
+                uiManager = new UIManager();
+                registerMenuCommands();
             });
         } else {
-            new UIManager();
+            uiManager = new UIManager();
+            registerMenuCommands();
         }
+    }
+
+    // 注册油猴菜单命令
+    function registerMenuCommands() {
+        GM_registerMenuCommand('⚙️ 打开设置', () => {
+            if (uiManager) {
+                uiManager.showSettings();
+            }
+        });
+
+        GM_registerMenuCommand('📍 重置按钮位置', () => {
+            if (uiManager && uiManager.button) {
+                // 重置到默认位置
+                uiManager.button.style.left = 'auto';
+                uiManager.button.style.top = 'auto';
+                uiManager.button.style.right = '20px';
+                uiManager.button.style.bottom = '80px';
+                GM_setValue('buttonPosition', null);
+                console.log('[Dify] 按钮位置已重置');
+            }
+        });
     }
 
     // 启动脚本
