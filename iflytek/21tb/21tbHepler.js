@@ -668,10 +668,12 @@
                     const payload = {
                         "inputs": {
                             "role": getConfig('role'),              // AI 角色设定
-                            "ability": getConfig('ability'),        // AI 能力设定
-                            "question": JSON.stringify(questionData) // 题目数据（JSON 字符串）
+                            "ability": getConfig('ability')         // AI 能力设定
+
                         },
+                        "query": JSON.stringify(questionData),// 题目数据（JSON 字符串）
                         "response_mode": "blocking",  // 阻塞模式：等待完整响应
+                        "conversation_id": "",
                         "user": "21tb-helper-user"    // 用户标识
                     };
 
@@ -718,6 +720,7 @@
                                 }
                             } else {
                                 reject("Dify API 返回错误状态码: " + response.status + " " + response.statusText);
+                                console.log(response.responseText);
                             }
                         },
                         onerror: (err) => reject("网络请求失败: " + (err?.statusText || '未知错误')),
