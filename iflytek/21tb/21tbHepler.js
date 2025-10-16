@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         ifly-21tb 增强脚本 (视频控制+自动答题)
 // @namespace    http://tampermonkey.net/
-// @version      1.3
-// @description  视频页：左右键快进/回退，数字键调速。考试页：自动请求Dify API并填写答案，支持暂停/继续。
+// @version      1.4
+// @description  视频页：左右键快进/回退，数字键调速。考试页：直接调用Dify API自动答题，无需本地代理服务，支持暂停/继续。
 // @author       yuan
 // @match        *://*.21tb.com/*
-// @connect      localhost
+// @connect      *
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @grant        GM_getValue
@@ -15,20 +15,50 @@
 // @updateURL    https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/iflytek/21tb/21tbHepler.js
 // ==/UserScript==
 
+/**
+ * ============================================================
+ * 脚本功能概述：
+ * 
+ * 1. 视频控制增强
+ *    - 键盘快捷键控制：左右箭头快进/回退，数字键调速
+ *    - 浮动速度控制按钮
+ * 
+ * 2. 考试自动答题
+ *    - 直接调用 Dify API 进行智能答题（v1.4 新特性）
+ *    - 无需本地代理服务，所有配置存储在浏览器中
+ *    - 支持暂停/继续控制
+ *    - 配置通过油猴菜单管理，方便快捷
+ * 
+ * 更新日志 (v1.4)：
+ * - 移除对本地 proxy_iflyek.py 服务的依赖
+ * - 直接调用 Dify API，使用 Bearer Token 认证
+ * - 新增 difyApiKey 配置项
+ * - 优化配置管理，所有设置存储在浏览器本地
+ * - 增强错误提示和状态显示
+ * ============================================================
+ */
+
 (function () {
     'use strict';
 
     /******************************************************************
      *
      * PART 0: 配置管理模块
+     * 
+     * 功能说明：
+     * - 管理用户配置，包括角色、能力、Dify API 地址和密钥
+     * - 配置数据通过 GM_setValue/GM_getValue 存储在浏览器本地
+     * - 用户可通过油猴菜单修改配置（无需修改代码）
      *
      ******************************************************************/
 
     // 默认配置
+    // 注意：首次使用前请通过油猴菜单"⚙️ 21tb脚本设置"配置 difyApiKey
     const DEFAULT_CONFIG = {
-        role: "科大讯飞公司的规章制度专家",
-        ability: "保密",
-        apiUrl: "http://localhost:5005/proxy/dify"
+        role: "科大讯飞公司的规章制度专家",        // AI 角色设定
+        ability: "保密",                            // AI 能力范围
+        difyApiUrl: "https://api.dify.ai/v1/workflows/run",  // Dify API 端点地址
+        difyApiKey: ""                              // Dify API Key (必须配置，格式: app-xxxxxxxx)
     };
 
     // 获取配置值，如果用户未设置则使用默认值
@@ -41,24 +71,494 @@
         GM_setValue(key, value);
     }
 
-    // 注册设置菜单
-    GM_registerMenuCommand("⚙️ 21tb脚本设置", function () {
-        const role = prompt("请输入角色设定 (role):", getConfig('role'));
-        if (role !== null) {
-            setConfig('role', role);
+    // 创建全局设置面板（只创建一次）
+    let settingsPanelCreated = false;
+    let settingsPanel = null;
+    let settingsOverlay = null;
+
+    /**
+     * 创建设置面板 UI
+     */
+    function createSettingsPanel() {
+        if (settingsPanelCreated) return;
+
+        // 添加设置面板样式
+        GM_addStyle(`
+            /* 设置面板遮罩层 */
+            #tb21-settings-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 999998;
+                display: none;
+            }
+            
+            #tb21-settings-overlay.show {
+                display: block;
+            }
+
+            /* 设置面板容器 */
+            #tb21-settings-panel {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 90%;
+                max-width: 600px;
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+                z-index: 999999;
+                display: none;
+                overflow: hidden;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            }
+
+            #tb21-settings-panel.show {
+                display: block;
+                animation: tb21-slideIn 0.3s ease;
+            }
+
+            @keyframes tb21-slideIn {
+                from {
+                    opacity: 0;
+                    transform: translate(-50%, -45%);
+                }
+                to {
+                    opacity: 1;
+                    transform: translate(-50%, -50%);
+                }
+            }
+
+            /* 设置面板头部 */
+            #tb21-settings-header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 20px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+            #tb21-settings-header h3 {
+                margin: 0;
+                font-size: 18px;
+                font-weight: 600;
+            }
+
+            #tb21-settings-close-btn {
+                background: rgba(255, 255, 255, 0.2);
+                border: none;
+                color: white;
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                cursor: pointer;
+                font-size: 20px;
+                line-height: 1;
+                transition: background 0.2s;
+            }
+
+            #tb21-settings-close-btn:hover {
+                background: rgba(255, 255, 255, 0.3);
+            }
+
+            /* 设置面板内容 */
+            #tb21-settings-content {
+                padding: 24px;
+                max-height: 70vh;
+                overflow-y: auto;
+            }
+
+            .tb21-form-group {
+                margin-bottom: 20px;
+            }
+
+            .tb21-form-group label {
+                display: block;
+                margin-bottom: 8px;
+                font-weight: 500;
+                color: #374151;
+                font-size: 14px;
+            }
+
+            .tb21-form-group input,
+            .tb21-form-group textarea {
+                width: 100%;
+                padding: 10px 12px;
+                border: 2px solid #e5e7eb;
+                border-radius: 8px;
+                font-size: 14px;
+                transition: border-color 0.2s;
+                box-sizing: border-box;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            }
+
+            .tb21-form-group input:focus,
+            .tb21-form-group textarea:focus {
+                outline: none;
+                border-color: #667eea;
+            }
+
+            .tb21-form-group input::placeholder,
+            .tb21-form-group textarea::placeholder {
+                color: #9ca3af;
+            }
+
+            .tb21-form-help {
+                margin-top: 6px;
+                font-size: 12px;
+                color: #6b7280;
+                line-height: 1.5;
+            }
+
+            .tb21-form-actions {
+                display: flex;
+                gap: 12px;
+                margin-top: 24px;
+                padding-top: 20px;
+                border-top: 1px solid #e5e7eb;
+            }
+
+            .tb21-btn {
+                flex: 1;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            }
+
+            .tb21-btn-primary {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+
+            .tb21-btn-primary:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            }
+
+            .tb21-btn-secondary {
+                background: #f3f4f6;
+                color: #374151;
+            }
+
+            .tb21-btn-secondary:hover {
+                background: #e5e7eb;
+            }
+
+            .tb21-success-message {
+                background: #d1fae5;
+                color: #065f46;
+                padding: 12px 16px;
+                border-radius: 8px;
+                margin-bottom: 16px;
+                font-size: 14px;
+                display: none;
+                border-left: 4px solid #10b981;
+            }
+
+            .tb21-success-message.show {
+                display: block;
+                animation: tb21-fadeIn 0.3s ease;
+            }
+
+            @keyframes tb21-fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .tb21-config-status {
+                display: inline-block;
+                padding: 4px 10px;
+                border-radius: 12px;
+                font-size: 12px;
+                font-weight: 500;
+                margin-left: 8px;
+            }
+
+            .tb21-config-status.configured {
+                background: #d1fae5;
+                color: #065f46;
+            }
+
+            .tb21-config-status.not-configured {
+                background: #fee2e2;
+                color: #991b1b;
+            }
+        `);
+
+        // 创建遮罩层
+        settingsOverlay = document.createElement('div');
+        settingsOverlay.id = 'tb21-settings-overlay';
+        settingsOverlay.addEventListener('click', hideSettingsPanel);
+        document.body.appendChild(settingsOverlay);
+
+        // 创建设置面板
+        settingsPanel = document.createElement('div');
+        settingsPanel.id = 'tb21-settings-panel';
+        settingsPanel.innerHTML = `
+            <div id="tb21-settings-header">
+                <h3>⚙️ 21tb 脚本配置</h3>
+                <button id="tb21-settings-close-btn">×</button>
+            </div>
+            <div id="tb21-settings-content">
+                <div class="tb21-success-message" id="tb21-save-success">
+                    ✓ 配置已成功保存！
+                </div>
+                
+                <div class="tb21-form-group">
+                    <label for="tb21-role">
+                        AI 角色设定
+                        <span class="tb21-config-status configured" id="tb21-role-status">已配置</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="tb21-role" 
+                        placeholder="例如：科大讯飞公司的规章制度专家"
+                        autocomplete="off"
+                    />
+                    <div class="tb21-form-help">
+                        定义 AI 助手的角色，帮助其更好地理解问题背景
+                    </div>
+                </div>
+                
+                <div class="tb21-form-group">
+                    <label for="tb21-ability">
+                        AI 能力范围
+                        <span class="tb21-config-status configured" id="tb21-ability-status">已配置</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="tb21-ability" 
+                        placeholder="例如：保密"
+                        autocomplete="off"
+                    />
+                    <div class="tb21-form-help">
+                        定义 AI 助手可以处理的问题范围和能力边界
+                    </div>
+                </div>
+                
+                <div class="tb21-form-group">
+                    <label for="tb21-api-url">
+                        Dify 工作流 API 地址
+                        <span class="tb21-config-status" id="tb21-url-status"></span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="tb21-api-url" 
+                        placeholder="https://api.dify.ai/v1/workflows/run"
+                        autocomplete="off"
+                    />
+                    <div class="tb21-form-help">
+                        在 Dify 平台的工作流设置中获取 API 端点地址
+                    </div>
+                </div>
+                
+                <div class="tb21-form-group">
+                    <label for="tb21-api-key">
+                        Dify API Key <span style="color: #ef4444;">*</span>
+                        <span class="tb21-config-status" id="tb21-key-status"></span>
+                    </label>
+                    <input 
+                        type="password" 
+                        id="tb21-api-key" 
+                        placeholder="app-xxxxxxxxxxxxxxxx"
+                        autocomplete="off"
+                    />
+                    <div class="tb21-form-help">
+                        在 Dify 平台的工作流 API 访问页面获取密钥（以 app- 开头）<br/>
+                        <strong>注意：此为必填项，未配置将无法使用自动答题功能</strong>
+                    </div>
+                </div>
+                
+                <div class="tb21-form-actions">
+                    <button class="tb21-btn tb21-btn-secondary" id="tb21-cancel-btn">取消</button>
+                    <button class="tb21-btn tb21-btn-primary" id="tb21-save-btn">保存配置</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(settingsPanel);
+
+        // 绑定事件
+        settingsPanel.querySelector('#tb21-settings-close-btn').addEventListener('click', hideSettingsPanel);
+        settingsPanel.querySelector('#tb21-cancel-btn').addEventListener('click', hideSettingsPanel);
+        settingsPanel.querySelector('#tb21-save-btn').addEventListener('click', saveSettings);
+
+        // 按 Enter 键保存
+        const inputs = settingsPanel.querySelectorAll('input');
+        inputs.forEach(input => {
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') saveSettings();
+            });
+        });
+
+        settingsPanelCreated = true;
+    }
+
+    /**
+     * 显示设置面板
+     */
+    function showSettingsPanel() {
+        if (!settingsPanelCreated) {
+            createSettingsPanel();
         }
 
-        const ability = prompt("请输入能力设定 (ability):", getConfig('ability'));
-        if (ability !== null) {
-            setConfig('ability', ability);
+        // 填充当前配置值
+        document.getElementById('tb21-role').value = getConfig('role');
+        document.getElementById('tb21-ability').value = getConfig('ability');
+        document.getElementById('tb21-api-url').value = getConfig('difyApiUrl');
+        document.getElementById('tb21-api-key').value = getConfig('difyApiKey');
+
+        // 隐藏成功消息
+        document.getElementById('tb21-save-success').classList.remove('show');
+
+        // 更新配置状态标识
+        updateConfigStatus();
+
+        // 显示面板
+        settingsPanel.classList.add('show');
+        settingsOverlay.classList.add('show');
+
+        // 聚焦到第一个输入框
+        setTimeout(() => document.getElementById('tb21-role').focus(), 100);
+    }
+
+    /**
+     * 隐藏设置面板
+     */
+    function hideSettingsPanel() {
+        if (settingsPanel) {
+            settingsPanel.classList.remove('show');
+            settingsOverlay.classList.remove('show');
+        }
+    }
+
+    /**
+     * 保存设置
+     */
+    function saveSettings() {
+        const role = document.getElementById('tb21-role').value.trim();
+        const ability = document.getElementById('tb21-ability').value.trim();
+        const apiUrl = document.getElementById('tb21-api-url').value.trim();
+        const apiKey = document.getElementById('tb21-api-key').value.trim();
+
+        // 基本验证
+        if (!role) {
+            alert('请输入 AI 角色设定');
+            document.getElementById('tb21-role').focus();
+            return;
         }
 
-        const apiUrl = prompt("请输入API地址:", getConfig('apiUrl'));
-        if (apiUrl !== null) {
-            setConfig('apiUrl', apiUrl);
+        if (!ability) {
+            alert('请输入 AI 能力范围');
+            document.getElementById('tb21-ability').focus();
+            return;
         }
 
-        alert("设置已保存！");
+        if (!apiUrl) {
+            alert('请输入 Dify API 地址');
+            document.getElementById('tb21-api-url').focus();
+            return;
+        }
+
+        if (!apiKey) {
+            alert('请输入 Dify API Key（必填项）');
+            document.getElementById('tb21-api-key').focus();
+            return;
+        }
+
+        // 验证 URL 格式
+        try {
+            new URL(apiUrl);
+        } catch (e) {
+            alert('请输入有效的 API 地址（必须以 http:// 或 https:// 开头）');
+            document.getElementById('tb21-api-url').focus();
+            return;
+        }
+
+        // 验证 API Key 格式
+        if (!apiKey.startsWith('app-')) {
+            alert('API Key 格式不正确，应该以 "app-" 开头');
+            document.getElementById('tb21-api-key').focus();
+            return;
+        }
+
+        // 保存配置
+        setConfig('role', role);
+        setConfig('ability', ability);
+        setConfig('difyApiUrl', apiUrl);
+        setConfig('difyApiKey', apiKey);
+
+        // 更新状态标识
+        updateConfigStatus();
+
+        // 显示成功消息
+        const successMsg = document.getElementById('tb21-save-success');
+        successMsg.classList.add('show');
+
+        console.log('[21tb脚本] 配置已保存');
+
+        // 2秒后自动关闭面板
+        setTimeout(() => {
+            hideSettingsPanel();
+            successMsg.classList.remove('show');
+        }, 2000);
+    }
+
+    /**
+     * 更新配置状态显示
+     */
+    function updateConfigStatus() {
+        const urlStatus = document.getElementById('tb21-url-status');
+        const keyStatus = document.getElementById('tb21-key-status');
+
+        // 更新 URL 状态
+        const apiUrl = getConfig('difyApiUrl');
+        if (apiUrl && apiUrl !== 'https://api.dify.ai/v1/workflows/run') {
+            urlStatus.textContent = '已配置';
+            urlStatus.className = 'tb21-config-status configured';
+        } else {
+            urlStatus.textContent = '使用默认';
+            urlStatus.className = 'tb21-config-status configured';
+        }
+
+        // 更新 Key 状态
+        const apiKey = getConfig('difyApiKey');
+        if (apiKey && apiKey.length > 0) {
+            keyStatus.textContent = '已配置';
+            keyStatus.className = 'tb21-config-status configured';
+        } else {
+            keyStatus.textContent = '未配置';
+            keyStatus.className = 'tb21-config-status not-configured';
+        }
+    }
+
+    // 注册油猴菜单命令
+    GM_registerMenuCommand("⚙️ 21tb脚本设置", showSettingsPanel);
+
+    GM_registerMenuCommand("🔄 重置为默认配置", function () {
+        if (confirm('确定要重置所有配置为默认值吗？\n\n注意：这将清除您的 API Key 等所有自定义配置！')) {
+            setConfig('role', DEFAULT_CONFIG.role);
+            setConfig('ability', DEFAULT_CONFIG.ability);
+            setConfig('difyApiUrl', DEFAULT_CONFIG.difyApiUrl);
+            setConfig('difyApiKey', DEFAULT_CONFIG.difyApiKey);
+            alert('配置已重置为默认值！\n请重新配置 Dify API Key 后使用。');
+            console.log('[21tb脚本] 配置已重置为默认值');
+        }
     });
 
     /******************************************************************
@@ -75,7 +575,8 @@
             let isRunning = false;
 
             // --- 配置信息 (使用用户设置或默认值) ---
-            const API_URL = getConfig('apiUrl');
+            const DIFY_API_URL = getConfig('difyApiUrl');
+            const DIFY_API_KEY = getConfig('difyApiKey');
 
             // --- UI界面 ---
             GM_addStyle(`
@@ -94,6 +595,13 @@
 
             const panel = document.createElement('div');
             panel.id = 'auto-exam-panel';
+
+            // 检查 API Key 是否已配置
+            const apiKeyConfigured = DIFY_API_KEY && DIFY_API_KEY.length > 0;
+            const configStatus = apiKeyConfigured
+                ? `✅ API已配置`
+                : `⚠️ 请先配置API Key`;
+
             panel.innerHTML = `
                 <h3>自动答题控制台</h3>
                 <div class="exam-btn-group">
@@ -101,7 +609,10 @@
                     <button id="pause-exam-btn" class="exam-btn">暂停</button>
                 </div>
                 <div id="exam-status">准备就绪</div>
-                <div id="config-info">角色: ${getConfig('role')} | 能力: ${getConfig('ability')}</div>
+                <div id="config-info">
+                    角色: ${getConfig('role')} | 能力: ${getConfig('ability')}<br/>
+                    ${configStatus}
+                </div>
             `;
             document.body.appendChild(panel);
 
@@ -132,38 +643,69 @@
                 return new Promise(resolve => setTimeout(resolve, ms));
             }
 
+            /**
+             * 直接调用 Dify API 获取答案
+             * 
+             * 工作原理（第一性原理）：
+             * 1. 验证 API Key 是否已配置（安全性检查）
+             * 2. 将题目数据和配置参数组装成 Dify 标准格式
+             * 3. 通过 HTTPS 向 Dify 工作流发送请求（使用 Bearer Token 认证）
+             * 4. 解析返回的 JSON 数据，提取答案
+             * 5. 处理各种异常情况（网络错误、超时、解析失败等）
+             * 
+             * @param {Object} questionData - 题目数据对象，包含题型、题目、选项等信息
+             * @returns {Promise} - 返回 Promise，resolve 时包含答案对象 {type, ans}
+             */
             function fetchAnswer(questionData) {
                 return new Promise((resolve, reject) => {
+                    // 检查 API Key 是否配置
+                    if (!DIFY_API_KEY) {
+                        reject("请先配置 Dify API Key！点击油猴菜单中的 '⚙️ 21tb脚本设置' 进行配置。");
+                        return;
+                    }
+
+                    // 构建 Dify API 请求负载（遵循 Dify 工作流标准格式）
                     const payload = {
                         "inputs": {
-                            "role": getConfig('role'),
-                            "ability": getConfig('ability')
+                            "role": getConfig('role'),              // AI 角色设定
+                            "ability": getConfig('ability'),        // AI 能力设定
+                            "question": JSON.stringify(questionData) // 题目数据（JSON 字符串）
                         },
-                        "query": JSON.stringify(questionData),
-                        "response_mode": "blocking",
-                        "conversation_id": "",
-                        "user": "abc-123"
+                        "response_mode": "blocking",  // 阻塞模式：等待完整响应
+                        "user": "21tb-helper-user"    // 用户标识
                     };
 
                     GM_xmlhttpRequest({
                         method: "POST",
-                        url: API_URL,
+                        url: DIFY_API_URL,
                         headers: {
-                            "Content-Type": "application/json"
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${DIFY_API_KEY}`  // 使用 Bearer Token 认证
                         },
                         data: JSON.stringify(payload),
+                        timeout: 30000,  // 30秒超时
                         onload: (response) => {
                             if (response.status >= 200 && response.status < 300) {
                                 try {
                                     const data = JSON.parse(response.responseText);
 
-                                    // 提取原始 answer 字符串
-                                    let answerStr = data.answer || "";
+                                    // 尝试多种可能的返回结构提取答案
+                                    // Dify 工作流可能返回: data.data.outputs.text 或 data.answer
+                                    let answerStr = data.data?.outputs?.text
+                                        || data.data?.outputs?.result
+                                        || data.data?.outputs?.answer
+                                        || data.answer
+                                        || "";
 
-                                    // 去除 Markdown 包裹 ```json ... ```
-                                    answerStr = answerStr.replace(/^```json/, "")
-                                        .replace(/^```/, "")
-                                        .replace(/```$/, "")
+                                    if (!answerStr) {
+                                        reject("API 返回数据中未找到答案字段。原始返回: " + response.responseText);
+                                        return;
+                                    }
+
+                                    // 去除可能的 Markdown 代码块包裹 ```json ... ```
+                                    answerStr = answerStr.replace(/^```json\s*/, "")
+                                        .replace(/^```\s*/, "")
+                                        .replace(/```\s*$/, "")
                                         .trim();
 
                                     // 解析 JSON 格式答案
@@ -172,13 +714,14 @@
                                     // 返回标准结构：{ type: "...", ans: [...] }
                                     resolve(parsed);
                                 } catch (e) {
-                                    reject("解析失败: " + e.message + "，原始返回: " + response.responseText);
+                                    reject("解析答案失败: " + e.message + "。原始返回: " + response.responseText);
                                 }
                             } else {
-                                reject("代理返回失败状态码: " + response.status);
+                                reject("Dify API 返回错误状态码: " + response.status + " " + response.statusText);
                             }
                         },
-                        onerror: (err) => reject("代理请求失败: " + (err?.statusText || '未知错误'))
+                        onerror: (err) => reject("网络请求失败: " + (err?.statusText || '未知错误')),
+                        ontimeout: () => reject("请求超时，请检查网络连接或稍后重试")
                     });
                 });
             }
