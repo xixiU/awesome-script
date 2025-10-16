@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.4.1
+// @version      1.4.2
 // @description  使用Dify工作流智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
@@ -177,6 +177,37 @@
             margin: 0;
             font-size: 18px;
             font-weight: 600;
+        }
+
+        #dify-panel-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        #dify-copy-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        #dify-copy-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        #dify-copy-btn.copied {
+            background: rgba(16, 185, 129, 0.9);
         }
         
         #dify-close-btn {
@@ -916,7 +947,13 @@
             panel.innerHTML = `
                 <div id="dify-panel-header">
                     <h3>📝 AI总结结果</h3>
-                    <button id="dify-close-btn">×</button>
+                    <div id="dify-panel-actions">
+                        <button id="dify-copy-btn">
+                            <span class="copy-icon">📋</span>
+                            <span class="copy-text">复制结果</span>
+                        </button>
+                        <button id="dify-close-btn">×</button>
+                    </div>
                 </div>
                 <div id="dify-panel-content"></div>
             `;
@@ -925,6 +962,9 @@
 
             // 关闭按钮事件
             panel.querySelector('#dify-close-btn').addEventListener('click', () => this.hidePanel());
+
+            // 复制按钮事件
+            panel.querySelector('#dify-copy-btn').addEventListener('click', () => this.copyResult());
         }
 
         createSettingsPanel() {
@@ -1033,6 +1073,9 @@
                 // 调用Dify API
                 const result = await DifyAPI.summarize(newsUrl, newsContent);
 
+                // 保存原始结果文本（用于复制）
+                this.currentResult = result;
+
                 // 显示结果
                 this.showPanel(this.formatResult(result));
 
@@ -1061,6 +1104,84 @@
         hidePanel() {
             this.panel.classList.remove('show');
             this.overlay.classList.remove('show');
+        }
+
+        copyResult() {
+            // 如果没有结果，直接返回
+            if (!this.currentResult) {
+                console.warn('[Dify] 没有可复制的内容');
+                return;
+            }
+
+            const copyBtn = this.panel.querySelector('#dify-copy-btn');
+            const copyText = copyBtn.querySelector('.copy-text');
+            const copyIcon = copyBtn.querySelector('.copy-icon');
+
+            try {
+                // 创建临时文本区域
+                const textarea = document.createElement('textarea');
+                textarea.value = this.currentResult;
+                textarea.style.position = 'fixed';
+                textarea.style.left = '-9999px';
+                textarea.style.top = '0';
+                document.body.appendChild(textarea);
+
+                // 选择并复制文本
+                textarea.select();
+                textarea.setSelectionRange(0, textarea.value.length);
+                const successful = document.execCommand('copy');
+
+                // 移除临时元素
+                document.body.removeChild(textarea);
+
+                if (successful) {
+                    // 显示复制成功状态
+                    copyBtn.classList.add('copied');
+                    copyIcon.textContent = '✓';
+                    copyText.textContent = '已复制';
+
+                    console.log('[Dify] 复制成功，内容长度:', this.currentResult.length);
+
+                    // 2秒后恢复按钮状态
+                    setTimeout(() => {
+                        copyBtn.classList.remove('copied');
+                        copyIcon.textContent = '📋';
+                        copyText.textContent = '复制结果';
+                    }, 2000);
+                } else {
+                    throw new Error('复制命令执行失败');
+                }
+            } catch (error) {
+                console.error('[Dify] 复制失败:', error);
+
+                // 尝试使用现代 Clipboard API
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(this.currentResult)
+                        .then(() => {
+                            copyBtn.classList.add('copied');
+                            copyIcon.textContent = '✓';
+                            copyText.textContent = '已复制';
+
+                            setTimeout(() => {
+                                copyBtn.classList.remove('copied');
+                                copyIcon.textContent = '📋';
+                                copyText.textContent = '复制结果';
+                            }, 2000);
+                        })
+                        .catch(err => {
+                            console.error('[Dify] Clipboard API 失败:', err);
+                            copyText.textContent = '复制失败';
+                            setTimeout(() => {
+                                copyText.textContent = '复制结果';
+                            }, 2000);
+                        });
+                } else {
+                    copyText.textContent = '复制失败';
+                    setTimeout(() => {
+                        copyText.textContent = '复制结果';
+                    }, 2000);
+                }
+            }
         }
 
         formatResult(result) {
