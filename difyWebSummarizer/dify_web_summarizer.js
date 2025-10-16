@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  使用Dify工作流智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
@@ -36,36 +36,81 @@
         #dify-summarizer-btn {
             position: fixed;
             bottom: 80px;
-            right: 20px;
+            right: 0px;
             z-index: 999999;
-            padding: 12px 24px;
+            padding: 12px 16px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            border-radius: 25px;
+            border-top-left-radius: 25px;
+            border-bottom-left-radius: 25px;
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
             cursor: move;
-            font-size: 14px;
+            font-size: 20px;
             font-weight: bold;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            transition: box-shadow 0.3s ease;
+            box-shadow: -2px 2px 10px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             user-select: none;
             touch-action: none;
+            width: 48px;
+            overflow: hidden;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #dify-summarizer-btn .btn-icon {
+            flex-shrink: 0;
+            display: inline-block;
+            width: 20px;
+            text-align: center;
+        }
+
+        #dify-summarizer-btn .btn-text {
+            font-size: 14px;
+            opacity: 0;
+            transform: translateX(-10px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         #dify-summarizer-btn:hover {
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+            width: 140px;
+            padding: 12px 20px;
+            right: 0px;
+            box-shadow: -4px 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        #dify-summarizer-btn:hover .btn-text {
+            opacity: 1;
+            transform: translateX(0);
         }
 
         #dify-summarizer-btn.dragging {
             cursor: grabbing;
             opacity: 0.8;
             transition: none;
+            width: 140px;
+            padding: 12px 20px;
+        }
+
+        #dify-summarizer-btn.dragging .btn-text {
+            opacity: 1;
+            transform: translateX(0);
         }
 
         #dify-summarizer-btn.loading {
             background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
             cursor: wait;
+            width: 140px;
+            padding: 12px 20px;
+        }
+
+        #dify-summarizer-btn.loading .btn-text {
+            opacity: 1;
+            transform: translateX(0);
         }
         
         #dify-result-panel {
@@ -700,7 +745,7 @@
         createButton() {
             const btn = document.createElement('button');
             btn.id = 'dify-summarizer-btn';
-            btn.textContent = '📝 AI总结';
+            btn.innerHTML = '<span class="btn-icon">📝</span><span class="btn-text">AI总结</span>';
             document.body.appendChild(btn);
             this.button = btn;
 
@@ -918,7 +963,7 @@
             try {
                 // 显示加载状态
                 this.button.classList.add('loading');
-                this.button.textContent = '⏳ 处理中...';
+                this.button.innerHTML = '<span class="btn-icon">⏳</span><span class="btn-text">处理中...</span>';
 
                 // 显示面板并展示加载动画
                 this.showPanel('<div class="dify-loading-spinner"></div>');
@@ -952,7 +997,7 @@
             } finally {
                 // 恢复按钮状态
                 this.button.classList.remove('loading');
-                this.button.textContent = '📝 AI总结';
+                this.button.innerHTML = '<span class="btn-icon">📝</span><span class="btn-text">AI总结</span>';
             }
         }
 
