@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.4.2
+// @version      1.4.3
 // @description  使用Dify工作流智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
@@ -794,8 +794,20 @@
         createButton() {
             const btn = document.createElement('button');
             btn.id = 'dify-summarizer-btn';
-            btn.innerHTML = '<span class="btn-icon">📝</span><span class="btn-text">AI总结</span>';
             btn.classList.add('edge-mode'); // 默认贴边模式
+
+            // 使用 DOM API 创建元素，避免 TrustedHTML 问题
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'btn-icon';
+            iconSpan.textContent = '📝';
+
+            const textSpan = document.createElement('span');
+            textSpan.className = 'btn-text';
+            textSpan.textContent = 'AI总结';
+
+            btn.appendChild(iconSpan);
+            btn.appendChild(textSpan);
+
             document.body.appendChild(btn);
             this.button = btn;
 
@@ -944,93 +956,181 @@
         createResultPanel() {
             const panel = document.createElement('div');
             panel.id = 'dify-result-panel';
-            panel.innerHTML = `
-                <div id="dify-panel-header">
-                    <h3>📝 AI总结结果</h3>
-                    <div id="dify-panel-actions">
-                        <button id="dify-copy-btn">
-                            <span class="copy-icon">📋</span>
-                            <span class="copy-text">复制结果</span>
-                        </button>
-                        <button id="dify-close-btn">×</button>
-                    </div>
-                </div>
-                <div id="dify-panel-content"></div>
-            `;
+
+            // 使用 DOM API 创建元素，避免 TrustedHTML 问题
+            const header = document.createElement('div');
+            header.id = 'dify-panel-header';
+
+            const title = document.createElement('h3');
+            title.textContent = '📝 AI总结结果';
+
+            const actionsDiv = document.createElement('div');
+            actionsDiv.id = 'dify-panel-actions';
+
+            // 创建复制按钮
+            const copyBtn = document.createElement('button');
+            copyBtn.id = 'dify-copy-btn';
+
+            const copyIcon = document.createElement('span');
+            copyIcon.className = 'copy-icon';
+            copyIcon.textContent = '📋';
+
+            const copyText = document.createElement('span');
+            copyText.className = 'copy-text';
+            copyText.textContent = '复制结果';
+
+            copyBtn.appendChild(copyIcon);
+            copyBtn.appendChild(copyText);
+
+            // 创建关闭按钮
+            const closeBtn = document.createElement('button');
+            closeBtn.id = 'dify-close-btn';
+            closeBtn.textContent = '×';
+
+            // 组装元素
+            actionsDiv.appendChild(copyBtn);
+            actionsDiv.appendChild(closeBtn);
+
+            header.appendChild(title);
+            header.appendChild(actionsDiv);
+
+            const content = document.createElement('div');
+            content.id = 'dify-panel-content';
+
+            panel.appendChild(header);
+            panel.appendChild(content);
+
             document.body.appendChild(panel);
             this.panel = panel;
 
             // 关闭按钮事件
-            panel.querySelector('#dify-close-btn').addEventListener('click', () => this.hidePanel());
+            closeBtn.addEventListener('click', () => this.hidePanel());
 
             // 复制按钮事件
-            panel.querySelector('#dify-copy-btn').addEventListener('click', () => this.copyResult());
+            copyBtn.addEventListener('click', () => this.copyResult());
         }
 
         createSettingsPanel() {
             const panel = document.createElement('div');
             panel.id = 'dify-settings-panel';
-            panel.innerHTML = `
-                <div id="dify-settings-header">
-                    <h3>⚙️ Dify API 配置</h3>
-                    <button id="dify-settings-close-btn">×</button>
-                </div>
-                <div id="dify-settings-content">
-                    <div class="dify-success-message" id="dify-save-success">
-                        ✓ 配置已成功保存！
-                    </div>
-                    
-                    <div class="dify-form-group">
-                        <label for="dify-api-url">
-                            Dify 工作流 API 地址
-                            <span class="dify-config-status" id="dify-url-status"></span>
-                        </label>
-                        <input 
-                            type="text" 
-                            id="dify-api-url" 
-                            placeholder="https://api.dify.ai/v1/workflows/run"
-                            autocomplete="off"
-                        />
-                        <div class="dify-form-help">
-                            在 Dify 平台的工作流设置中获取 API 端点地址
-                        </div>
-                    </div>
-                    
-                    <div class="dify-form-group">
-                        <label for="dify-api-key">
-                            Dify API Key
-                            <span class="dify-config-status" id="dify-key-status"></span>
-                        </label>
-                        <input 
-                            type="password" 
-                            id="dify-api-key" 
-                            placeholder="app-xxxxxxxxxxxxxxxx"
-                            autocomplete="off"
-                        />
-                        <div class="dify-form-help">
-                            在 Dify 平台的工作流 API 访问页面获取密钥（以 app- 开头）
-                        </div>
-                    </div>
-                    
-                    <div class="dify-form-actions">
-                        <button class="dify-btn dify-btn-secondary" id="dify-cancel-btn">取消</button>
-                        <button class="dify-btn dify-btn-primary" id="dify-save-btn">保存配置</button>
-                    </div>
-                </div>
-            `;
+
+            // 使用 DOM API 创建元素，避免 TrustedHTML 问题
+            // 创建头部
+            const header = document.createElement('div');
+            header.id = 'dify-settings-header';
+
+            const title = document.createElement('h3');
+            title.textContent = '⚙️ Dify API 配置';
+
+            const closeBtn = document.createElement('button');
+            closeBtn.id = 'dify-settings-close-btn';
+            closeBtn.textContent = '×';
+
+            header.appendChild(title);
+            header.appendChild(closeBtn);
+
+            // 创建内容区
+            const content = document.createElement('div');
+            content.id = 'dify-settings-content';
+
+            // 成功提示消息
+            const successMsg = document.createElement('div');
+            successMsg.className = 'dify-success-message';
+            successMsg.id = 'dify-save-success';
+            successMsg.textContent = '✓ 配置已成功保存！';
+            content.appendChild(successMsg);
+
+            // API URL 表单组
+            const urlGroup = document.createElement('div');
+            urlGroup.className = 'dify-form-group';
+
+            const urlLabel = document.createElement('label');
+            urlLabel.setAttribute('for', 'dify-api-url');
+            urlLabel.textContent = 'Dify 工作流 API 地址';
+
+            const urlStatus = document.createElement('span');
+            urlStatus.className = 'dify-config-status';
+            urlStatus.id = 'dify-url-status';
+            urlLabel.appendChild(urlStatus);
+
+            const urlInput = document.createElement('input');
+            urlInput.type = 'text';
+            urlInput.id = 'dify-api-url';
+            urlInput.placeholder = 'https://api.dify.ai/v1/workflows/run';
+            urlInput.autocomplete = 'off';
+
+            const urlHelp = document.createElement('div');
+            urlHelp.className = 'dify-form-help';
+            urlHelp.textContent = '在 Dify 平台的工作流设置中获取 API 端点地址';
+
+            urlGroup.appendChild(urlLabel);
+            urlGroup.appendChild(urlInput);
+            urlGroup.appendChild(urlHelp);
+            content.appendChild(urlGroup);
+
+            // API Key 表单组
+            const keyGroup = document.createElement('div');
+            keyGroup.className = 'dify-form-group';
+
+            const keyLabel = document.createElement('label');
+            keyLabel.setAttribute('for', 'dify-api-key');
+            keyLabel.textContent = 'Dify API Key';
+
+            const keyStatus = document.createElement('span');
+            keyStatus.className = 'dify-config-status';
+            keyStatus.id = 'dify-key-status';
+            keyLabel.appendChild(keyStatus);
+
+            const keyInput = document.createElement('input');
+            keyInput.type = 'password';
+            keyInput.id = 'dify-api-key';
+            keyInput.placeholder = 'app-xxxxxxxxxxxxxxxx';
+            keyInput.autocomplete = 'off';
+
+            const keyHelp = document.createElement('div');
+            keyHelp.className = 'dify-form-help';
+            keyHelp.textContent = '在 Dify 平台的工作流 API 访问页面获取密钥（以 app- 开头）';
+
+            keyGroup.appendChild(keyLabel);
+            keyGroup.appendChild(keyInput);
+            keyGroup.appendChild(keyHelp);
+            content.appendChild(keyGroup);
+
+            // 按钮组
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'dify-form-actions';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'dify-btn dify-btn-secondary';
+            cancelBtn.id = 'dify-cancel-btn';
+            cancelBtn.textContent = '取消';
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'dify-btn dify-btn-primary';
+            saveBtn.id = 'dify-save-btn';
+            saveBtn.textContent = '保存配置';
+
+            actionsDiv.appendChild(cancelBtn);
+            actionsDiv.appendChild(saveBtn);
+            content.appendChild(actionsDiv);
+
+            // 组装面板
+            panel.appendChild(header);
+            panel.appendChild(content);
+
             document.body.appendChild(panel);
             this.settingsPanel = panel;
 
             // 绑定事件
-            panel.querySelector('#dify-settings-close-btn').addEventListener('click', () => this.hideSettingsPanel());
-            panel.querySelector('#dify-cancel-btn').addEventListener('click', () => this.hideSettingsPanel());
-            panel.querySelector('#dify-save-btn').addEventListener('click', () => this.saveSettings());
+            closeBtn.addEventListener('click', () => this.hideSettingsPanel());
+            cancelBtn.addEventListener('click', () => this.hideSettingsPanel());
+            saveBtn.addEventListener('click', () => this.saveSettings());
 
             // 按 Enter 键保存
-            panel.querySelector('#dify-api-url').addEventListener('keypress', (e) => {
+            urlInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') this.saveSettings();
             });
-            panel.querySelector('#dify-api-key').addEventListener('keypress', (e) => {
+            keyInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') this.saveSettings();
             });
         }
@@ -1053,10 +1153,13 @@
             try {
                 // 显示加载状态
                 this.button.classList.add('loading');
-                this.button.innerHTML = '<span class="btn-icon">⏳</span><span class="btn-text">处理中...</span>';
+                const iconSpan = this.button.querySelector('.btn-icon');
+                const textSpan = this.button.querySelector('.btn-text');
+                if (iconSpan) iconSpan.textContent = '⏳';
+                if (textSpan) textSpan.textContent = '处理中...';
 
                 // 显示面板并展示加载动画
-                this.showPanel('<div class="dify-loading-spinner"></div>');
+                this.showLoadingPanel();
 
                 // 提取网页内容
                 const extractor = new ContentExtractor();
@@ -1077,26 +1180,65 @@
                 this.currentResult = result;
 
                 // 显示结果
-                this.showPanel(this.formatResult(result));
+                this.showResultPanel(result);
 
             } catch (error) {
                 console.error('[Dify] 错误:', error);
-                this.showPanel(`
-                    <div class="dify-error-message">
-                        <h4 style="margin-top: 0;">❌ 处理失败</h4>
-                        <p>${error.message}</p>
-                    </div>
-                `);
+                this.showErrorPanel(error.message);
             } finally {
                 // 恢复按钮状态
                 this.button.classList.remove('loading');
-                this.button.innerHTML = '<span class="btn-icon">📝</span><span class="btn-text">AI总结</span>';
+                const iconSpan = this.button.querySelector('.btn-icon');
+                const textSpan = this.button.querySelector('.btn-text');
+                if (iconSpan) iconSpan.textContent = '📝';
+                if (textSpan) textSpan.textContent = 'AI总结';
             }
         }
 
-        showPanel(content) {
+        showLoadingPanel() {
+            // 显示加载动画
             const contentDiv = this.panel.querySelector('#dify-panel-content');
-            contentDiv.innerHTML = content;
+            contentDiv.textContent = ''; // 清空内容
+
+            const spinner = document.createElement('div');
+            spinner.className = 'dify-loading-spinner';
+            contentDiv.appendChild(spinner);
+
+            this.panel.classList.add('show');
+            this.overlay.classList.add('show');
+        }
+
+        showResultPanel(result) {
+            // 显示总结结果
+            const contentDiv = this.panel.querySelector('#dify-panel-content');
+            contentDiv.textContent = ''; // 清空内容
+
+            // 将 Markdown 格式的结果转换为 DOM 元素
+            this.renderMarkdownContent(result, contentDiv);
+
+            this.panel.classList.add('show');
+            this.overlay.classList.add('show');
+        }
+
+        showErrorPanel(errorMessage) {
+            // 显示错误信息
+            const contentDiv = this.panel.querySelector('#dify-panel-content');
+            contentDiv.textContent = ''; // 清空内容
+
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'dify-error-message';
+
+            const errorTitle = document.createElement('h4');
+            errorTitle.style.marginTop = '0';
+            errorTitle.textContent = '❌ 处理失败';
+
+            const errorText = document.createElement('p');
+            errorText.textContent = errorMessage;
+
+            errorDiv.appendChild(errorTitle);
+            errorDiv.appendChild(errorText);
+            contentDiv.appendChild(errorDiv);
+
             this.panel.classList.add('show');
             this.overlay.classList.add('show');
         }
@@ -1104,6 +1246,134 @@
         hidePanel() {
             this.panel.classList.remove('show');
             this.overlay.classList.remove('show');
+        }
+
+        renderMarkdownContent(text, container) {
+            // 将 Markdown 文本转换为 DOM 元素（简单实现）
+            const lines = text.split('\n');
+            let currentParagraph = null;
+
+            for (let line of lines) {
+                line = line.trim();
+
+                if (!line) {
+                    // 空行，结束当前段落
+                    if (currentParagraph && currentParagraph.textContent.trim()) {
+                        container.appendChild(currentParagraph);
+                        currentParagraph = null;
+                    }
+                    continue;
+                }
+
+                // 标题处理
+                if (line.startsWith('### ')) {
+                    if (currentParagraph) {
+                        container.appendChild(currentParagraph);
+                        currentParagraph = null;
+                    }
+                    const h3 = document.createElement('h3');
+                    h3.textContent = line.substring(4);
+                    container.appendChild(h3);
+                } else if (line.startsWith('## ')) {
+                    if (currentParagraph) {
+                        container.appendChild(currentParagraph);
+                        currentParagraph = null;
+                    }
+                    const h2 = document.createElement('h2');
+                    h2.textContent = line.substring(3);
+                    container.appendChild(h2);
+                } else if (line.startsWith('# ')) {
+                    if (currentParagraph) {
+                        container.appendChild(currentParagraph);
+                        currentParagraph = null;
+                    }
+                    const h1 = document.createElement('h1');
+                    h1.textContent = line.substring(2);
+                    container.appendChild(h1);
+                } else {
+                    // 普通文本，添加到段落
+                    if (!currentParagraph) {
+                        currentParagraph = document.createElement('p');
+                    }
+
+                    // 处理粗体和斜体（简单处理）
+                    this.appendFormattedText(line, currentParagraph);
+                    currentParagraph.appendChild(document.createElement('br'));
+                }
+            }
+
+            // 添加最后一个段落
+            if (currentParagraph && currentParagraph.textContent.trim()) {
+                container.appendChild(currentParagraph);
+            }
+        }
+
+        appendFormattedText(text, container) {
+            // 简单的 Markdown 格式处理
+            const parts = [];
+            let currentText = '';
+            let i = 0;
+
+            while (i < text.length) {
+                // 处理粗体 **text**
+                if (text[i] === '*' && text[i + 1] === '*') {
+                    if (currentText) {
+                        parts.push({ type: 'text', content: currentText });
+                        currentText = '';
+                    }
+                    i += 2;
+                    let boldText = '';
+                    while (i < text.length - 1) {
+                        if (text[i] === '*' && text[i + 1] === '*') {
+                            i += 2;
+                            break;
+                        }
+                        boldText += text[i];
+                        i++;
+                    }
+                    parts.push({ type: 'bold', content: boldText });
+                }
+                // 处理斜体 *text*
+                else if (text[i] === '*') {
+                    if (currentText) {
+                        parts.push({ type: 'text', content: currentText });
+                        currentText = '';
+                    }
+                    i++;
+                    let italicText = '';
+                    while (i < text.length) {
+                        if (text[i] === '*') {
+                            i++;
+                            break;
+                        }
+                        italicText += text[i];
+                        i++;
+                    }
+                    parts.push({ type: 'italic', content: italicText });
+                } else {
+                    currentText += text[i];
+                    i++;
+                }
+            }
+
+            if (currentText) {
+                parts.push({ type: 'text', content: currentText });
+            }
+
+            // 创建 DOM 元素
+            for (let part of parts) {
+                if (part.type === 'text') {
+                    container.appendChild(document.createTextNode(part.content));
+                } else if (part.type === 'bold') {
+                    const strong = document.createElement('strong');
+                    strong.textContent = part.content;
+                    container.appendChild(strong);
+                } else if (part.type === 'italic') {
+                    const em = document.createElement('em');
+                    em.textContent = part.content;
+                    container.appendChild(em);
+                }
+            }
         }
 
         copyResult() {
@@ -1182,20 +1452,6 @@
                     }, 2000);
                 }
             }
-        }
-
-        formatResult(result) {
-            // 将markdown转换为HTML（简单处理）
-            let html = result
-                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.+?)\*/g, '<em>$1</em>')
-                .replace(/#{3}\s(.+)/g, '<h3>$1</h3>')
-                .replace(/#{2}\s(.+)/g, '<h2>$1</h2>')
-                .replace(/#{1}\s(.+)/g, '<h1>$1</h1>')
-                .replace(/\n\n/g, '</p><p>')
-                .replace(/\n/g, '<br>');
-
-            return `<p>${html}</p>`;
         }
 
         showSettings() {
