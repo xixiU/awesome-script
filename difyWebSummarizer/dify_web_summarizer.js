@@ -76,16 +76,34 @@
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        #dify-summarizer-btn:hover {
+        /* 贴边模式：悬停时展开 */
+        #dify-summarizer-btn.edge-mode:hover {
             width: 140px;
             padding: 12px 20px;
             right: 0px;
             box-shadow: -4px 4px 20px rgba(0, 0, 0, 0.3);
         }
 
-        #dify-summarizer-btn:hover .btn-text {
+        #dify-summarizer-btn.edge-mode:hover .btn-text {
             opacity: 1;
             transform: translateX(0);
+        }
+
+        /* 自由模式：始终展开，圆角按钮 */
+        #dify-summarizer-btn.free-mode {
+            width: 140px;
+            padding: 12px 20px;
+            border-radius: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        #dify-summarizer-btn.free-mode .btn-text {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        #dify-summarizer-btn.free-mode:hover {
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
         }
 
         #dify-summarizer-btn.dragging {
@@ -746,6 +764,7 @@
             const btn = document.createElement('button');
             btn.id = 'dify-summarizer-btn';
             btn.innerHTML = '<span class="btn-icon">📝</span><span class="btn-text">AI总结</span>';
+            btn.classList.add('edge-mode'); // 默认贴边模式
             document.body.appendChild(btn);
             this.button = btn;
 
@@ -777,17 +796,33 @@
             const savedPos = GM_getValue('buttonPosition', null);
             if (savedPos) {
                 const pos = JSON.parse(savedPos);
-                this.button.style.left = pos.left;
-                this.button.style.top = pos.top;
-                this.button.style.right = 'auto';
-                this.button.style.bottom = 'auto';
+
+                if (pos.mode === 'edge') {
+                    // 贴边模式
+                    this.button.classList.remove('free-mode');
+                    this.button.classList.add('edge-mode');
+                    this.button.style.left = 'auto';
+                    this.button.style.top = pos.top || 'auto';
+                    this.button.style.right = '0px';
+                    this.button.style.bottom = pos.bottom || '80px';
+                } else if (pos.mode === 'free') {
+                    // 自由模式
+                    this.button.classList.remove('edge-mode');
+                    this.button.classList.add('free-mode');
+                    this.button.style.left = pos.left;
+                    this.button.style.top = pos.top;
+                    this.button.style.right = 'auto';
+                    this.button.style.bottom = 'auto';
+                }
             }
         }
 
-        saveButtonPosition() {
+        saveButtonPosition(mode = 'edge') {
             const pos = {
+                mode: mode,
                 left: this.button.style.left,
-                top: this.button.style.top
+                top: this.button.style.top,
+                bottom: this.button.style.bottom
             };
             GM_setValue('buttonPosition', JSON.stringify(pos));
         }
@@ -848,8 +883,23 @@
                 document.removeEventListener('mousemove', elementDrag);
 
                 if (isDragging) {
-                    // 保存位置
-                    self.saveButtonPosition();
+                    // 计算按钮右边缘到窗口右边缘的距离
+                    const distanceToRight = window.innerWidth - (element.offsetLeft + element.offsetWidth);
+
+                    // 如果距离右边缘小于 100px，自动吸附到右边（贴边模式）
+                    if (distanceToRight < 100) {
+                        element.classList.remove('free-mode');
+                        element.classList.add('edge-mode');
+                        element.style.left = 'auto';
+                        element.style.right = '0px';
+                        element.style.bottom = (window.innerHeight - element.offsetTop - element.offsetHeight) + 'px';
+                        self.saveButtonPosition('edge');
+                    } else {
+                        // 自由模式：按钮保持在拖动的位置，始终展开
+                        element.classList.remove('edge-mode');
+                        element.classList.add('free-mode');
+                        self.saveButtonPosition('free');
+                    }
 
                     // 延迟移除拖拽状态，避免触发点击
                     setTimeout(() => {
@@ -1165,13 +1215,15 @@
 
         GM_registerMenuCommand('📍 重置按钮位置', () => {
             if (uiManager && uiManager.button) {
-                // 重置到默认位置
+                // 重置到默认位置（贴边模式）
+                uiManager.button.classList.remove('free-mode');
+                uiManager.button.classList.add('edge-mode');
                 uiManager.button.style.left = 'auto';
                 uiManager.button.style.top = 'auto';
-                uiManager.button.style.right = '20px';
+                uiManager.button.style.right = '0px';
                 uiManager.button.style.bottom = '80px';
                 GM_setValue('buttonPosition', null);
-                console.log('[Dify] 按钮位置已重置');
+                console.log('[Dify] 按钮位置已重置为贴边模式');
             }
         });
     }
