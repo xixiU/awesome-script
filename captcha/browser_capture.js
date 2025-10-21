@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.1
-// @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。
+// @version      4.2
+// @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。
 // @author       xixiu
 
 // @thanks       哈士奇
@@ -251,12 +251,16 @@
         }
         getCaptchaFeature(el) {
             // 获取验证码特征
+            // 增强版：检查更多属性以提高识别准确率
             let checkList = [];
             checkList.push(el.getAttribute("id"));
             checkList.push(el.className);
             checkList.push(el.getAttribute("alt"));
             checkList.push(el.getAttribute("src"));
             checkList.push(el.getAttribute("name"));
+            checkList.push(el.getAttribute("title"));  // 新增：检查 title 属性
+            checkList.push(el.getAttribute("placeholder"));  // 新增：检查 placeholder
+            checkList.push(el.getAttribute("onclick"));  // 新增：检查 onclick 事件
 
             return checkList;
         }
@@ -570,14 +574,16 @@
 
                 for (let i = 0; i < checkList.length; i++) {
                     if (
-                        /.*(code|captcha|验证码|login|点击|verify|yzm|yanzhengma).*/im.test(
+                        /.*(code|captcha|验证码|login|点击|verify|yzm|yanzhengma|image|换一张).*/im.test(
                             checkList[i].toLowerCase()
                         ) &&
-                        img.width > 30 &&
-                        img.width < 150 &&
-                        img.height < 80 &&
+                        img.width > 20 &&
+                        img.width < 200 &&
+                        img.height > 20 &&
+                        img.height < 100 &&
                         !isInvalid
                     ) {
+                        console.log(`[验证码助手] 检测到验证码图片: ${img.getAttribute("id") || img.getAttribute("src")}, 尺寸: ${img.width}x${img.height}`);
                         captchaMap.push({ img: img, input: null });
                         break;
                     }
@@ -586,13 +592,37 @@
             captchaMap.forEach((item) => {
                 let imgEle = item.img;
                 let parentNode = imgEle.parentNode;
-                for (let i = 0; i < 4; i++) {
-                    // 以当前可能是验证码的图片为基点，向上遍历四层查找可能的Input输入框
+
+                // 首先尝试查找包含验证码关键词的输入框
+                let captchaInputKeywords = /验证码|captcha|code|verify|yzm|yanzhengma/i;
+
+                for (let i = 0; i < 5; i++) {
+                    // 以当前可能是验证码的图片为基点，向上遍历五层查找可能的Input输入框
                     if (!parentNode) {
                         return;
                     }
                     let inputTags = [...parentNode.querySelectorAll("input")];
+
                     if (inputTags.length) {
+                        // 优先查找包含验证码关键词的输入框
+                        let captchaInput = inputTags.find(input => {
+                            let id = input.getAttribute("id") || "";
+                            let name = input.getAttribute("name") || "";
+                            let placeholder = input.getAttribute("placeholder") || "";
+                            let className = input.className || "";
+                            let type = input.getAttribute("type");
+
+                            return (type === "text" || !type) &&
+                                captchaInputKeywords.test(id + name + placeholder + className);
+                        });
+
+                        if (captchaInput) {
+                            console.log(`[验证码助手] 找到验证码输入框: ${captchaInput.getAttribute("id") || captchaInput.getAttribute("name")}`);
+                            item.input = captchaInput;
+                            break;
+                        }
+
+                        // 如果没找到，使用原来的逻辑（倒序查找 text 类型的输入框）
                         let input = inputTags.pop();
                         let type = input.getAttribute("type");
                         while (type !== "text" && inputTags.length) {
@@ -603,10 +633,10 @@
                             type = input.getAttribute("type");
                         }
                         let inputWidth = getStyle(input).width.replace(/[^0-9]/gi, "");
-                        // let inputHeight = getStyle(input).height.replace(/[^0-9]/gi, "");
                         if (!type || (type === "text" && inputWidth > 50)) {
                             // 兼容各种奇葩情况
                             item.input = input;
+                            console.log(`[验证码助手] 使用通用逻辑找到输入框: ${input.getAttribute("id") || input.getAttribute("name")}`);
                             break;
                         }
                         if (type === "password") {
