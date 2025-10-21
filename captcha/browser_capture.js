@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version 4.0
+// @version 4.1
 // @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。
 // @author       xixiu
 
