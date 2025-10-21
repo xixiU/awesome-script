@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.2.1
+// @version      4.2.2
 // @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。修复跨域图片处理问题。
 // @author       xixiu
 // @thanks       哈士奇
@@ -585,14 +585,16 @@
                     ["#", "about:blank"].includes(imgSrc) ||
                     !imgSrc;
 
-                // 排除明显不是验证码的图片（但不排除 button.jpg，因为有些站点验证码按钮图片也可能是验证码）
+                // 排除明显不是验证码的图片
                 let excludePatterns = /personalcenter|personal|gzh|qrcode|二维码|app\.png|logo|icon|avatar|header|banner/i;
                 if (excludePatterns.test(imgSrc)) {
+                    console.log(`[验证码助手] 排除非验证码图片: ${imgSrc}`);
                     return;
                 }
 
                 // 排除按钮图片，但需要更精确的匹配
                 if (/button_\d+\.jpg/i.test(imgSrc) && img.getAttribute("id") && /send|status/i.test(img.getAttribute("id"))) {
+                    console.log(`[验证码助手] 排除按钮图片: ${imgSrc}, id: ${img.getAttribute("id")}`);
                     return;  // 排除发送按钮
                 }
 
@@ -653,48 +655,86 @@
                     let inputTags = [...parentNode.querySelectorAll("input")];
 
                     if (inputTags.length) {
-                        // 优先在当前层级查找紧邻验证码图片的输入框
+                        // 优先查找在图片之前且最接近的输入框
                         let nearbyInput = null;
 
-                        // 检查图片的直接父节点内的输入框（通常在同一个 li 或 div 中）
-                        if (i === 0) {
-                            let siblingInputs = [...imgEle.parentNode.querySelectorAll("input")];
-                            for (let input of siblingInputs) {
+                        // 方法1: 查找图片的前一个兄弟节点中的输入框
+                        if (i === 0 || i === 1) {
+                            // 在前两层（直接父节点和父父节点）查找
+                            let currentNode = imgEle;
+                            // 向前查找兄弟节点
+                            while (currentNode.previousElementSibling) {
+                                let prevSibling = currentNode.previousElementSibling;
+                                // 如果兄弟节点是 input
+                                if (prevSibling.tagName === "INPUT") {
+                                    let type = prevSibling.getAttribute("type");
+                                    if (!type || type === "text") {
+                                        nearbyInput = prevSibling;
+                                        break;
+                                    }
+                                }
+                                // 如果兄弟节点内有 input
+                                let inputs = prevSibling.querySelectorAll("input");
+                                for (let j = inputs.length - 1; j >= 0; j--) {
+                                    let type = inputs[j].getAttribute("type");
+                                    if (!type || type === "text") {
+                                        nearbyInput = inputs[j];
+                                        break;
+                                    }
+                                }
+                                if (nearbyInput) break;
+                                currentNode = prevSibling;
+                            }
+                        }
+
+                        // 如果找到了前置输入框，直接使用
+                        if (nearbyInput) {
+                            item.input = nearbyInput;
+                            console.log(`[验证码助手] 找到前置输入框: ${nearbyInput.getAttribute("id") || nearbyInput.getAttribute("name")}`);
+                            break;
+                        }
+
+                        // 方法2: 查找在图片之前出现的所有输入框，取最后一个（最接近的）
+                        let inputBeforeImg = null;
+                        for (let input of inputTags) {
+                            // 比较 DOM 位置：如果 input 在 img 之前
+                            if (input.compareDocumentPosition(imgEle) & Node.DOCUMENT_POSITION_FOLLOWING) {
                                 let type = input.getAttribute("type");
-                                if (!type || type === "text") {
-                                    nearbyInput = input;
-                                    break;
+                                if ((!type || type === "text") && type !== "password") {
+                                    inputBeforeImg = input;  // 取最后一个（最接近的）
                                 }
                             }
                         }
 
-                        // 如果在同一层级找到了输入框，直接使用
-                        if (nearbyInput) {
-                            item.input = nearbyInput;
-                            console.log(`[验证码助手] 找到同级输入框: ${nearbyInput.getAttribute("id") || nearbyInput.getAttribute("name")}`);
+                        if (inputBeforeImg) {
+                            item.input = inputBeforeImg;
+                            console.log(`[验证码助手] 找到图片前的输入框: ${inputBeforeImg.getAttribute("id") || inputBeforeImg.getAttribute("name")}`);
                             break;
                         }
 
-                        // 使用原来的逻辑：倒序查找 text 类型的输入框（从后往前，更可能找到验证码输入框）
+                        // 方法3: 使用原来的逻辑：倒序查找 text 类型的输入框（兜底方案）
                         let input = inputTags.pop();
-                        let type = input.getAttribute("type");
-                        while (type !== "text" && inputTags.length) {
+                        if (input) {
+                            let type = input.getAttribute("type");
+                            while (type !== "text" && inputTags.length) {
+                                if (type === "password") {
+                                    break;
+                                }
+                                input = inputTags.pop();
+                                type = input ? input.getAttribute("type") : null;
+                            }
+                            if (input) {
+                                let inputWidth = getStyle(input).width.replace(/[^0-9]/gi, "");
+                                if (!type || (type === "text" && inputWidth > 50)) {
+                                    item.input = input;
+                                    console.log(`[验证码助手] 使用兜底逻辑找到输入框: ${input.getAttribute("id") || input.getAttribute("name")}`);
+                                    break;
+                                }
+                            }
                             if (type === "password") {
+                                // 验证码一般在密码框后面，遍历到密码框了就大概率说明没有验证码
                                 break;
                             }
-                            input = inputTags.pop();
-                            type = input.getAttribute("type");
-                        }
-                        let inputWidth = getStyle(input).width.replace(/[^0-9]/gi, "");
-                        if (!type || (type === "text" && inputWidth > 50)) {
-                            // 兼容各种奇葩情况
-                            item.input = input;
-                            console.log(`[验证码助手] 找到验证码输入框: ${input.getAttribute("id") || input.getAttribute("name")}`);
-                            break;
-                        }
-                        if (type === "password") {
-                            // 验证码一般在密码框后面，遍历到密码框了就大概率说明没有验证码
-                            break;
                         }
                     }
                     parentNode = parentNode.parentNode;
