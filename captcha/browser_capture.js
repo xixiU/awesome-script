@@ -492,8 +492,8 @@
                         url: requestUrl,
                         data: formData,
                         onload: function (response) {
+                            console.log(response.response);
                             let res = JSON.parse(response.response) || {};
-                            console.log({ res })
                             if (response.status === 429) {
                                 let msg = res.msg || '获取验证码失败';
                                 let date = new Date().getDate();

@@ -219,7 +219,7 @@ def captcha():
             import json
             detail = json.loads(detail_str)
             href = detail.get('href', '')
-            app.logger.info(f"验证码识别成功 - 来源: {href}, 结果: {result}")
+            app.logger.info(f"识别成功 - 来源: {href}, 结果: {result}")
         except:
             pass
         
