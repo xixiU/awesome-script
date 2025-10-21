@@ -1,12 +1,10 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.2
-// @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。
+// @version      4.2.1
+// @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。修复跨域图片处理问题。
 // @author       xixiu
-
 // @thanks       哈士奇
-
 // @include        http://*
 // @include        https://*
 // @license        MIT
@@ -375,13 +373,19 @@
                     let dataURL = null;
 
                     const action = () => {
-                        let canvas = document.createElement("canvas");
-                        canvas.width = img.naturalWidth;
-                        canvas.height = img.naturalHeight;
-                        let ctx = canvas.getContext("2d");
-                        ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
-                        dataURL = canvas.toDataURL("image/png");
-                        resolve(dataURL);
+                        try {
+                            let canvas = document.createElement("canvas");
+                            canvas.width = img.naturalWidth;
+                            canvas.height = img.naturalHeight;
+                            let ctx = canvas.getContext("2d");
+                            ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+                            dataURL = canvas.toDataURL("image/png");
+                            resolve(dataURL);
+                        } catch (error) {
+                            // Canvas 被污染，使用 GM_xmlhttpRequest 重新获取图片
+                            console.log("[验证码助手] Canvas 跨域错误，使用备用方案获取图片");
+                            this.handleCrossOriginImg(img.src, resolve, reject);
+                        }
                     };
                     if (!img.src.includes(";base64,")) {
                         img.onload = function () {
@@ -399,45 +403,53 @@
                         resolve(dataURL);
                     }
                 } catch (error) {
-                    console.error("error:" + error);
-                    // 这块处理比较复杂，待优化
-                    // 图片设置跨域，重新请求图片内容后转base64，相当于替用户点击了“换一张图片”
-                    // if (this.times >= 1) {
-                    //   return;
-                    // }
-                    // if (typeof Vue !== "undefined") {
-                    //     new Vue().$notify.success({
-                    //         title: "温馨提示",
-                    //         message: "当前验证码结果可能和图片显示不一致，请放心提交。",
-                    //         offset: 100,
-                    //     });
-                    // }
+                    console.error("[验证码助手] 图片处理错误:" + error);
+                    // 尝试使用备用方案
+                    this.handleCrossOriginImg(img.src, resolve, reject);
+                }
+            });
+        }
 
-                    // this.times++;
-                    // GM_xmlhttpRequest({
-                    //     method: "get",
-                    //     url: img.src,
-                    //     responseType: "blob",
-                    //     onload: (res) => {
-                    //         if (res.status === 200) {
-                    //             let blob = res.response;
-                    //             let fileReader = new FileReader();
-                    //             fileReader.onloadend = (e) => {
-                    //                 let base64 = e.target.result;
-                    //                 resolve(base64);
-                    //             };
-                    //             fileReader.readAsDataURL(blob);
-                    //         } else {
-                    //             console.log("图片转换blob失败");
-                    //             console.log(res);
-                    //             reject();
-                    //         }
-                    //     },
-                    //     onerror: function(err) {
-                    //         console.log("图片请求失败:" + err);
-                    //         reject();
-                    //     },
-                    // });
+        // 处理跨域图片的备用方案
+        handleCrossOriginImg(imgSrc, resolve, reject) {
+            if (!imgSrc || imgSrc.includes(";base64,")) {
+                reject(new Error("无效的图片源"));
+                return;
+            }
+
+            console.log("[验证码助手] 使用 GM_xmlhttpRequest 获取跨域图片");
+
+            // 使用 Tampermonkey 的特权 API 获取跨域图片
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: imgSrc,
+                responseType: "blob",
+                onload: (res) => {
+                    if (res.status === 200) {
+                        let blob = res.response;
+                        let fileReader = new FileReader();
+                        fileReader.onloadend = (e) => {
+                            let base64 = e.target.result;
+                            console.log("[验证码助手] 跨域图片获取成功");
+                            resolve(base64);
+                        };
+                        fileReader.onerror = (e) => {
+                            console.error("[验证码助手] FileReader 读取失败:", e);
+                            reject(new Error("FileReader 读取失败"));
+                        };
+                        fileReader.readAsDataURL(blob);
+                    } else {
+                        console.error("[验证码助手] 图片请求失败，状态码:", res.status);
+                        reject(new Error("图片请求失败: " + res.status));
+                    }
+                },
+                onerror: function (err) {
+                    console.error("[验证码助手] GM_xmlhttpRequest 请求失败:", err);
+                    reject(new Error("网络请求失败"));
+                },
+                ontimeout: function () {
+                    console.error("[验证码助手] 图片请求超时");
+                    reject(new Error("请求超时"));
                 }
             });
         }
@@ -568,33 +580,70 @@
                     ...this.getCaptchaFeature(img.parentNode),
                 ];
                 checkList = checkList.filter((item) => item);
+                let imgSrc = img.getAttribute("src") || "";
                 let isInvalid =
-                    ["#", "about:blank"].includes(img.getAttribute("src")) ||
-                    !img.getAttribute("src");
+                    ["#", "about:blank"].includes(imgSrc) ||
+                    !imgSrc;
 
+                // 排除明显不是验证码的图片（但不排除 button.jpg，因为有些站点验证码按钮图片也可能是验证码）
+                let excludePatterns = /personalcenter|personal|gzh|qrcode|二维码|app\.png|logo|icon|avatar|header|banner/i;
+                if (excludePatterns.test(imgSrc)) {
+                    return;
+                }
+
+                // 排除按钮图片，但需要更精确的匹配
+                if (/button_\d+\.jpg/i.test(imgSrc) && img.getAttribute("id") && /send|status/i.test(img.getAttribute("id"))) {
+                    return;  // 排除发送按钮
+                }
+
+                // 获取图片实际尺寸（使用 naturalWidth/Height 或 width/height）
+                let imgWidth = img.naturalWidth || img.width;
+                let imgHeight = img.naturalHeight || img.height;
+
+                // 验证码图片通常宽度大于高度（横向长条形）
+                let isValidSize = imgWidth > 20 &&
+                    imgWidth < 200 &&
+                    imgHeight > 20 &&
+                    imgHeight < 100;
+
+                // 优先匹配 src 中包含明确验证码路径的图片
+                let isCaptchaSrc = /createimage|captcha|verify|checkcode|validatecode|rand|vcode|authcode/i.test(imgSrc);
+
+                // 对于明确是验证码路径的图片，放宽尺寸限制（图片可能还在加载中）
+                if (isCaptchaSrc && !isInvalid) {
+                    // 检查是否已经添加过
+                    let alreadyAdded = captchaMap.some(item => item.img === img);
+                    if (!alreadyAdded) {
+                        // 如果图片已加载，检查尺寸；如果未加载（尺寸为0），也先添加
+                        if (imgWidth === 0 || imgHeight === 0 || isValidSize) {
+                            console.log(`[验证码助手] 通过 src 检测到验证码图片: ${img.getAttribute("id") || imgSrc}, 尺寸: ${imgWidth}x${imgHeight}`);
+                            captchaMap.push({ img: img, input: null });
+                            return;  // 已添加，跳过后续检查
+                        }
+                    }
+                }
+
+                // 对于非明确路径的图片，需要更严格的检查
                 for (let i = 0; i < checkList.length; i++) {
                     if (
-                        /.*(code|captcha|验证码|login|点击|verify|yzm|yanzhengma|image|换一张).*/im.test(
+                        /.*(code|captcha|验证码|login|点击|verify|yzm|yanzhengma|换一张).*/im.test(
                             checkList[i].toLowerCase()
                         ) &&
-                        img.width > 20 &&
-                        img.width < 200 &&
-                        img.height > 20 &&
-                        img.height < 100 &&
+                        isValidSize &&
                         !isInvalid
                     ) {
-                        console.log(`[验证码助手] 检测到验证码图片: ${img.getAttribute("id") || img.getAttribute("src")}, 尺寸: ${img.width}x${img.height}`);
-                        captchaMap.push({ img: img, input: null });
-                        break;
+                        // 需要宽高比合理（宽度至少是高度的1.5倍，排除正方形图片如二维码）
+                        if (imgWidth / imgHeight >= 1.5) {
+                            console.log(`[验证码助手] 通过属性检测到验证码图片: ${img.getAttribute("id") || imgSrc}, 尺寸: ${imgWidth}x${imgHeight}`);
+                            captchaMap.push({ img: img, input: null });
+                            break;
+                        }
                     }
                 }
             });
             captchaMap.forEach((item) => {
                 let imgEle = item.img;
                 let parentNode = imgEle.parentNode;
-
-                // 首先尝试查找包含验证码关键词的输入框
-                let captchaInputKeywords = /验证码|captcha|code|verify|yzm|yanzhengma/i;
 
                 for (let i = 0; i < 5; i++) {
                     // 以当前可能是验证码的图片为基点，向上遍历五层查找可能的Input输入框
@@ -604,25 +653,29 @@
                     let inputTags = [...parentNode.querySelectorAll("input")];
 
                     if (inputTags.length) {
-                        // 优先查找包含验证码关键词的输入框
-                        let captchaInput = inputTags.find(input => {
-                            let id = input.getAttribute("id") || "";
-                            let name = input.getAttribute("name") || "";
-                            let placeholder = input.getAttribute("placeholder") || "";
-                            let className = input.className || "";
-                            let type = input.getAttribute("type");
+                        // 优先在当前层级查找紧邻验证码图片的输入框
+                        let nearbyInput = null;
 
-                            return (type === "text" || !type) &&
-                                captchaInputKeywords.test(id + name + placeholder + className);
-                        });
+                        // 检查图片的直接父节点内的输入框（通常在同一个 li 或 div 中）
+                        if (i === 0) {
+                            let siblingInputs = [...imgEle.parentNode.querySelectorAll("input")];
+                            for (let input of siblingInputs) {
+                                let type = input.getAttribute("type");
+                                if (!type || type === "text") {
+                                    nearbyInput = input;
+                                    break;
+                                }
+                            }
+                        }
 
-                        if (captchaInput) {
-                            console.log(`[验证码助手] 找到验证码输入框: ${captchaInput.getAttribute("id") || captchaInput.getAttribute("name")}`);
-                            item.input = captchaInput;
+                        // 如果在同一层级找到了输入框，直接使用
+                        if (nearbyInput) {
+                            item.input = nearbyInput;
+                            console.log(`[验证码助手] 找到同级输入框: ${nearbyInput.getAttribute("id") || nearbyInput.getAttribute("name")}`);
                             break;
                         }
 
-                        // 如果没找到，使用原来的逻辑（倒序查找 text 类型的输入框）
+                        // 使用原来的逻辑：倒序查找 text 类型的输入框（从后往前，更可能找到验证码输入框）
                         let input = inputTags.pop();
                         let type = input.getAttribute("type");
                         while (type !== "text" && inputTags.length) {
@@ -636,7 +689,7 @@
                         if (!type || (type === "text" && inputWidth > 50)) {
                             // 兼容各种奇葩情况
                             item.input = input;
-                            console.log(`[验证码助手] 使用通用逻辑找到输入框: ${input.getAttribute("id") || input.getAttribute("name")}`);
+                            console.log(`[验证码助手] 找到验证码输入框: ${input.getAttribute("id") || input.getAttribute("name")}`);
                             break;
                         }
                         if (type === "password") {
