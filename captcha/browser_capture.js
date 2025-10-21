@@ -46,7 +46,7 @@
 (function () {
     // GM_setValue('tipsConfig',"")
     var elementUIcss = GM_getResourceText("elementUIcss");
-    var routePrefix = 'http://1.95.154.26:7000'
+    var routePrefix = 'http://localhost:9876'
     GM_addStyle(elementUIcss);
 
     function getStyle(el) {
