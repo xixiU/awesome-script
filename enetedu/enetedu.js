@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.6.2.7
+// @version      0.6.2.8
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频。优先使用接口检测学习进度，页面元素检测作为兜底。已移除tab切换时视频自动停止的限制。
 // @author       xixiu
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -456,7 +456,7 @@
     removeTabSwitchRestrictions();
 
     // 普通课程倍速
-    const speed = 2.0;
+    const speed = 3.0;
     // 直播课程倍速
     const liveSpeed = 5.0;
 
@@ -558,12 +558,15 @@
                                 utils.error("iframeWindow.GetQuestion 函数未找到，可能无法禁用课程问题弹出。");
                             }
 
-                            // 保存原始 RecordDuration 并覆盖
+                            // 保存原始 RecordDuration 并覆盖，通过代理模式保留原始上报逻辑
                             let originalRecordDuration = null;
                             if (typeof iframeWindow.RecordDuration === 'function') {
                                 originalRecordDuration = iframeWindow.RecordDuration;
+                                const self = this; // 保存外层的 this 引用
                                 iframeWindow.RecordDuration = function (start, end) {
-                                    utils.log(`拦截 iframe 中的 RecordDuration，阻止页面原有上报。原始调用参数: start=${start}, end=${end}`);
+                                    utils.log(`拦截 iframe 中的 RecordDuration，继续页面原有上报。原始调用参数: start=${start}, end=${end}`);
+                                    originalRecordDuration(start, end); // 执行原始上报
+                                    self.lastForceReportTime = end; // 使用 end 而不是 start，更新到最新的上报时间点
                                 };
                             } else {
                                 utils.error("iframeWindow.RecordDuration 函数未找到，无法拦截原有上报。");
