@@ -32,6 +32,9 @@
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
 // @connect      *
+// @require      https://unpkg.com/vue@2.6.12/dist/vue.js
+// @require      https://unpkg.com/element-ui/lib/index.js
+// @resource elementUIcss https://unpkg.com/element-ui/lib/theme-chalk/index.css
 // @require      https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/common/config_manager.js
 
 // @run-at document-end
@@ -41,6 +44,10 @@
 
 (function () {
     // GM_setValue('tipsConfig',"")
+
+    // 加载Element UI样式
+    var elementUIcss = GM_getResourceText("elementUIcss");
+    GM_addStyle(elementUIcss);
 
     // ==================== 配置管理 ====================
     const configManager = new ConfigManager('captchaConfig', {

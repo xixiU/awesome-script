@@ -41,7 +41,7 @@
             // 自定义frame相关的标题关键词
             customFrameKeywords: GM_getValue('customFrameKeywords', []),
             // 最小页面尺寸阈值
-            minViewportSize: GM_getValue('minViewportSize', { width: 800, height: 600 })
+            minViewportSize: GM_getValue('minViewportSize', { width: 200, height: 200 })
         }
     };
 
