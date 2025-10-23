@@ -7,7 +7,7 @@
 # 脚本配置
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVICE_NAME="captcha-recognition"
-PYTHON_APP="recognize_captcha.py"
+PYTHON_APP="recognize_captcha"
 LOG_DIR="${SCRIPT_DIR}/logs"
 PID_FILE="${SCRIPT_DIR}/captcha_service.pid"
 CONFIG_FILE="${SCRIPT_DIR}/config.env"
@@ -233,13 +233,19 @@ load_config() {
         source "$CONFIG_FILE"
     else
         log_warn "配置文件不存在，使用默认配置"
-        HOST="$DEFAULT_HOST"
-        PORT="$DEFAULT_PORT"
-        WORKERS="$DEFAULT_WORKERS"
-        TIMEOUT="$DEFAULT_TIMEOUT"
-        MAX_REQUESTS="$DEFAULT_MAX_REQUESTS"
-        MAX_REQUESTS_JITTER="$DEFAULT_MAX_REQUESTS_JITTER"
     fi
+    
+    # 设置默认值（如果配置文件中没有定义）
+    HOST="${HOST:-$DEFAULT_HOST}"
+    PORT="${PORT:-$DEFAULT_PORT}"
+    WORKERS="${WORKERS:-$DEFAULT_WORKERS}"
+    TIMEOUT="${TIMEOUT:-$DEFAULT_TIMEOUT}"
+    MAX_REQUESTS="${MAX_REQUESTS:-$DEFAULT_MAX_REQUESTS}"
+    MAX_REQUESTS_JITTER="${MAX_REQUESTS_JITTER:-$DEFAULT_MAX_REQUESTS_JITTER}"
+    KEEPALIVE="${KEEPALIVE:-2}"
+    LOG_LEVEL="${LOG_LEVEL:-INFO}"
+    ACCESS_LOG_FILE="${ACCESS_LOG_FILE:-${LOG_DIR}/access.log}"
+    ERROR_LOG_FILE="${ERROR_LOG_FILE:-${LOG_DIR}/error.log}"
     
     log_info "服务配置:"
     log_info "  主机: $HOST"
@@ -273,8 +279,8 @@ start_service() {
     fi
     
     # 检查应用文件
-    if [ ! -f "${SCRIPT_DIR}/${PYTHON_APP}" ]; then
-        log_error "应用文件不存在: ${SCRIPT_DIR}/${PYTHON_APP}"
+    if [ ! -f "${SCRIPT_DIR}/${PYTHON_APP}.py" ]; then
+        log_error "应用文件不存在: ${SCRIPT_DIR}/${PYTHON_APP}.py"
         exit 1
     fi
     
@@ -293,20 +299,20 @@ start_service() {
     
     # 构建gunicorn命令
     local gunicorn_cmd="gunicorn"
-    gunicorn_cmd+=" --bind ${HOST}:${PORT}"
-    gunicorn_cmd+=" --workers ${WORKERS}"
-    gunicorn_cmd+=" --timeout ${TIMEOUT}"
-    gunicorn_cmd+=" --max-requests ${MAX_REQUESTS}"
-    gunicorn_cmd+=" --max-requests-jitter ${MAX_REQUESTS_JITTER}"
-    gunicorn_cmd+=" --keep-alive ${KEEPALIVE:-2}"
-    gunicorn_cmd+=" --preload"
-    gunicorn_cmd+=" --access-logfile ${ACCESS_LOG_FILE:-${LOG_DIR}/access.log}"
-    gunicorn_cmd+=" --error-logfile ${ERROR_LOG_FILE:-${LOG_DIR}/error.log}"
-    gunicorn_cmd+=" --log-level ${LOG_LEVEL:-INFO}"
-    gunicorn_cmd+=" --pid ${PID_FILE}"
-    gunicorn_cmd+=" --daemon"
-    gunicorn_cmd+=" --chdir ${SCRIPT_DIR}"
-    gunicorn_cmd+=" ${PYTHON_APP}:app"
+    gunicorn_cmd="$gunicorn_cmd --bind ${HOST}:${PORT}"
+    gunicorn_cmd="$gunicorn_cmd --workers ${WORKERS}"
+    gunicorn_cmd="$gunicorn_cmd --timeout ${TIMEOUT}"
+    gunicorn_cmd="$gunicorn_cmd --max-requests ${MAX_REQUESTS}"
+    gunicorn_cmd="$gunicorn_cmd --max-requests-jitter ${MAX_REQUESTS_JITTER}"
+    gunicorn_cmd="$gunicorn_cmd --keep-alive ${KEEPALIVE:-2}"
+    gunicorn_cmd="$gunicorn_cmd --preload"
+    gunicorn_cmd="$gunicorn_cmd --access-logfile ${ACCESS_LOG_FILE:-${LOG_DIR}/access.log}"
+    gunicorn_cmd="$gunicorn_cmd --error-logfile ${ERROR_LOG_FILE:-${LOG_DIR}/error.log}"
+    gunicorn_cmd="$gunicorn_cmd --log-level ${LOG_LEVEL:-INFO}"
+    gunicorn_cmd="$gunicorn_cmd --pid ${PID_FILE}"
+    gunicorn_cmd="$gunicorn_cmd --daemon"
+    gunicorn_cmd="$gunicorn_cmd --chdir ${SCRIPT_DIR}"
+    gunicorn_cmd="$gunicorn_cmd ${PYTHON_APP}:app"
     
     log_debug "执行命令: $gunicorn_cmd"
     
@@ -314,7 +320,7 @@ start_service() {
     eval "$gunicorn_cmd"
     
     # 等待服务启动
-    sleep 3
+    sleep 10
     
     if is_running; then
         local pid=$(cat "$PID_FILE")
