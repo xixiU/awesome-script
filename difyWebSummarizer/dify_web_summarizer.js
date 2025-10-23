@@ -27,21 +27,7 @@
         // 按钮样式配置
         buttonPosition: {
             bottom: '80px',
-            right: '20px'
-        },
-
-        // Frame页面检测配置
-        frameDetection: {
-            // 自定义frame相关的class名称
-            customFrameClasses: GM_getValue('customFrameClasses', []),
-            // 自定义frame相关的选择器
-            customFrameSelectors: GM_getValue('customFrameSelectors', []),
-            // 自定义frame相关的URL参数
-            customFrameParams: GM_getValue('customFrameParams', []),
-            // 自定义frame相关的标题关键词
-            customFrameKeywords: GM_getValue('customFrameKeywords', []),
-            // 最小页面尺寸阈值
-            minViewportSize: GM_getValue('minViewportSize', { width: 200, height: 200 })
+            right: '0px'
         }
     };
 
@@ -853,31 +839,36 @@
             const savedPos = GM_getValue('buttonPosition', null);
             if (savedPos) {
                 const pos = JSON.parse(savedPos);
+                // 根据保存的位置模式设置按钮位置
+                this.button.classList.remove('free-mode');
+                this.button.classList.add('edge-mode');
 
-                if (pos.mode === 'edge') {
-                    // 贴边模式
-                    this.button.classList.remove('free-mode');
-                    this.button.classList.add('edge-mode');
-                    this.button.style.left = 'auto';
-                    this.button.style.top = pos.top || 'auto';
-                    this.button.style.right = '0px';
-                    this.button.style.bottom = pos.bottom || '80px';
-                } else if (pos.mode === 'free') {
-                    // 自由模式
-                    this.button.classList.remove('edge-mode');
-                    this.button.classList.add('free-mode');
-                    this.button.style.left = pos.left;
-                    this.button.style.top = pos.top;
+                if (pos.side === 'left') {
+                    // 贴左边
+                    this.button.style.left = '0px';
                     this.button.style.right = 'auto';
-                    this.button.style.bottom = 'auto';
+                    this.button.style.borderTopLeftRadius = '0';
+                    this.button.style.borderBottomLeftRadius = '0';
+                    this.button.style.borderTopRightRadius = '25px';
+                    this.button.style.borderBottomRightRadius = '25px';
+                } else {
+                    // 贴右边（默认）
+                    this.button.style.left = 'auto';
+                    this.button.style.right = '0px';
+                    this.button.style.borderTopLeftRadius = '25px';
+                    this.button.style.borderBottomLeftRadius = '25px';
+                    this.button.style.borderTopRightRadius = '0';
+                    this.button.style.borderBottomRightRadius = '0';
                 }
+
+                this.button.style.top = pos.top || 'auto';
+                this.button.style.bottom = pos.bottom || '80px';
             }
         }
 
-        saveButtonPosition(mode = 'edge') {
+        saveButtonPosition(side = 'right') {
             const pos = {
-                mode: mode,
-                left: this.button.style.left,
+                side: side,
                 top: this.button.style.top,
                 bottom: this.button.style.bottom
             };
@@ -940,22 +931,41 @@
                 document.removeEventListener('mousemove', elementDrag);
 
                 if (isDragging) {
-                    // 计算按钮右边缘到窗口右边缘的距离
-                    const distanceToRight = window.innerWidth - (element.offsetLeft + element.offsetWidth);
+                    // 计算按钮中心点到窗口左右边缘的距离
+                    const buttonCenterX = element.offsetLeft + element.offsetWidth / 2;
+                    const windowCenterX = window.innerWidth / 2;
 
-                    // 如果距离右边缘小于 100px，自动吸附到右边（贴边模式）
-                    if (distanceToRight < 100) {
+                    // 根据按钮中心点位置决定贴哪一边
+                    if (buttonCenterX < windowCenterX) {
+                        // 贴左边
+                        element.classList.remove('free-mode');
+                        element.classList.add('edge-mode');
+                        element.style.left = '0px';
+                        element.style.right = 'auto';
+                        element.style.bottom = (window.innerHeight - element.offsetTop - element.offsetHeight) + 'px';
+
+                        // 调整圆角样式
+                        element.style.borderTopLeftRadius = '0';
+                        element.style.borderBottomLeftRadius = '0';
+                        element.style.borderTopRightRadius = '25px';
+                        element.style.borderBottomRightRadius = '25px';
+
+                        self.saveButtonPosition('left');
+                    } else {
+                        // 贴右边
                         element.classList.remove('free-mode');
                         element.classList.add('edge-mode');
                         element.style.left = 'auto';
                         element.style.right = '0px';
                         element.style.bottom = (window.innerHeight - element.offsetTop - element.offsetHeight) + 'px';
-                        self.saveButtonPosition('edge');
-                    } else {
-                        // 自由模式：按钮保持在拖动的位置，始终展开
-                        element.classList.remove('edge-mode');
-                        element.classList.add('free-mode');
-                        self.saveButtonPosition('free');
+
+                        // 调整圆角样式
+                        element.style.borderTopLeftRadius = '25px';
+                        element.style.borderBottomLeftRadius = '25px';
+                        element.style.borderTopRightRadius = '0';
+                        element.style.borderBottomRightRadius = '0';
+
+                        self.saveButtonPosition('right');
                     }
 
                     // 延迟移除拖拽状态，避免触发点击
@@ -1583,128 +1593,23 @@
     // ==================== 初始化 ====================
     let uiManager = null;
 
-    // 检测是否为独立frame页面
-    // 修复：防止在独立frame页面中创建多个dify图标
-    function isIndependentFrame() {
-        const body = document.body;
-        if (!body) return false;
-
-        // 检查是否在iframe中
-        if (window !== window.top) {
-            return true;
-        }
-
-        // 合并默认和自定义的frame相关class
-        const defaultFrameClasses = [
-            'web_qrcode_type_iframe',
-            'iframe-mode',
-            'frame-page',
-            'embedded-page',
-            'popup-page',
-            'modal-page'
-        ];
-        const frameClasses = [...defaultFrameClasses, ...CONFIG.frameDetection.customFrameClasses];
-
-        const hasFrameClass = frameClasses.some(cls => body.classList.contains(cls));
-
-        // 合并默认和自定义的frame相关选择器
-        const defaultFrameSelectors = [
-            '#tpl_for_page',
-            '#tpl_for_iframe',
-            '.iframe-container',
-            '.frame-container',
-            '.popup-container',
-            '.modal-container',
-            '[class*="iframe"]',
-            '[class*="frame"]',
-            '[class*="popup"]',
-            '[class*="modal"]'
-        ];
-        const frameSelectors = [...defaultFrameSelectors, ...CONFIG.frameDetection.customFrameSelectors];
-
-        const hasFrameStructure = frameSelectors.some(selector => {
-            try {
-                return document.querySelector(selector) !== null;
-            } catch (e) {
-                return false;
-            }
-        });
-
-        // 检查URL参数中是否包含frame相关标识
-        const urlParams = new URLSearchParams(window.location.search);
-        const defaultFrameParams = ['iframe', 'frame', 'popup', 'modal', 'embedded'];
-        const frameParams = [...defaultFrameParams, ...CONFIG.frameDetection.customFrameParams];
-        const hasFrameParam = frameParams.some(param => urlParams.has(param));
-
-        // 检查页面标题是否包含frame相关关键词
-        const title = document.title.toLowerCase();
-        const defaultFrameKeywords = ['iframe', 'frame', 'popup', 'modal', 'embedded', '独立页面', '弹窗'];
-        const frameKeywords = [...defaultFrameKeywords, ...CONFIG.frameDetection.customFrameKeywords];
-        const hasFrameTitle = frameKeywords.some(keyword => title.includes(keyword));
-
-        return hasFrameClass || hasFrameStructure || hasFrameParam || hasFrameTitle;
-    }
-
-    // 检测是否为最外层页面
-    function isTopLevelPage() {
-        // 检查是否在iframe中
-        if (window !== window.top) {
-            return false;
-        }
-
-        // 检查是否为独立frame页面
-        if (isIndependentFrame()) {
-            return false;
-        }
-
-        // 检查页面大小，如果页面很小可能是弹窗或独立页面
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const minSize = CONFIG.frameDetection.minViewportSize;
-
-        // 如果视口小于配置的阈值，可能是独立页面
-        if (viewportWidth < minSize.width || viewportHeight < minSize.height) {
-            console.log(`[Dify] 检测到小尺寸页面 (${viewportWidth}x${viewportHeight})，可能是独立frame页面`);
-            return false;
-        }
-
-        // 检查是否有多个同类型的脚本元素（可能是重复加载）
-        const existingButtons = document.querySelectorAll('[id*="dify"]');
-        if (existingButtons.length > 0) {
-            console.log('[Dify] 检测到已存在的dify元素，跳过初始化');
-            return false;
-        }
-
-        return true;
-    }
-
     function init() {
-        // 调试信息
-        console.log('[Dify] 页面检测信息:', {
-            url: window.location.href,
-            title: document.title,
-            viewport: `${window.innerWidth}x${window.innerHeight}`,
-            isTopWindow: window === window.top,
-            isIndependentFrame: isIndependentFrame(),
-            isTopLevelPage: isTopLevelPage()
-        });
-
-        // 只在最外层页面初始化
-        if (!isTopLevelPage()) {
-            console.log('[Dify Web Summarizer] 检测到独立frame页面，跳过初始化');
+        // 只在主窗口中运行，避免在iframe中重复创建
+        if (window !== window.top) {
+            //console.log('[Dify] 检测到iframe环境，跳过初始化');
             return;
         }
 
-        // 等待页面加载完成
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => {
-                uiManager = new UIManager();
-                registerMenuCommands();
-            });
-        } else {
-            uiManager = new UIManager();
-            registerMenuCommands();
+        // 检查是否有多个同类型的脚本元素（防止重复加载）
+        const existingButtons = document.querySelectorAll('[id*="dify"]');
+        if (existingButtons.length > 0) {
+            console.log('[Dify] 检测到已存在的dify元素，跳过初始化');
+            return;
         }
+
+        // 直接初始化，不需要等待页面加载
+        uiManager = new UIManager();
+        registerMenuCommands();
     }
 
     // 注册油猴菜单命令
@@ -1717,15 +1622,22 @@
 
         GM_registerMenuCommand('📍 重置按钮位置', () => {
             if (uiManager && uiManager.button) {
-                // 重置到默认位置（贴边模式）
+                // 重置到默认位置（贴右边）
                 uiManager.button.classList.remove('free-mode');
                 uiManager.button.classList.add('edge-mode');
                 uiManager.button.style.left = 'auto';
                 uiManager.button.style.top = 'auto';
                 uiManager.button.style.right = '0px';
                 uiManager.button.style.bottom = '80px';
+
+                // 重置圆角样式为右边模式
+                uiManager.button.style.borderTopLeftRadius = '25px';
+                uiManager.button.style.borderBottomLeftRadius = '25px';
+                uiManager.button.style.borderTopRightRadius = '0';
+                uiManager.button.style.borderBottomRightRadius = '0';
+
                 GM_setValue('buttonPosition', null);
-                console.log('[Dify] 按钮位置已重置为贴边模式');
+                console.log('[Dify] 按钮位置已重置为贴右边模式');
             }
         });
     }
