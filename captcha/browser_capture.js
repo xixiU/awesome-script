@@ -32,9 +32,7 @@
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
 // @connect      *
-// @require      https://unpkg.com/vue@2.6.12/dist/vue.js
-// @require      https://unpkg.com/element-ui/lib/index.js
-// @resource elementUIcss https://unpkg.com/element-ui/lib/theme-chalk/index.css
+// @require      https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/common/config_manager.js
 
 // @run-at document-end
 // @downloadURL  https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/captcha/browser_capture.js
@@ -43,9 +41,41 @@
 
 (function () {
     // GM_setValue('tipsConfig',"")
-    var elementUIcss = GM_getResourceText("elementUIcss");
-    var routePrefix = 'http://localhost:9876'
-    GM_addStyle(elementUIcss);
+
+    // ==================== 配置管理 ====================
+    const configManager = new ConfigManager('captchaConfig', {
+        routePrefix: 'http://localhost:9876'
+    });
+
+    // 配置项定义
+    const configItems = [
+        {
+            key: 'routePrefix',
+            label: '验证码识别服务地址',
+            type: 'text',
+            placeholder: 'http://localhost:9876',
+            help: '验证码识别服务的API地址，确保服务正在运行',
+            validate: (value) => {
+                if (!value || value.trim() === '') {
+                    return false;
+                }
+                try {
+                    new URL(value);
+                    return true;
+                } catch {
+                    return false;
+                }
+            },
+            transform: (value) => value.trim(),
+            showStatus: true
+        }
+    ];
+
+    // 初始化配置管理
+    configManager.init(configItems);
+
+    // 获取当前配置
+    const routePrefix = configManager.get('routePrefix');
 
     function getStyle(el) {
         // 获取元素样式
