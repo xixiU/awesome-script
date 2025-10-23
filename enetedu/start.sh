@@ -5,7 +5,7 @@
 # ====================================================================
 
 # 脚本配置
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVICE_NAME="captcha-recognition"
 PYTHON_APP="recognize_captcha.py"
 LOG_DIR="${SCRIPT_DIR}/logs"
@@ -46,7 +46,7 @@ log_debug() {
 
 # 检查命令是否存在
 check_command() {
-    if ! command -v "$1" &> /dev/null; then
+    if ! command -v "$1" > /dev/null 2>&1; then
         log_error "命令 '$1' 未找到，请先安装"
         return 1
     fi
@@ -70,11 +70,11 @@ check_python_env() {
     fi
     
     # 检查虚拟环境
-    if [[ -z "$VIRTUAL_ENV" ]]; then
+    if [ -z "$VIRTUAL_ENV" ]; then
         log_warn "未检测到虚拟环境，建议使用虚拟环境运行"
-        read -p "是否继续？(y/N): " -n 1 -r
+        read -p "是否继续？(y/N): " REPLY
         echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        if [ ! "$REPLY" = "y" ] && [ ! "$REPLY" = "Y" ]; then
             log_info "请先创建并激活虚拟环境："
             log_info "python3 -m venv venv"
             log_info "source venv/bin/activate"
@@ -90,39 +90,56 @@ check_python_env() {
 check_dependencies() {
     log_info "检查依赖包状态..."
     
-    local missing_deps=()
-    local installed_deps=()
+    local missing_deps=""
+    local installed_deps=""
     
-    # 定义依赖包映射（包名 -> 导入名）
-    declare -A package_map=(
-        ["flask"]="flask"
-        ["flask-cors"]="flask_cors"
-        ["ddddocr"]="ddddocr"
-        ["Pillow"]="PIL"
-    )
+    # 检查依赖包
+    local packages="flask flask-cors ddddocr Pillow"
+    local import_names="flask flask_cors ddddocr PIL"
     
-    # 检查每个依赖包
-    for package in "${!package_map[@]}"; do
-        local import_name="${package_map[$package]}"
+    for package in $packages; do
+        case "$package" in
+            "flask")
+                import_name="flask"
+                ;;
+            "flask-cors")
+                import_name="flask_cors"
+                ;;
+            "ddddocr")
+                import_name="ddddocr"
+                ;;
+            "Pillow")
+                import_name="PIL"
+                ;;
+        esac
+        
         if python3 -c "import ${import_name}" 2>/dev/null; then
-            installed_deps+=("$package")
+            if [ -z "$installed_deps" ]; then
+                installed_deps="$package"
+            else
+                installed_deps="$installed_deps $package"
+            fi
             log_debug "✓ $package 已安装"
         else
-            missing_deps+=("$package")
+            if [ -z "$missing_deps" ]; then
+                missing_deps="$package"
+            else
+                missing_deps="$missing_deps $package"
+            fi
             log_debug "✗ $package 未安装"
         fi
     done
     
     # 输出检查结果
-    if [[ ${#installed_deps[@]} -gt 0 ]]; then
-        log_info "已安装的依赖: ${installed_deps[*]}"
+    if [ -n "$installed_deps" ]; then
+        log_info "已安装的依赖: $installed_deps"
     fi
     
-    if [[ ${#missing_deps[@]} -eq 0 ]]; then
+    if [ -z "$missing_deps" ]; then
         log_info "✓ 所有依赖包已安装"
         return 0
     else
-        log_warn "缺少以下依赖包: ${missing_deps[*]}"
+        log_warn "缺少以下依赖包: $missing_deps"
         return 1
     fi
 }
@@ -137,7 +154,7 @@ install_dependencies() {
         return 0
     fi
     
-    if [[ -f "${SCRIPT_DIR}/requirements.txt" ]]; then
+    if [ -f "${SCRIPT_DIR}/requirements.txt" ]; then
         log_info "开始安装缺失的依赖包..."
         log_info "安装命令: pip3 install -r requirements.txt --upgrade"
         
@@ -145,7 +162,7 @@ install_dependencies() {
         pip3 install -r "${SCRIPT_DIR}/requirements.txt" --upgrade --progress-bar on
         local install_result=$?
         
-        if [[ $install_result -eq 0 ]]; then
+        if [ $install_result -eq 0 ]; then
             log_info "✓ 依赖安装完成"
             
             # 再次检查依赖
@@ -178,7 +195,7 @@ create_directories() {
     mkdir -p "$LOG_DIR"
     
     # 创建配置文件（如果不存在）
-    if [[ ! -f "$CONFIG_FILE" ]]; then
+    if [ ! -f "$CONFIG_FILE" ]; then
         cat > "$CONFIG_FILE" << EOF
 # 验证码识别服务配置文件
 # Captcha Recognition Service Configuration
@@ -211,7 +228,7 @@ EOF
 
 # 加载配置
 load_config() {
-    if [[ -f "$CONFIG_FILE" ]]; then
+    if [ -f "$CONFIG_FILE" ]; then
         log_info "加载配置文件: $CONFIG_FILE"
         source "$CONFIG_FILE"
     else
@@ -234,7 +251,7 @@ load_config() {
 
 # 检查服务是否运行
 is_running() {
-    if [[ -f "$PID_FILE" ]]; then
+    if [ -f "$PID_FILE" ]; then
         local pid=$(cat "$PID_FILE")
         if ps -p "$pid" > /dev/null 2>&1; then
             return 0
@@ -256,7 +273,7 @@ start_service() {
     fi
     
     # 检查应用文件
-    if [[ ! -f "${SCRIPT_DIR}/${PYTHON_APP}" ]]; then
+    if [ ! -f "${SCRIPT_DIR}/${PYTHON_APP}" ]; then
         log_error "应用文件不存在: ${SCRIPT_DIR}/${PYTHON_APP}"
         exit 1
     fi
@@ -265,7 +282,7 @@ start_service() {
     if ! check_command "gunicorn"; then
         log_warn "gunicorn 未安装，尝试安装..."
         pip3 install gunicorn
-        if [[ $? -ne 0 ]]; then
+        if [ $? -ne 0 ]; then
             log_error "gunicorn 安装失败"
             exit 1
         fi
@@ -329,7 +346,7 @@ stop_service() {
     
     # 等待进程结束
     local count=0
-    while ps -p "$pid" > /dev/null 2>&1 && [[ $count -lt 30 ]]; do
+    while ps -p "$pid" > /dev/null 2>&1 && [ $count -lt 30 ]; do
         sleep 1
         ((count++))
     done
@@ -374,10 +391,10 @@ status_service() {
         
         # 检查健康状态
         log_info "检查服务健康状态..."
-        if command -v curl &> /dev/null; then
+        if command -v curl > /dev/null 2>&1; then
             local health_url="http://${HOST}:${PORT}/health"
             local health_response=$(curl -s -w "%{http_code}" -o /dev/null "$health_url" 2>/dev/null)
-            if [[ "$health_response" == "200" ]]; then
+            if [ "$health_response" = "200" ]; then
                 log_info "健康检查: 通过"
             else
                 log_warn "健康检查: 失败 (HTTP $health_response)"
@@ -399,21 +416,21 @@ view_logs() {
     
     case "$log_type" in
         "access")
-            if [[ -f "${LOG_DIR}/access.log" ]]; then
+    if [ -f "${LOG_DIR}/access.log" ]; then
                 tail -f "${LOG_DIR}/access.log"
             else
                 log_error "访问日志文件不存在"
             fi
             ;;
         "error")
-            if [[ -f "${LOG_DIR}/error.log" ]]; then
+            if [ -f "${LOG_DIR}/error.log" ]; then
                 tail -f "${LOG_DIR}/error.log"
             else
                 log_error "错误日志文件不存在"
             fi
             ;;
         "all"|*)
-            if [[ -f "${LOG_DIR}/captcha_service.log" ]]; then
+            if [ -f "${LOG_DIR}/captcha_service.log" ]; then
                 tail -f "${LOG_DIR}/captcha_service.log"
             else
                 log_error "服务日志文件不存在"
@@ -433,11 +450,11 @@ health_check() {
     
     local health_url="http://${HOST}:${PORT}/health"
     
-    if command -v curl &> /dev/null; then
+    if command -v curl > /dev/null 2>&1; then
         local response=$(curl -s "$health_url")
         local http_code=$(curl -s -w "%{http_code}" -o /dev/null "$health_url")
         
-        if [[ "$http_code" == "200" ]]; then
+        if [ "$http_code" = "200" ]; then
             log_info "健康检查通过"
             echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
             return 0
@@ -493,7 +510,7 @@ EOF
 
 # 编辑配置文件
 edit_config() {
-    if [[ -f "$CONFIG_FILE" ]]; then
+    if [ -f "$CONFIG_FILE" ]; then
         ${EDITOR:-nano} "$CONFIG_FILE"
         log_info "配置文件已更新，重启服务以应用新配置"
     else
