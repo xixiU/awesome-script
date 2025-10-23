@@ -653,13 +653,13 @@
                 // 排除明显不是验证码的图片
                 let excludePatterns = /personalcenter|personal|gzh|qrcode|二维码|app\.png|logo|icon|avatar|header|banner/i;
                 if (excludePatterns.test(imgSrc)) {
-                    console.log(`[验证码助手] 排除非验证码图片: ${imgSrc}`);
+                    //console.log(`[验证码助手] 排除非验证码图片: ${imgSrc}`);
                     return;
                 }
 
                 // 排除按钮图片，但需要更精确的匹配
                 if (/button_\d+\.jpg/i.test(imgSrc) && img.getAttribute("id") && /send|status/i.test(img.getAttribute("id"))) {
-                    console.log(`[验证码助手] 排除按钮图片: ${imgSrc}, id: ${img.getAttribute("id")}`);
+                    //console.log(`[验证码助手] 排除按钮图片: ${imgSrc}, id: ${img.getAttribute("id")}`);
                     return;  // 排除发送按钮
                 }
 
@@ -670,18 +670,18 @@
                 // 验证码图片通常宽度大于高度（横向长条形）
                 let isValidSize = imgWidth > 20 &&
                     imgWidth < 200 &&
-                    imgHeight > 20 &&
+                    imgHeight >= 20 &&
                     imgHeight < 100;
 
                 // 优先匹配 src 中包含明确验证码路径的图片
                 let isCaptchaSrc = /createimage|captcha|verify|checkcode|validatecode|rand|vcode|authcode/i.test(imgSrc);
-                console.log(`[验证码助手] 图片src: ${imgSrc}, 验证码路径检查: ${isCaptchaSrc}`);
+                //console.log(`[验证码助手] 图片src: ${imgSrc}, 验证码路径检查: ${isCaptchaSrc}`);
 
                 // Element UI 特殊处理：检查是否在 el-input-group__append 内
                 let isElementUICaptcha = img.closest('.el-input-group__append') &&
                     img.closest('.el-input-group') &&
                     imgSrc.startsWith('data:image/');
-                console.log(`[验证码助手] Element UI检查: ${isElementUICaptcha}`);
+                //console.log(`[验证码助手] Element UI检查: ${isElementUICaptcha}`);
 
                 // 对于明确是验证码路径的图片，放宽尺寸限制（图片可能还在加载中）
                 if ((isCaptchaSrc || isElementUICaptcha) && !isInvalid) {
@@ -695,15 +695,19 @@
                             console.log(`[验证码助手] 通过 src 检测到验证码图片: ${img.getAttribute("id") || imgSrc}, 尺寸: ${imgWidth}x${imgHeight}`);
                             captchaMap.push({ img: img, input: null });
                             return;  // 已添加，跳过后续检查
-                        } else {
-                            console.log(`[验证码助手] 验证码图片尺寸不符合要求: ${imgWidth}x${imgHeight}`);
                         }
-                    } else {
-                        console.log(`[验证码助手] 验证码图片已经添加过了`);
                     }
-                } else {
-                    console.log(`[验证码助手] 不是验证码路径: isCaptchaSrc=${isCaptchaSrc}, isElementUICaptcha=${isElementUICaptcha}, isInvalid=${isInvalid}`);
                 }
+
+                //         } else {
+                //             console.log(`[验证码助手] 验证码图片尺寸不符合要求: ${imgWidth}x${imgHeight}`);
+                //         }
+                //     } else {
+                //         console.log(`[验证码助手] 验证码图片已经添加过了`);
+                //     }
+                // } else {
+                //     console.log(`[验证码助手] 不是验证码路径: isCaptchaSrc=${isCaptchaSrc}, isElementUICaptcha=${isElementUICaptcha}, isInvalid=${isInvalid}`);
+                // }
 
                 // 对于非明确路径的图片，需要更严格的检查
                 for (let i = 0; i < checkList.length; i++) {
