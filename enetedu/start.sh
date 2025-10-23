@@ -86,21 +86,87 @@ check_python_env() {
     fi
 }
 
+# 检查依赖是否已安装
+check_dependencies() {
+    log_info "检查依赖包状态..."
+    
+    local missing_deps=()
+    local installed_deps=()
+    
+    # 定义依赖包映射（包名 -> 导入名）
+    declare -A package_map=(
+        ["flask"]="flask"
+        ["flask-cors"]="flask_cors"
+        ["ddddocr"]="ddddocr"
+        ["Pillow"]="PIL"
+    )
+    
+    # 检查每个依赖包
+    for package in "${!package_map[@]}"; do
+        local import_name="${package_map[$package]}"
+        if python3 -c "import ${import_name}" 2>/dev/null; then
+            installed_deps+=("$package")
+            log_debug "✓ $package 已安装"
+        else
+            missing_deps+=("$package")
+            log_debug "✗ $package 未安装"
+        fi
+    done
+    
+    # 输出检查结果
+    if [[ ${#installed_deps[@]} -gt 0 ]]; then
+        log_info "已安装的依赖: ${installed_deps[*]}"
+    fi
+    
+    if [[ ${#missing_deps[@]} -eq 0 ]]; then
+        log_info "✓ 所有依赖包已安装"
+        return 0
+    else
+        log_warn "缺少以下依赖包: ${missing_deps[*]}"
+        return 1
+    fi
+}
+
 # 安装依赖
 install_dependencies() {
     log_info "检查并安装依赖..."
     
+    # 首先检查依赖是否已安装
+    if check_dependencies; then
+        log_info "✓ 依赖检查通过，无需重新安装"
+        return 0
+    fi
+    
     if [[ -f "${SCRIPT_DIR}/requirements.txt" ]]; then
-        pip3 install -r "${SCRIPT_DIR}/requirements.txt" --upgrade
-        if [[ $? -eq 0 ]]; then
-            log_info "依赖安装完成"
+        log_info "开始安装缺失的依赖包..."
+        log_info "安装命令: pip3 install -r requirements.txt --upgrade"
+        
+        # 显示安装进度
+        pip3 install -r "${SCRIPT_DIR}/requirements.txt" --upgrade --progress-bar on
+        local install_result=$?
+        
+        if [[ $install_result -eq 0 ]]; then
+            log_info "✓ 依赖安装完成"
+            
+            # 再次检查依赖
+            log_info "验证安装结果..."
+            if check_dependencies; then
+                log_info "🎉 所有依赖包安装成功！"
+                return 0
+            else
+                log_error "❌ 依赖安装后仍有缺失，请检查安装日志"
+                log_error "建议手动执行: pip3 install -r requirements.txt"
+                return 1
+            fi
         else
-            log_error "依赖安装失败"
-            exit 1
+            log_error "❌ 依赖安装失败 (退出码: $install_result)"
+            log_error "请检查网络连接和Python环境"
+            log_error "建议手动执行: pip3 install -r requirements.txt"
+            return 1
         fi
     else
-        log_error "requirements.txt 文件不存在"
-        exit 1
+        log_error "❌ requirements.txt 文件不存在: ${SCRIPT_DIR}/requirements.txt"
+        return 1
     fi
 }
 
@@ -401,6 +467,7 @@ Captcha Recognition Service Management Script
     health      健康检查
     logs        查看日志 (可选参数: access, error, all)
     install     安装依赖
+    check       检查依赖状态
     config      编辑配置文件
     help        显示此帮助信息
 
@@ -414,6 +481,7 @@ Captcha Recognition Service Management Script
     $0 logs access              # 查看访问日志
     $0 logs error               # 查看错误日志
     $0 install                  # 安装依赖
+    $0 check                    # 检查依赖状态
     $0 config                   # 编辑配置
 
 配置文件: $CONFIG_FILE
@@ -467,6 +535,10 @@ main() {
         "install")
             check_python_env
             install_dependencies
+            ;;
+        "check")
+            check_python_env
+            check_dependencies
             ;;
         "config")
             edit_config
