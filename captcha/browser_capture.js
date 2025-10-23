@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.2.2
+// @version      4.2.3
 // @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。修复跨域图片处理问题。
 // @author       xixiu
 // @thanks       哈士奇
@@ -257,7 +257,18 @@
                                                 selector(imgSelector).getAttribute("src")
                                             );
                                             if (code) {
-                                                selector(inputSelector).value = code;
+                                                let inputElement = selector(inputSelector);
+                                                // Element UI 特殊处理
+                                                if (inputElement.closest('.el-input-group')) {
+                                                    // 触发Element UI的输入事件
+                                                    inputElement.value = code;
+                                                    inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+                                                    inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+                                                    inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
+                                                } else {
+                                                    inputElement.value = code;
+                                                }
+
                                                 if (typeof Vue !== "undefined") {
                                                     new Vue().$message.success("获取验证码成功");
                                                 }
@@ -648,8 +659,13 @@
                 // 优先匹配 src 中包含明确验证码路径的图片
                 let isCaptchaSrc = /createimage|captcha|verify|checkcode|validatecode|rand|vcode|authcode/i.test(imgSrc);
 
+                // Element UI 特殊处理：检查是否在 el-input-group__append 内
+                let isElementUICaptcha = img.closest('.el-input-group__append') &&
+                    img.closest('.el-input-group') &&
+                    imgSrc.startsWith('data:image/');
+
                 // 对于明确是验证码路径的图片，放宽尺寸限制（图片可能还在加载中）
-                if (isCaptchaSrc && !isInvalid) {
+                if ((isCaptchaSrc || isElementUICaptcha) && !isInvalid) {
                     // 检查是否已经添加过
                     let alreadyAdded = captchaMap.some(item => item.img === img);
                     if (!alreadyAdded) {
@@ -695,8 +711,18 @@
                         // 优先查找在图片之前且最接近的输入框
                         let nearbyInput = null;
 
+                        // 方法0: Element UI 特殊处理
+                        let elInputGroup = imgEle.closest('.el-input-group');
+                        if (elInputGroup) {
+                            let inputInGroup = elInputGroup.querySelector('input[type="text"], input:not([type])');
+                            if (inputInGroup) {
+                                nearbyInput = inputInGroup;
+                                console.log(`[验证码助手] 找到Element UI输入框: ${inputInGroup.getAttribute("id") || inputInGroup.getAttribute("name")}`);
+                            }
+                        }
+
                         // 方法1: 查找图片的前一个兄弟节点中的输入框
-                        if (i === 0 || i === 1) {
+                        if (!nearbyInput && (i === 0 || i === 1)) {
                             // 在前两层（直接父节点和父父节点）查找
                             let currentNode = imgEle;
                             // 向前查找兄弟节点
@@ -816,7 +842,17 @@
                             item.img.getAttribute("src")
                         );
                         if (code) {
-                            item.input.value = code;
+                            // Element UI 特殊处理
+                            if (item.input.closest('.el-input-group')) {
+                                // 触发Element UI的输入事件
+                                item.input.value = code;
+                                item.input.dispatchEvent(new Event('input', { bubbles: true }));
+                                item.input.dispatchEvent(new Event('change', { bubbles: true }));
+                                item.input.dispatchEvent(new Event('blur', { bubbles: true }));
+                            } else {
+                                item.input.value = code;
+                            }
+
                             if (typeof Vue !== "undefined") {
                                 new Vue().$message.success("获取验证码成功");
                             }
