@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.4.3
+// @version      1.4.5
 // @description  使用Dify工作流智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
@@ -28,6 +28,20 @@
         buttonPosition: {
             bottom: '80px',
             right: '20px'
+        },
+
+        // Frame页面检测配置
+        frameDetection: {
+            // 自定义frame相关的class名称
+            customFrameClasses: GM_getValue('customFrameClasses', []),
+            // 自定义frame相关的选择器
+            customFrameSelectors: GM_getValue('customFrameSelectors', []),
+            // 自定义frame相关的URL参数
+            customFrameParams: GM_getValue('customFrameParams', []),
+            // 自定义frame相关的标题关键词
+            customFrameKeywords: GM_getValue('customFrameKeywords', []),
+            // 最小页面尺寸阈值
+            minViewportSize: GM_getValue('minViewportSize', { width: 800, height: 600 })
         }
     };
 
@@ -1569,7 +1583,118 @@
     // ==================== 初始化 ====================
     let uiManager = null;
 
+    // 检测是否为独立frame页面
+    // 修复：防止在独立frame页面中创建多个dify图标
+    function isIndependentFrame() {
+        const body = document.body;
+        if (!body) return false;
+
+        // 检查是否在iframe中
+        if (window !== window.top) {
+            return true;
+        }
+
+        // 合并默认和自定义的frame相关class
+        const defaultFrameClasses = [
+            'web_qrcode_type_iframe',
+            'iframe-mode',
+            'frame-page',
+            'embedded-page',
+            'popup-page',
+            'modal-page'
+        ];
+        const frameClasses = [...defaultFrameClasses, ...CONFIG.frameDetection.customFrameClasses];
+
+        const hasFrameClass = frameClasses.some(cls => body.classList.contains(cls));
+
+        // 合并默认和自定义的frame相关选择器
+        const defaultFrameSelectors = [
+            '#tpl_for_page',
+            '#tpl_for_iframe',
+            '.iframe-container',
+            '.frame-container',
+            '.popup-container',
+            '.modal-container',
+            '[class*="iframe"]',
+            '[class*="frame"]',
+            '[class*="popup"]',
+            '[class*="modal"]'
+        ];
+        const frameSelectors = [...defaultFrameSelectors, ...CONFIG.frameDetection.customFrameSelectors];
+
+        const hasFrameStructure = frameSelectors.some(selector => {
+            try {
+                return document.querySelector(selector) !== null;
+            } catch (e) {
+                return false;
+            }
+        });
+
+        // 检查URL参数中是否包含frame相关标识
+        const urlParams = new URLSearchParams(window.location.search);
+        const defaultFrameParams = ['iframe', 'frame', 'popup', 'modal', 'embedded'];
+        const frameParams = [...defaultFrameParams, ...CONFIG.frameDetection.customFrameParams];
+        const hasFrameParam = frameParams.some(param => urlParams.has(param));
+
+        // 检查页面标题是否包含frame相关关键词
+        const title = document.title.toLowerCase();
+        const defaultFrameKeywords = ['iframe', 'frame', 'popup', 'modal', 'embedded', '独立页面', '弹窗'];
+        const frameKeywords = [...defaultFrameKeywords, ...CONFIG.frameDetection.customFrameKeywords];
+        const hasFrameTitle = frameKeywords.some(keyword => title.includes(keyword));
+
+        return hasFrameClass || hasFrameStructure || hasFrameParam || hasFrameTitle;
+    }
+
+    // 检测是否为最外层页面
+    function isTopLevelPage() {
+        // 检查是否在iframe中
+        if (window !== window.top) {
+            return false;
+        }
+
+        // 检查是否为独立frame页面
+        if (isIndependentFrame()) {
+            return false;
+        }
+
+        // 检查页面大小，如果页面很小可能是弹窗或独立页面
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const minSize = CONFIG.frameDetection.minViewportSize;
+
+        // 如果视口小于配置的阈值，可能是独立页面
+        if (viewportWidth < minSize.width || viewportHeight < minSize.height) {
+            console.log(`[Dify] 检测到小尺寸页面 (${viewportWidth}x${viewportHeight})，可能是独立frame页面`);
+            return false;
+        }
+
+        // 检查是否有多个同类型的脚本元素（可能是重复加载）
+        const existingButtons = document.querySelectorAll('[id*="dify"]');
+        if (existingButtons.length > 0) {
+            console.log('[Dify] 检测到已存在的dify元素，跳过初始化');
+            return false;
+        }
+
+        return true;
+    }
+
     function init() {
+        // 调试信息
+        console.log('[Dify] 页面检测信息:', {
+            url: window.location.href,
+            title: document.title,
+            viewport: `${window.innerWidth}x${window.innerHeight}`,
+            isTopWindow: window === window.top,
+            isIndependentFrame: isIndependentFrame(),
+            isTopLevelPage: isTopLevelPage()
+        });
+
+        // 只在最外层页面初始化
+        if (!isTopLevelPage()) {
+            console.log('[Dify Web Summarizer] 检测到独立frame页面，跳过初始化');
+            return;
+        }
+
         // 等待页面加载完成
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
