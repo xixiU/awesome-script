@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.4.5
+// @version      1.4.6
 // @description  使用Dify工作流智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
@@ -1648,6 +1648,12 @@
 
     // 注册油猴菜单命令
     function registerMenuCommands() {
+        GM_registerMenuCommand('📝 AI总结当前页面', () => {
+            if (uiManager) {
+                uiManager.handleSummarize();
+            }
+        });
+
         GM_registerMenuCommand('⚙️ 打开设置', () => {
             if (uiManager) {
                 uiManager.showSettings();
