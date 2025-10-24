@@ -38,34 +38,34 @@
             bottom: 80px;
             right: 0px;
             z-index: 2147483647;
-            padding: 12px 16px;
+            padding: 6px 8px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            border-top-left-radius: 25px;
-            border-bottom-left-radius: 25px;
+            border-top-left-radius: 20px;
+            border-bottom-left-radius: 20px;
             border-top-right-radius: 0;
             border-bottom-right-radius: 0;
             cursor: move;
-            font-size: 20px;
+            font-size: 16px;
             font-weight: bold;
             box-shadow: -2px 2px 10px rgba(0, 0, 0, 0.2);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             user-select: none;
             touch-action: none;
-            width: 48px;
+            width: 36px;
             overflow: hidden;
             white-space: nowrap;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
         }
 
         #dify-summarizer-btn .btn-icon {
             flex-shrink: 0;
             display: inline-block;
-            width: 20px;
+            width: 16px;
             text-align: center;
         }
 
