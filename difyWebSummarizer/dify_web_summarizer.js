@@ -144,6 +144,11 @@
             opacity: 1 !important;
             transform: translateX(0) !important;
         }
+
+        /* 隐藏状态（用于全屏等场景）*/
+        #dify-summarizer-btn.hidden {
+            display: none !important;
+        }
         
         #dify-result-panel {
             position: fixed;
@@ -1617,11 +1622,11 @@
 
                     if (isFullscreen) {
                         // 全屏时隐藏按钮
-                        this.button.style.display = 'none';
+                        this.button.classList.add('hidden');
                         //console.log('[Dify] 检测到全屏状态，隐藏AI总结按钮');
                     } else {
                         // 退出全屏时显示按钮
-                        this.button.style.display = 'flex';
+                        this.button.classList.remove('hidden');
                         //console.log('[Dify] 退出全屏状态，显示AI总结按钮');
                     }
                 }
