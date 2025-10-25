@@ -38,7 +38,7 @@
             bottom: 80px;
             right: 0px;
             z-index: 2147483647 !important;
-            padding: 6px 6px !important;
+            padding: 8px 10px !important;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
             color: white !important;
             border: none !important;
@@ -54,84 +54,95 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
             user-select: none;
             touch-action: none;
-            width: 36px !important;
+            width: 40px !important;
+            height: auto !important;
+            min-height: 40px !important;
             overflow: hidden !important;
             white-space: nowrap !important;
             display: flex !important;
             align-items: center !important;
             gap: 4px !important;
+            transform: scale(1) !important;
             box-sizing: border-box !important;
         }
 
         #dify-summarizer-btn .btn-icon {
             flex-shrink: 0 !important;
-            display: inline-block !important;
-            width: 16px !important;
-            text-align: center !important;
-            font-size: 16px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 24px !important;
+            height: 24px !important;
+            font-size: 20px !important;
             line-height: 1 !important;
+            text-align: center !important;
+            transform: scale(1) !important;
+            font-style: normal !important;
+            font-weight: normal !important;
         }
 
         #dify-summarizer-btn .btn-text {
-            font-size: 14px;
-            opacity: 0;
-            transform: translateX(-10px);
+            flex-shrink: 0;
+            font-size: 14px !important;
+            opacity: 0 !important;
+            transform: translateX(-10px) !important;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
         }
 
         /* 贴边模式：悬停时展开 */
         #dify-summarizer-btn.edge-mode:hover {
-            width: 140px;
-            padding: 12px 20px;
+            width: 140px !important;
+            padding: 12px 20px !important;
             right: 0px;
-            box-shadow: -4px 4px 20px rgba(0, 0, 0, 0.3);
+            box-shadow: -4px 4px 20px rgba(0, 0, 0, 0.3) !important;
         }
 
         #dify-summarizer-btn.edge-mode:hover .btn-text {
-            opacity: 1;
-            transform: translateX(0);
+            opacity: 1 !important;
+            transform: translateX(0) !important;
         }
 
         /* 自由模式：始终展开，圆角按钮 */
         #dify-summarizer-btn.free-mode {
-            width: 140px;
-            padding: 12px 20px;
-            border-radius: 25px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            width: 140px !important;
+            padding: 12px 20px !important;
+            border-radius: 25px !important;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
         }
 
         #dify-summarizer-btn.free-mode .btn-text {
-            opacity: 1;
-            transform: translateX(0);
+            opacity: 1 !important;
+            transform: translateX(0) !important;
         }
 
         #dify-summarizer-btn.free-mode:hover {
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3) !important;
         }
 
         #dify-summarizer-btn.dragging {
             cursor: grabbing;
             opacity: 0.8;
             transition: none;
-            width: 140px;
-            padding: 12px 20px;
+            width: 140px !important;
+            padding: 12px 20px !important;
         }
 
         #dify-summarizer-btn.dragging .btn-text {
-            opacity: 1;
-            transform: translateX(0);
+            opacity: 1 !important;
+            transform: translateX(0) !important;
         }
 
         #dify-summarizer-btn.loading {
-            background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+            background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%) !important;
             cursor: wait;
-            width: 140px;
-            padding: 12px 20px;
+            width: 140px !important;
+            padding: 12px 20px !important;
         }
 
         #dify-summarizer-btn.loading .btn-text {
-            opacity: 1;
-            transform: translateX(0);
+            opacity: 1 !important;
+            transform: translateX(0) !important;
         }
         
         #dify-result-panel {
