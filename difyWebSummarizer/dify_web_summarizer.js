@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.4.5
+// @version      1.4.6
 // @description  使用Dify工作流智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
@@ -37,35 +37,35 @@
             position: fixed;
             bottom: 80px;
             right: 0px;
-            z-index: 999999;
-            padding: 12px 16px;
+            z-index: 2147483647;
+            padding: 6px 8px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            border-top-left-radius: 25px;
-            border-bottom-left-radius: 25px;
+            border-top-left-radius: 20px;
+            border-bottom-left-radius: 20px;
             border-top-right-radius: 0;
             border-bottom-right-radius: 0;
             cursor: move;
-            font-size: 20px;
+            font-size: 16px;
             font-weight: bold;
             box-shadow: -2px 2px 10px rgba(0, 0, 0, 0.2);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             user-select: none;
             touch-action: none;
-            width: 48px;
+            width: 36px;
             overflow: hidden;
             white-space: nowrap;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
         }
 
         #dify-summarizer-btn .btn-icon {
             flex-shrink: 0;
             display: inline-block;
-            width: 20px;
+            width: 16px;
             text-align: center;
         }
 
@@ -789,6 +789,9 @@
 
             // 创建遮罩层
             this.createOverlay();
+
+            // 添加全屏状态监听
+            this.initFullscreenDetection();
         }
 
         createButton() {
@@ -1588,6 +1591,37 @@
                 keyStatus.className = 'dify-config-status not-configured';
             }
         }
+
+        initFullscreenDetection() {
+            // 检测全屏状态变化
+            const handleFullscreenChange = () => {
+                if (this.button) {
+                    const isFullscreen = !!(document.fullscreenElement ||
+                        document.webkitFullscreenElement ||
+                        document.mozFullScreenElement ||
+                        document.msFullscreenElement);
+
+                    if (isFullscreen) {
+                        // 全屏时隐藏按钮
+                        this.button.style.display = 'none';
+                        //console.log('[Dify] 检测到全屏状态，隐藏AI总结按钮');
+                    } else {
+                        // 退出全屏时显示按钮
+                        this.button.style.display = 'flex';
+                        //console.log('[Dify] 退出全屏状态，显示AI总结按钮');
+                    }
+                }
+            };
+
+            // 监听各种全屏事件
+            document.addEventListener('fullscreenchange', handleFullscreenChange);
+            document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+            document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+            document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+            // 初始检查
+            handleFullscreenChange();
+        }
     }
 
     // ==================== 初始化 ====================
@@ -1614,6 +1648,12 @@
 
     // 注册油猴菜单命令
     function registerMenuCommands() {
+        GM_registerMenuCommand('📝 AI总结当前页面', () => {
+            if (uiManager) {
+                uiManager.handleSummarize();
+            }
+        });
+
         GM_registerMenuCommand('⚙️ 打开设置', () => {
             if (uiManager) {
                 uiManager.showSettings();
