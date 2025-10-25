@@ -34,39 +34,42 @@
     // ==================== 样式定义 ====================
     const styles = `
         #dify-summarizer-btn {
-            position: fixed;
+            position: fixed !important;
             bottom: 80px;
             right: 0px;
-            z-index: 2147483647;
-            padding: 6px 8px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-top-left-radius: 20px;
-            border-bottom-left-radius: 20px;
-            border-top-right-radius: 0;
-            border-bottom-right-radius: 0;
+            z-index: 2147483647 !important;
+            padding: 6px 6px !important;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            color: white !important;
+            border: none !important;
+            border-top-left-radius: 20px !important;
+            border-bottom-left-radius: 20px !important;
+            border-top-right-radius: 0 !important;
+            border-bottom-right-radius: 0 !important;
             cursor: move;
-            font-size: 16px;
-            font-weight: bold;
-            box-shadow: -2px 2px 10px rgba(0, 0, 0, 0.2);
+            font-size: 16px !important;
+            font-weight: bold !important;
+            box-shadow: -2px 2px 10px rgba(0, 0, 0, 0.2) !important;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
             user-select: none;
             touch-action: none;
-            width: 36px;
-            overflow: hidden;
-            white-space: nowrap;
-            display: flex;
-            align-items: center;
-            gap: 4px;
+            width: 36px !important;
+            overflow: hidden !important;
+            white-space: nowrap !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            box-sizing: border-box !important;
         }
 
         #dify-summarizer-btn .btn-icon {
-            flex-shrink: 0;
-            display: inline-block;
-            width: 16px;
-            text-align: center;
+            flex-shrink: 0 !important;
+            display: inline-block !important;
+            width: 16px !important;
+            text-align: center !important;
+            font-size: 16px !important;
+            line-height: 1 !important;
         }
 
         #dify-summarizer-btn .btn-text {
