@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>批量运维工具</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 12px 12px 0 0;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .main-content {
+            background: white;
+            padding: 30px;
+            border-radius: 0 0 12px 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+            font-weight: 600;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #555;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .file-upload {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #fafafa;
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+            background: #f0f0ff;
+        }
+
+        .file-upload.has-file {
+            border-color: #667eea;
+            background: #e8f0fe;
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .file-info {
+            margin-top: 10px;
+            color: #666;
+            font-size: 13px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex: 1;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .results-container {
+            margin-top: 30px;
+        }
+
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 13px;
+        }
+
+        .preview-table th,
+        .preview-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .preview-table th {
+            background: #f8f9fa;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .preview-table tr:hover {
+            background: #f5f5f5;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .execution-results {
+            margin-top: 20px;
+        }
+
+        .result-item {
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            background: #f8f9fa;
+        }
+
+        .result-item.success {
+            border-left-color: #28a745;
+        }
+
+        .result-item.error {
+            border-left-color: #dc3545;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .result-url {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #666;
+            word-break: break-all;
+        }
+
+        .result-body {
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+
+        .help-text {
+            color: #666;
+            font-size: 13px;
+            margin-top: 5px;
+        }
+
+        .example {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+            color: #555;
+        }
+
+        .command-preview {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+
+        .command-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            background: white;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .command-item:hover {
+            background: #f5f5f5;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 批量运维工具</h1>
+            <p>将 curl 命令与 Excel 数据结合，快速执行批量运维操作</p>
+        </div>
+
+        <div class="main-content">
+            <!-- 第一步：输入 curl 命令 -->
+            <div class="section">
+                <div class="section-title">步骤 1：输入 curl 命令</div>
+                <div class="input-group">
+                    <label for="curlCommand">
+                        curl 命令（支持 ${列名} 变量占位符）
+                        <span class="help-text">在命令中使用 ${列名} 来标记需要替换的参数</span>
+                    </label>
+                    <textarea id="curlCommand"
+                        placeholder="例如：curl -X POST http://example.com/api -d 'user=${用户名}&age=${年龄}'"></textarea>
+                    <div class="example">
+                        示例：curl -X POST https://api.example.com/users -H "Content-Type: application/json" -d
+                        '{"name":"${姓名}","id":"${编号}"}'
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第二步：上传 Excel 文件 -->
+            <div class="section">
+                <div class="section-title">步骤 2：上传 Excel 参数文件</div>
+                <div class="input-group">
+                    <label for="excelFile">Excel 文件（.xlsx 或 .xls）</label>
+                    <div class="file-upload" id="fileUploadArea">
+                        <div class="upload-icon">📄</div>
+                        <div>点击或拖拽上传 Excel 文件</div>
+                        <div class="file-info" id="fileInfo">未选择文件</div>
+                        <input type="file" id="excelFile" accept=".xlsx,.xls">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第三步：预览 -->
+            <div class="section" id="previewSection" style="display: none;">
+                <div class="section-title">步骤 3：数据预览</div>
+                <div id="previewContent"></div>
+            </div>
+
+            <!-- 命令预览 -->
+            <div class="section" id="commandPreviewSection" style="display: none;">
+                <div class="section-title">命令预览</div>
+                <div id="commandPreviewContent"></div>
+                <div class="button-group" style="margin-top: 15px;">
+                    <button class="btn-primary" id="exportScriptBtn">
+                        📥 导出为 Shell 脚本
+                    </button>
+                    <button class="btn-secondary" id="resetBtnPage">重置</button>
+                </div>
+            </div>
+
+            <!-- 执行结果 -->
+            <div class="section" id="resultsSection" style="display: none;">
+                <div class="section-title">执行结果</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+                <div id="progressText" style="text-align: center; color: #666; margin-bottom: 15px;">准备就绪</div>
+                <div id="executionResults"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let excelData = [];
+        let curlTemplate = '';
+        let executedRequests = 0;
+        let totalRequests = 0;
+        let results = [];
+
+        // 文件上传区域事件
+        const fileUploadArea = document.getElementById('fileUploadArea');
+        const excelFileInput = document.getElementById('excelFile');
+        const fileInfo = document.getElementById('fileInfo');
+
+        fileUploadArea.addEventListener('click', () => {
+            excelFileInput.click();
+        });
+
+        fileUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileUploadArea.style.borderColor = '#667eea';
+        });
+
+        fileUploadArea.addEventListener('dragleave', () => {
+            fileUploadArea.style.borderColor = '#ccc';
+        });
+
+        fileUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileUploadArea.style.borderColor = '#ccc';
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                excelFileInput.files = files;
+                handleFileUpload();
+            }
+        });
+
+        excelFileInput.addEventListener('change', handleFileUpload);
+
+        function handleFileUpload() {
+            const file = excelFileInput.files[0];
+            if (!file) return;
+
+            fileInfo.textContent = file.name;
+            fileUploadArea.classList.add('has-file');
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = e.target.result;
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    excelData = XLSX.utils.sheet_to_json(firstSheet);
+
+                    if (excelData.length > 0) {
+                        showPreview();
+                    } else {
+                        alert('Excel 文件为空或格式不正确');
+                    }
+                } catch (error) {
+                    alert('读取 Excel 文件失败: ' + error.message);
+                }
+            };
+            reader.readAsBinaryString(file);
+        }
+
+        function showPreview() {
+            curlTemplate = document.getElementById('curlCommand').value;
+            const previewSection = document.getElementById('previewSection');
+            const previewContent = document.getElementById('previewContent');
+            const commandPreviewSection = document.getElementById('commandPreviewSection');
+            const commandPreviewContent = document.getElementById('commandPreviewContent');
+
+            if (!curlTemplate.trim()) {
+                alert('请先输入 curl 命令');
+                return;
+            }
+
+            // 检测命令中的变量
+            const variables = extractVariables(curlTemplate);
+
+            if (variables.length === 0) {
+                alert('curl 命令中没有找到变量占位符（如 ${列名}）');
+                return;
+            }
+
+            // 显示预览表格
+            let tableHtml = `
+                <p style="margin-bottom: 10px; color: #666;">
+                    检测到 ${excelData.length} 条数据，变量: ${variables.join(', ')}
+                </p>
+                <table class="preview-table">
+                    <thead>
+                        <tr>
+                            <th>序号</th>
+                            ${variables.map(v => `<th>${v}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${excelData.slice(0, 5).map((row, idx) => `
+                            <tr>
+                                <td>${idx + 1}</td>
+                                ${variables.map(v => `<td>${row[v] || ''}</td>`).join('')}
+                            </tr>
+                        `).join('')}
+                        ${excelData.length > 5 ? `<tr><td colspan="${variables.length + 1}" style="text-align: center; color: #999;">... 还有 ${excelData.length - 5} 条数据</td></tr>` : ''}
+                    </tbody>
+                </table>
+            `;
+
+            previewContent.innerHTML = tableHtml;
+            previewSection.style.display = 'block';
+
+            // 显示命令预览
+            showCommandPreview(curlTemplate, variables, commandPreviewSection, commandPreviewContent);
+        }
+
+        // 显示命令预览
+        function showCommandPreview(curlTemplate, variables, section, content) {
+            let commands = excelData.map((row, idx) => {
+                const replacedCommand = replaceVariables(curlTemplate, variables, row);
+                return { index: idx + 1, command: replacedCommand };
+            });
+
+            // 转义 HTML 并保持换行格式
+            const escapeHtml = (text) => {
+                return text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            };
+
+            let previewHtml = `
+                <p style="margin-bottom: 10px; color: #666;">
+                    生成 ${commands.length} 条 curl 命令（显示前 3 条）：
+                </p>
+                <div class="command-preview">
+                    ${commands.slice(0, 3).map(cmd => `
+                        <div class="command-item">
+                            <strong>命令 ${cmd.index}:</strong>
+                            <pre style="margin-top: 5px; white-space: pre-wrap; word-break: break-all; font-family: 'Courier New', monospace; font-size: 11px; background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto;">${escapeHtml(cmd.command)}</pre>
+                        </div>
+                    `).join('')}
+                    ${commands.length > 3 ? `<div style="text-align: center; color: #999; padding: 10px;">... 还有 ${commands.length - 3} 条命令</div>` : ''}
+                </div>
+            `;
+
+            content.innerHTML = previewHtml;
+            section.style.display = 'block';
+        }
+
+        // 提取变量
+        function extractVariables(curlCommand) {
+            // 支持两种格式: ${列名} 和 {列名}
+            const matches1 = curlCommand.match(/\$\{([^}]+)\}/g);
+            const matches2 = curlCommand.match(/\{([^}]+)\}/g);
+
+            const allMatches = [];
+            if (matches1) allMatches.push(...matches1);
+            if (matches2) {
+                // 过滤掉已经被 ${格式匹配的，避免重复
+                matches2.forEach(m => {
+                    if (!allMatches.includes('$' + m)) {
+                        allMatches.push(m);
+                    }
+                });
+            }
+
+            if (allMatches.length === 0) return [];
+
+            // 统一去除大括号，支持两种格式
+            const variables = [...new Set(allMatches.map(m => m.replace(/^\$\{/, '').replace(/\}$/, '')))];
+            return variables;
+        }
+
+        // 替换变量
+        function replaceVariables(curlCommand, variables, row) {
+            let result = curlCommand;
+            variables.forEach(variable => {
+                const value = row[variable] || '';
+                // 转义特殊字符以支持中文和特殊字符
+                const escapedVariable = variable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                // 替换两种格式: ${变量} 和 {变量}
+                result = result.replace(new RegExp(`\\$\\{${escapedVariable}\\}`, 'g'), value);
+                result = result.replace(new RegExp(`\\{${escapedVariable}\\}`, 'g'), value);
+            });
+            return result;
+        }
+
+        // 重置按钮事件
+        document.getElementById('resetBtnPage').addEventListener('click', () => {
+            location.reload();
+        });
+
+
+        // 导出为 Shell 脚本
+        function exportToShellScript() {
+            if (!curlTemplate.trim() || excelData.length === 0) {
+                alert('请先完成配置');
+                return;
+            }
+
+            const variables = extractVariables(curlTemplate);
+
+            // 生成所有的 curl 命令
+            const allCommands = excelData.map((row) => {
+                return replaceVariables(curlTemplate, variables, row);
+            });
+
+            // 生成 shell 脚本内容
+            const scriptContent = `#!/bin/bash
+# 批量运维脚本
+# 生成时间: ${new Date().toLocaleString('zh-CN')}
+# 共 ${allCommands.length} 条命令
+
+set -e  # 遇到错误时立即退出
+
+echo "开始执行批量操作..."
+echo "共 ${allCommands.length} 条命令"
+echo ""
+
+# 执行命令
+${allCommands.map((cmd, idx) => `
+# 第 ${idx + 1} 条命令
+echo "[$((idx + 1))/${allCommands.length}] 执行命令..."
+${cmd}
+echo "完成第 $((idx + 1)) 条命令"
+echo "---"
+`).join('\n')}
+
+echo ""
+echo "全部完成！共执行 ${allCommands.length} 条命令"
+`;
+
+            // 创建下载链接
+            const blob = new Blob([scriptContent], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `batch_ops_${new Date().getTime()}.sh`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            alert('Shell 脚本导出成功！请下载后上传到服务器执行。');
+        }
+
+        // 导出按钮事件
+        document.getElementById('exportScriptBtn').addEventListener('click', exportToShellScript);
+
+        // 监听 curl 命令变化，自动显示预览
+        document.getElementById('curlCommand').addEventListener('input', () => {
+            if (excelData.length > 0) {
+                showPreview();
+            }
+        });
+    </script>
+</body>
+
+</html>
