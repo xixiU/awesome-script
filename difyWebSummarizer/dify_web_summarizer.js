@@ -801,7 +801,7 @@
             try {
                 // 检查浏览器是否支持 Chrome AI
                 if (!window.ai || !window.ai.canCreateTextSession) {
-                    throw new Error('您的浏览器不支持 Chrome Gemini AI。\n请确保：\n1. Chrome 版本 >= 125\n2. 已启用 AI 功能\n3. 已下载 Gemini Nano 模型');
+                    throw new Error('您的浏览器不支持 Chrome Gemini AI。\n请确保：\n1. Chrome 版本 >= 128\n2. 已启用 AI 功能\n3. 已下载 Gemini Nano 模型');
                 }
 
                 // 检查模型可用性
