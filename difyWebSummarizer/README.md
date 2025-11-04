@@ -2,16 +2,21 @@
 
 ## 📝 简介
 
-这是一个基于Dify工作流的智能网页总结工具，可以在任何网页上一键调用AI对当前页面内容进行总结。脚本采用智能算法自动提取网页正文，适用于各类知识型网站。
+这是一个智能网页总结工具，支持使用 Dify 工作流或 Chrome 内置 Gemini AI 对网页内容进行总结。可以在任何网页上一键调用 AI 对当前页面内容进行智能分析。脚本采用智能算法自动提取网页正文，适用于各类知识型网站。
 
 ## ✨ 特性
+
+- 🤖 **双 AI 引擎支持**：
+  - **Dify 工作流**：支持自定义工作流，灵活配置 AI 处理逻辑
+  - **Chrome Gemini AI**：使用 Chrome 浏览器内置的 Gemini Nano 模型，无需配置 API，本地运行更快速
+  - 一键切换，满足不同使用场景
 
 - 🎯 **智能内容提取**：采用多策略智能算法，自动识别并提取网页正文
   - 支持常见的文章网站（博客、新闻、技术文档等）
   - 自动过滤广告、导航栏、侧边栏等无关内容
   - 使用文本密度算法精准定位主要内容区域
 
-- 🚀 **一键总结**：点击浮动按钮即可调用Dify工作流进行内容总结
+- 🚀 **一键总结**：点击浮动按钮即可调用 AI 进行内容总结
 
 - 💡 **美观的UI**：
   - 现代化的渐变色设计
@@ -29,17 +34,33 @@
 
 ### 前置要求
 
+#### 必需
+
 1. 安装浏览器扩展 [Tampermonkey](https://www.tampermonkey.net/)
    - Chrome: [Chrome Web Store](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojobhflfapmlkmbgj)
    - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/)
    - Edge: [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)
 
-2. 准备Dify工作流
-   - 登录你的Dify平台
-   - 创建一个工作流，包含以下输入参数：
-     - `newsUrl` (文本): 网页URL
-     - `newsContent` (文本): 网页正文内容
-   - 获取工作流的API地址和API Key
+#### AI 提供商配置（二选一）
+
+##### 选项 1: 使用 Chrome Gemini AI（推荐新手）
+
+- **Chrome 版本**: >= 125
+- **Gemini Nano 模型**: 需要下载
+  1. 访问 `chrome://components`
+  2. 找到 "Optimization Guide On Device Model"
+  3. 确认版本号 >= 2024.5.21.1031
+  4. 如未安装，点击 "Check for update" 下载
+- **优势**: 无需配置 API，本地运行，响应快速，免费
+
+##### 选项 2: 使用 Dify 工作流（适合进阶用户）
+
+- 登录你的Dify平台
+- 创建一个工作流，包含以下输入参数：
+  - `newsUrl` (文本): 网页URL
+  - `newsContent` (文本): 网页正文内容
+- 获取工作流的API地址和API Key
+- **优势**: 自定义工作流，灵活配置 AI 处理逻辑
 
 ### 安装步骤
 
@@ -55,6 +76,7 @@
 **特色：代码与配置完全分离** ✨
 
 脚本采用现代化的配置管理方式，所有配置信息都存储在浏览器本地，与脚本代码完全分离。这意味着：
+
 - ✅ 升级脚本时不会丢失配置
 - ✅ 配置信息安全存储在本地
 - ✅ 美观的可视化配置界面

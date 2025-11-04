@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.4.6
-// @description  使用Dify工作流智能总结网页内容，支持各类知识型网站
+// @version      1.5.0
+// @description  使用Dify工作流或Chrome Gemini AI智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
@@ -20,6 +20,9 @@
 
     // ==================== 配置区域 ====================
     const CONFIG = {
+        // AI提供商配置: 'dify' 或 'chrome-gemini'
+        aiProvider: GM_getValue('aiProvider', 'dify'),
+
         // Dify API配置 - 需要用户自行配置
         difyApiUrl: GM_getValue('difyApiUrl', 'https://api.dify.ai/v1/workflows/run'), // 替换为你的Dify工作流API地址
         difyApiKey: GM_getValue('difyApiKey', ''), // 替换为你的Dify API Key
@@ -399,7 +402,8 @@
             font-size: 14px;
         }
 
-        .dify-form-group input {
+        .dify-form-group input,
+        .dify-form-group select {
             width: 100%;
             padding: 10px 12px;
             border: 2px solid #e5e7eb;
@@ -410,13 +414,19 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
 
-        .dify-form-group input:focus {
+        .dify-form-group input:focus,
+        .dify-form-group select:focus {
             outline: none;
             border-color: #10b981;
         }
 
         .dify-form-group input::placeholder {
             color: #9ca3af;
+        }
+
+        .dify-form-group select {
+            cursor: pointer;
+            background-color: white;
         }
 
         .dify-form-help {
@@ -785,6 +795,54 @@
         }
     }
 
+    // ==================== Chrome Gemini AI调用 ====================
+    class ChromeGeminiAPI {
+        static async summarize(newsUrl, newsContent) {
+            try {
+                // 检查浏览器是否支持 Chrome AI
+                if (!window.ai || !window.ai.canCreateTextSession) {
+                    throw new Error('您的浏览器不支持 Chrome Gemini AI。\n请确保：\n1. Chrome 版本 >= 125\n2. 已启用 AI 功能\n3. 已下载 Gemini Nano 模型');
+                }
+
+                // 检查模型可用性
+                const canCreate = await window.ai.canCreateTextSession();
+                if (canCreate === 'no') {
+                    throw new Error('Chrome Gemini AI 模型不可用。\n请在 chrome://components 中检查 "Optimization Guide On Device Model" 是否已下载。');
+                }
+
+                // 创建文本会话
+                const session = await window.ai.createTextSession();
+
+                // 构建总结提示词
+                const prompt = `请对以下网页内容进行智能总结，要求：
+1. 提取核心观点和关键信息
+2. 使用清晰的结构组织内容
+3. 保持客观准确
+4. 使用中文输出
+
+网页地址：${newsUrl}
+
+网页内容：
+${newsContent.substring(0, 8000)}
+
+请生成总结：`;
+
+                // 调用模型生成总结
+                const result = await session.prompt(prompt);
+
+                // 销毁会话（可选，释放资源）
+                if (session.destroy) {
+                    session.destroy();
+                }
+
+                return result;
+            } catch (error) {
+                console.error('[Chrome Gemini] 调用失败:', error);
+                throw new Error(`Chrome Gemini AI 调用失败: ${error.message}`);
+            }
+        }
+    }
+
     // ==================== UI管理 ====================
     class UIManager {
         constructor() {
@@ -1086,6 +1144,41 @@
             successMsg.textContent = '✓ 配置已成功保存！';
             content.appendChild(successMsg);
 
+            // AI 提供商选择器
+            const providerGroup = document.createElement('div');
+            providerGroup.className = 'dify-form-group';
+
+            const providerLabel = document.createElement('label');
+            providerLabel.setAttribute('for', 'dify-ai-provider');
+            providerLabel.textContent = 'AI 提供商';
+
+            const providerSelect = document.createElement('select');
+            providerSelect.id = 'dify-ai-provider';
+            providerSelect.className = 'dify-select';
+
+            const difyOption = document.createElement('option');
+            difyOption.value = 'dify';
+            difyOption.textContent = 'Dify 工作流';
+            providerSelect.appendChild(difyOption);
+
+            const geminiOption = document.createElement('option');
+            geminiOption.value = 'chrome-gemini';
+            geminiOption.textContent = 'Chrome Gemini AI (内置)';
+            providerSelect.appendChild(geminiOption);
+
+            const providerHelp = document.createElement('div');
+            providerHelp.className = 'dify-form-help';
+            providerHelp.textContent = '选择使用哪个 AI 服务来生成总结';
+
+            providerGroup.appendChild(providerLabel);
+            providerGroup.appendChild(providerSelect);
+            providerGroup.appendChild(providerHelp);
+            content.appendChild(providerGroup);
+
+            // 添加提供商切换事件，控制 Dify 配置项的显示/隐藏
+            const difyConfigSection = document.createElement('div');
+            difyConfigSection.id = 'dify-config-section';
+
             // API URL 表单组
             const urlGroup = document.createElement('div');
             urlGroup.className = 'dify-form-group';
@@ -1112,7 +1205,7 @@
             urlGroup.appendChild(urlLabel);
             urlGroup.appendChild(urlInput);
             urlGroup.appendChild(urlHelp);
-            content.appendChild(urlGroup);
+            difyConfigSection.appendChild(urlGroup);
 
             // API Key 表单组
             const keyGroup = document.createElement('div');
@@ -1140,7 +1233,10 @@
             keyGroup.appendChild(keyLabel);
             keyGroup.appendChild(keyInput);
             keyGroup.appendChild(keyHelp);
-            content.appendChild(keyGroup);
+            difyConfigSection.appendChild(keyGroup);
+
+            // 将 Dify 配置区块添加到内容区
+            content.appendChild(difyConfigSection);
 
             // 按钮组
             const actionsDiv = document.createElement('div');
@@ -1171,6 +1267,15 @@
             closeBtn.addEventListener('click', () => this.hideSettingsPanel());
             cancelBtn.addEventListener('click', () => this.hideSettingsPanel());
             saveBtn.addEventListener('click', () => this.saveSettings());
+
+            // AI 提供商切换事件
+            providerSelect.addEventListener('change', () => {
+                if (providerSelect.value === 'chrome-gemini') {
+                    difyConfigSection.style.display = 'none';
+                } else {
+                    difyConfigSection.style.display = 'block';
+                }
+            });
 
             // 按 Enter 键保存
             urlInput.addEventListener('keypress', (e) => {
@@ -1219,8 +1324,13 @@
                     throw new Error('未能提取到有效的网页内容，请刷新页面后重试');
                 }
 
-                // 调用Dify API
-                const result = await DifyAPI.summarize(newsUrl, newsContent);
+                // 根据配置选择 AI 提供商
+                let result;
+                if (CONFIG.aiProvider === 'chrome-gemini') {
+                    result = await ChromeGeminiAPI.summarize(newsUrl, newsContent);
+                } else {
+                    result = await DifyAPI.summarize(newsUrl, newsContent);
+                }
 
                 // 保存原始结果文本（用于复制）
                 this.currentResult = result;
@@ -1502,11 +1612,21 @@
 
         showSettings() {
             // 填充当前配置值
+            const providerSelect = this.settingsPanel.querySelector('#dify-ai-provider');
             const urlInput = this.settingsPanel.querySelector('#dify-api-url');
             const keyInput = this.settingsPanel.querySelector('#dify-api-key');
+            const difyConfigSection = this.settingsPanel.querySelector('#dify-config-section');
 
+            providerSelect.value = CONFIG.aiProvider;
             urlInput.value = CONFIG.difyApiUrl;
             keyInput.value = CONFIG.difyApiKey;
+
+            // 根据当前提供商显示/隐藏 Dify 配置
+            if (CONFIG.aiProvider === 'chrome-gemini') {
+                difyConfigSection.style.display = 'none';
+            } else {
+                difyConfigSection.style.display = 'block';
+            }
 
             // 隐藏成功消息
             this.settingsPanel.querySelector('#dify-save-success').classList.remove('show');
@@ -1519,7 +1639,7 @@
             this.overlay.classList.add('show');
 
             // 聚焦到第一个输入框
-            setTimeout(() => urlInput.focus(), 100);
+            setTimeout(() => providerSelect.focus(), 100);
         }
 
         hideSettingsPanel() {
@@ -1528,50 +1648,59 @@
         }
 
         saveSettings() {
+            const providerSelect = this.settingsPanel.querySelector('#dify-ai-provider');
             const urlInput = this.settingsPanel.querySelector('#dify-api-url');
             const keyInput = this.settingsPanel.querySelector('#dify-api-key');
             const successMsg = this.settingsPanel.querySelector('#dify-save-success');
 
+            const aiProvider = providerSelect.value;
             const apiUrl = urlInput.value.trim();
             const apiKey = keyInput.value.trim();
 
-            // 基本验证
-            if (!apiUrl) {
-                urlInput.focus();
-                urlInput.style.borderColor = '#ef4444';
-                setTimeout(() => {
-                    urlInput.style.borderColor = '';
-                }, 2000);
-                return;
+            // 如果选择 Dify，需要验证配置
+            if (aiProvider === 'dify') {
+                // 基本验证
+                if (!apiUrl) {
+                    urlInput.focus();
+                    urlInput.style.borderColor = '#ef4444';
+                    setTimeout(() => {
+                        urlInput.style.borderColor = '';
+                    }, 2000);
+                    return;
+                }
+
+                if (!apiKey) {
+                    keyInput.focus();
+                    keyInput.style.borderColor = '#ef4444';
+                    setTimeout(() => {
+                        keyInput.style.borderColor = '';
+                    }, 2000);
+                    return;
+                }
+
+                // 验证 URL 格式
+                try {
+                    new URL(apiUrl);
+                } catch (e) {
+                    urlInput.focus();
+                    urlInput.style.borderColor = '#ef4444';
+                    alert('请输入有效的 API 地址（必须以 http:// 或 https:// 开头）');
+                    setTimeout(() => {
+                        urlInput.style.borderColor = '';
+                    }, 2000);
+                    return;
+                }
+
+                // 保存 Dify 配置
+                CONFIG.difyApiUrl = apiUrl;
+                CONFIG.difyApiKey = apiKey;
+                GM_setValue('difyApiUrl', apiUrl);
+                GM_setValue('difyApiKey', apiKey);
             }
 
-            if (!apiKey) {
-                keyInput.focus();
-                keyInput.style.borderColor = '#ef4444';
-                setTimeout(() => {
-                    keyInput.style.borderColor = '';
-                }, 2000);
-                return;
-            }
-
-            // 验证 URL 格式
-            try {
-                new URL(apiUrl);
-            } catch (e) {
-                urlInput.focus();
-                urlInput.style.borderColor = '#ef4444';
-                alert('请输入有效的 API 地址（必须以 http:// 或 https:// 开头）');
-                setTimeout(() => {
-                    urlInput.style.borderColor = '';
-                }, 2000);
-                return;
-            }
-
-            // 保存配置
-            CONFIG.difyApiUrl = apiUrl;
-            CONFIG.difyApiKey = apiKey;
-            GM_setValue('difyApiUrl', apiUrl);
-            GM_setValue('difyApiKey', apiKey);
+            // 保存 AI 提供商选择
+            CONFIG.aiProvider = aiProvider;
+            GM_setValue('aiProvider', aiProvider);
 
             // 更新状态标识
             this.updateConfigStatus();
@@ -1585,7 +1714,7 @@
                 successMsg.classList.remove('show');
             }, 2000);
 
-            console.log('[Dify] 配置已保存');
+            console.log('[Dify] 配置已保存，AI 提供商:', aiProvider);
         }
 
         updateConfigStatus() {
