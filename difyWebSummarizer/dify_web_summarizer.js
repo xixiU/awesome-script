@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.5.0
+// @version      1.4.9
 // @description  使用Dify工作流或Chrome Gemini AI智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
@@ -799,31 +799,33 @@
     class ChromeGeminiAPI {
         static async summarize(newsUrl, newsContent) {
             try {
-                // 检查浏览器是否支持 Chrome AI
-                if (!window.ai || !window.ai.canCreateTextSession) {
-                    throw new Error('您的浏览器不支持 Chrome Gemini AI。\n请确保：\n1. Chrome 版本 >= 128\n2. 已启用 AI 功能\n3. 已下载 Gemini Nano 模型');
+                // 检查浏览器是否支持 Prompt API（LanguageModel）
+                if (typeof LanguageModel === 'undefined' || !LanguageModel.availability) {
+                    throw new Error('您的浏览器不支持 Prompt API（LanguageModel）。\n请确保：\n1. Chrome 版本 >= 138\n2. 已启用内置 AI 功能\n3. 已下载 Gemini Nano 模型');
                 }
 
                 // 检查模型可用性
-                const canCreate = await window.ai.canCreateTextSession();
-                if (canCreate === 'no') {
-                    throw new Error('Chrome Gemini AI 模型不可用。\n请在 chrome://components 中检查 "Optimization Guide On Device Model" 是否已下载。');
+                const availability = await LanguageModel.availability();
+                if (availability === 'unavailable') {
+                    throw new Error('Gemini Nano 模型不可用。\n请在 chrome://components 中检查 "Optimization Guide On Device Model" 是否已下载，并等待下载完成。');
                 }
 
-                // 创建文本会话
-                const session = await window.ai.createTextSession();
+                // 创建会话
+                const session = await LanguageModel.create();
 
                 // 构建总结提示词
                 const prompt = `请对以下网页内容进行智能总结，要求：
 1. 提取核心观点和关键信息
 2. 使用清晰的结构组织内容
 3. 保持客观准确
-4. 使用中文输出
-
+4. 无论原文使用何种语言，都使用中文总结
+5. 输出markdown格式的内容。
+6.基于文章观点，在单独章节给出相关的建议或者预测。
+7.最后要有阅读原文跳转，原文地址:
 网页地址：${newsUrl}
 
 网页内容：
-${newsContent.substring(0, 8000)}
+${newsContent}
 
 请生成总结：`;
 
