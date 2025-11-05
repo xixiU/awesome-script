@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.4.9
+// @version      1.5.0
 // @description  使用Dify工作流或Chrome Gemini AI智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
@@ -616,7 +616,7 @@
                         text += this.extractTextFromElement(el) + '\n\n';
                     });
                     if (text.trim().length > 100) {
-                        console.log(`[Dify] 使用选择器提取: ${selector}`);
+                        console.log(`使用选择器提取: ${selector}`);
                         return text;
                     }
                 }
@@ -634,7 +634,7 @@
             // 按分数排序
             candidates.sort((a, b) => b.score - a.score);
 
-            console.log(`[Dify] 使用文本密度算法提取，候选元素: ${candidates.length}`);
+            console.log(`使用文本密度算法提取，候选元素: ${candidates.length}`);
             return this.extractTextFromElement(candidates[0].element);
         }
 
@@ -730,7 +730,7 @@
 
         // 从body提取（最后的回退方案）
         extractFromBody() {
-            console.log('[Dify] 使用body回退方案');
+            console.log('使用body回退方案');
             return this.extractTextFromElement(document.body);
         }
 
@@ -1319,8 +1319,8 @@ ${newsContent}
                 const newsContent = extractor.extract();
                 const newsUrl = window.location.href;
 
-                console.log('[Dify] 提取的内容长度:', newsContent.length);
-                console.log('[Dify] 内容预览:', newsContent.substring(0, 500));
+                console.log('提取的内容长度:', newsContent.length);
+                console.log('内容预览:', newsContent.substring(0, 500));
 
                 if (!newsContent || newsContent.length < 50) {
                     throw new Error('未能提取到有效的网页内容，请刷新页面后重试');
@@ -1341,7 +1341,7 @@ ${newsContent}
                 this.showResultPanel(result);
 
             } catch (error) {
-                console.error('[Dify] 错误:', error);
+                console.error('错误:', error);
                 this.showErrorPanel(error.message);
             } finally {
                 // 恢复按钮状态
@@ -1537,7 +1537,7 @@ ${newsContent}
         copyResult() {
             // 如果没有结果，直接返回
             if (!this.currentResult) {
-                console.warn('[Dify] 没有可复制的内容');
+                console.warn('没有可复制的内容');
                 return;
             }
 
@@ -1568,7 +1568,7 @@ ${newsContent}
                     copyIcon.textContent = '✓';
                     copyText.textContent = '已复制';
 
-                    console.log('[Dify] 复制成功，内容长度:', this.currentResult.length);
+                    console.log('复制成功，内容长度:', this.currentResult.length);
 
                     // 2秒后恢复按钮状态
                     setTimeout(() => {
@@ -1580,7 +1580,7 @@ ${newsContent}
                     throw new Error('复制命令执行失败');
                 }
             } catch (error) {
-                console.error('[Dify] 复制失败:', error);
+                console.error('复制失败:', error);
 
                 // 尝试使用现代 Clipboard API
                 if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1597,7 +1597,7 @@ ${newsContent}
                             }, 2000);
                         })
                         .catch(err => {
-                            console.error('[Dify] Clipboard API 失败:', err);
+                            console.error('Clipboard API 失败:', err);
                             copyText.textContent = '复制失败';
                             setTimeout(() => {
                                 copyText.textContent = '复制结果';
@@ -1716,7 +1716,7 @@ ${newsContent}
                 successMsg.classList.remove('show');
             }, 2000);
 
-            console.log('[Dify] 配置已保存，AI 提供商:', aiProvider);
+            console.log('配置已保存，AI 提供商:', aiProvider);
         }
 
         updateConfigStatus() {
@@ -1754,11 +1754,11 @@ ${newsContent}
                     if (isFullscreen) {
                         // 全屏时隐藏按钮
                         this.button.classList.add('hidden');
-                        //console.log('[Dify] 检测到全屏状态，隐藏AI总结按钮');
+                        //console.log('检测到全屏状态，隐藏AI总结按钮');
                     } else {
                         // 退出全屏时显示按钮
                         this.button.classList.remove('hidden');
-                        //console.log('[Dify] 退出全屏状态，显示AI总结按钮');
+                        //console.log('退出全屏状态，显示AI总结按钮');
                     }
                 }
             };
@@ -1780,7 +1780,7 @@ ${newsContent}
     function init() {
         // 只在主窗口中运行，避免在iframe中重复创建
         if (window !== window.top) {
-            //console.log('[Dify] 检测到iframe环境，跳过初始化');
+            //console.log('检测到iframe环境，跳过初始化');
             return;
         }
 
@@ -1827,7 +1827,7 @@ ${newsContent}
                 uiManager.button.style.borderBottomRightRadius = '0';
 
                 GM_setValue('buttonPosition', null);
-                console.log('[Dify] 按钮位置已重置为贴右边模式');
+                console.log('按钮位置已重置为贴右边模式');
             }
         });
     }
