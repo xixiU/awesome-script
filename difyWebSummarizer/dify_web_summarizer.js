@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.5.0
+// @version      1.5.1
 // @description  使用Dify工作流或Chrome Gemini AI智能总结网页内容，支持各类知识型网站
 // @author       xixiu
 // @match        *://*/*
@@ -175,6 +175,47 @@
             animation: slideIn 0.3s ease;
         }
         
+        /* 拖拽状态 */
+        #dify-result-panel.draggable {
+            cursor: move;
+        }
+        
+        #dify-result-panel.dragging {
+            cursor: grabbing;
+            transition: none;
+        }
+        
+        /* 全屏模式 */
+        #dify-result-panel.fullscreen {
+            top: 0 !important;
+            left: 0 !important;
+            transform: none !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            border-radius: 0 !important;
+            cursor: default !important;
+        }
+        
+        #dify-result-panel.fullscreen #dify-panel-content {
+            max-height: calc(100vh - 80px) !important;
+            font-size: 18px !important;
+            padding: 32px !important;
+        }
+        
+        #dify-result-panel.fullscreen #dify-panel-content h1 {
+            font-size: 32px !important;
+        }
+        
+        #dify-result-panel.fullscreen #dify-panel-content h2 {
+            font-size: 28px !important;
+        }
+        
+        #dify-result-panel.fullscreen #dify-panel-content h3 {
+            font-size: 24px !important;
+        }
+        
         @keyframes slideIn {
             from {
                 opacity: 0;
@@ -247,6 +288,34 @@
         
         #dify-close-btn:hover {
             background: rgba(255, 255, 255, 0.3);
+        }
+        
+        #dify-fullscreen-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #dify-fullscreen-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        #dify-panel-header.draggable {
+            cursor: move;
+        }
+        
+        #dify-panel-header.dragging {
+            cursor: grabbing;
         }
         
         #dify-panel-content {
@@ -1088,6 +1157,12 @@ ${newsContent}
             copyBtn.appendChild(copyIcon);
             copyBtn.appendChild(copyText);
 
+            // 创建全屏按钮
+            const fullscreenBtn = document.createElement('button');
+            fullscreenBtn.id = 'dify-fullscreen-btn';
+            fullscreenBtn.innerHTML = '⤢';
+            fullscreenBtn.title = '全屏显示';
+
             // 创建关闭按钮
             const closeBtn = document.createElement('button');
             closeBtn.id = 'dify-close-btn';
@@ -1095,6 +1170,7 @@ ${newsContent}
 
             // 组装元素
             actionsDiv.appendChild(copyBtn);
+            actionsDiv.appendChild(fullscreenBtn);
             actionsDiv.appendChild(closeBtn);
 
             header.appendChild(title);
@@ -1108,12 +1184,30 @@ ${newsContent}
 
             document.body.appendChild(panel);
             this.panel = panel;
+            this.panelHeader = header;
+            this.fullscreenBtn = fullscreenBtn;
+            this.isFullscreen = false;
 
             // 关闭按钮事件
-            closeBtn.addEventListener('click', () => this.hidePanel());
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.hidePanel();
+            });
 
             // 复制按钮事件
-            copyBtn.addEventListener('click', () => this.copyResult());
+            copyBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.copyResult();
+            });
+
+            // 全屏按钮事件
+            fullscreenBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleFullscreen();
+            });
+
+            // 添加拖拽功能（非全屏状态下）
+            this.makePanelDraggable();
         }
 
         createSettingsPanel() {
@@ -1362,6 +1456,16 @@ ${newsContent}
             spinner.className = 'dify-loading-spinner';
             contentDiv.appendChild(spinner);
 
+            // 确保面板处于非全屏状态（新请求时）
+            if (this.isFullscreen) {
+                this.toggleFullscreen();
+            }
+
+            // 重置位置到居中
+            this.panel.style.top = '50%';
+            this.panel.style.left = '50%';
+            this.panel.style.transform = 'translate(-50%, -50%)';
+
             this.panel.classList.add('show');
             this.overlay.classList.add('show');
         }
@@ -1402,8 +1506,112 @@ ${newsContent}
         }
 
         hidePanel() {
+            // 退出全屏模式
+            if (this.isFullscreen) {
+                this.toggleFullscreen();
+            }
             this.panel.classList.remove('show');
             this.overlay.classList.remove('show');
+        }
+
+        toggleFullscreen() {
+            this.isFullscreen = !this.isFullscreen;
+
+            if (this.isFullscreen) {
+                // 进入全屏
+                this.panel.classList.add('fullscreen');
+                this.panel.classList.remove('draggable');
+                this.panelHeader.classList.remove('draggable');
+                this.fullscreenBtn.innerHTML = '⤓';
+                this.fullscreenBtn.title = '退出全屏';
+            } else {
+                // 退出全屏
+                this.panel.classList.remove('fullscreen');
+                this.panel.classList.add('draggable');
+                this.panelHeader.classList.add('draggable');
+                this.fullscreenBtn.innerHTML = '⤢';
+                this.fullscreenBtn.title = '全屏显示';
+                // 恢复居中位置
+                this.panel.style.top = '50%';
+                this.panel.style.left = '50%';
+                this.panel.style.transform = 'translate(-50%, -50%)';
+            }
+        }
+
+        makePanelDraggable() {
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            let isDragging = false;
+            const self = this;
+
+            // 只有非全屏状态才能拖拽
+            const handleMouseDown = (e) => {
+                // 如果点击的是按钮或其子元素，不触发拖拽
+                if (e.target.closest('button') || e.target.tagName === 'BUTTON') {
+                    return;
+                }
+
+                // 全屏状态下不允许拖拽
+                if (self.isFullscreen) {
+                    return;
+                }
+
+                e.preventDefault();
+                e.stopPropagation();
+                isDragging = true;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+
+                self.panel.classList.add('dragging');
+                self.panelHeader.classList.add('dragging');
+
+                // 移除居中定位
+                const rect = self.panel.getBoundingClientRect();
+                self.panel.style.top = rect.top + 'px';
+                self.panel.style.left = rect.left + 'px';
+                self.panel.style.transform = 'none';
+
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            };
+
+            const handleMouseMove = (e) => {
+                if (!isDragging || self.isFullscreen) return;
+
+                e.preventDefault();
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+
+                // 计算新位置
+                let newTop = self.panel.offsetTop - pos2;
+                let newLeft = self.panel.offsetLeft - pos1;
+
+                // 边界检查
+                const maxX = window.innerWidth - self.panel.offsetWidth;
+                const maxY = window.innerHeight - self.panel.offsetHeight;
+
+                newLeft = Math.max(0, Math.min(newLeft, maxX));
+                newTop = Math.max(0, Math.min(newTop, maxY));
+
+                self.panel.style.top = newTop + 'px';
+                self.panel.style.left = newLeft + 'px';
+            };
+
+            const handleMouseUp = () => {
+                if (isDragging) {
+                    isDragging = false;
+                    self.panel.classList.remove('dragging');
+                    self.panelHeader.classList.remove('dragging');
+                }
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
+
+            // 在标题栏上添加拖拽功能
+            this.panelHeader.addEventListener('mousedown', handleMouseDown);
+            this.panelHeader.classList.add('draggable');
+            this.panel.classList.add('draggable');
         }
 
         renderMarkdownContent(text, container) {
