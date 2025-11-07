@@ -998,7 +998,10 @@ ${newsContent}
                 // 防抖处理
                 clearTimeout(selectionTimeout);
                 selectionTimeout = setTimeout(() => {
-                    if (this.button.classList.contains('loading')) return;
+                    // 如果按钮正在加载或被隐藏（全屏等场景），不更新按钮文本
+                    if (this.button.classList.contains('loading') || this.button.classList.contains('hidden')) {
+                        return;
+                    }
 
                     const selection = window.getSelection();
                     const selectedText = selection ? selection.toString().trim() : '';
