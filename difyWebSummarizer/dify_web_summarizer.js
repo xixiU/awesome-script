@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.5.2
+// @version      1.5.3
 // @description  使用Dify工作流或Chrome Gemini AI智能总结网页内容，支持全文总结和选中文本总结
 // @author       xixiu
 // @match        *://*/*
@@ -60,6 +60,8 @@
             width: 40px !important;
             height: auto !important;
             min-height: 40px !important;
+            max-width: 200px !important;
+            max-height: 60px !important;
             overflow: hidden !important;
             white-space: nowrap !important;
             display: flex !important;
@@ -1205,7 +1207,7 @@ ${newsContent}
             // 创建全屏按钮
             const fullscreenBtn = document.createElement('button');
             fullscreenBtn.id = 'dify-fullscreen-btn';
-            fullscreenBtn.innerHTML = '⤢';
+            fullscreenBtn.textContent = '⤢';
             fullscreenBtn.title = '全屏显示';
 
             // 创建关闭按钮
@@ -1599,14 +1601,14 @@ ${newsContent}
                 this.panel.classList.add('fullscreen');
                 this.panel.classList.remove('draggable');
                 this.panelHeader.classList.remove('draggable');
-                this.fullscreenBtn.innerHTML = '⤓';
+                this.fullscreenBtn.textContent = '⤓';
                 this.fullscreenBtn.title = '退出全屏';
             } else {
                 // 退出全屏
                 this.panel.classList.remove('fullscreen');
                 this.panel.classList.add('draggable');
                 this.panelHeader.classList.add('draggable');
-                this.fullscreenBtn.innerHTML = '⤢';
+                this.fullscreenBtn.textContent = '⤢';
                 this.fullscreenBtn.title = '全屏显示';
                 // 恢复居中位置
                 this.panel.style.top = '50%';
@@ -2038,12 +2040,14 @@ ${newsContent}
 
                     if (isFullscreen) {
                         // 全屏时隐藏按钮
-                        this.button.classList.add('hidden');
-                        //console.log('检测到全屏状态，隐藏AI总结按钮');
+                        if (!this.button.classList.contains('hidden')) {
+                            this.button.classList.add('hidden');
+                        }
                     } else {
                         // 退出全屏时显示按钮
-                        this.button.classList.remove('hidden');
-                        //console.log('退出全屏状态，显示AI总结按钮');
+                        if (this.button.classList.contains('hidden')) {
+                            this.button.classList.remove('hidden');
+                        }
                     }
                 }
             };
@@ -2054,8 +2058,22 @@ ${newsContent}
             document.addEventListener('mozfullscreenchange', handleFullscreenChange);
             document.addEventListener('MSFullscreenChange', handleFullscreenChange);
 
+
+            // 监听窗口大小变化（用于检测伪全屏）
+            window.addEventListener('resize', () => {
+                console.log('[Dify Debug] 📢 窗口大小变化');
+                handleFullscreenChange();
+            });
+
             // 初始检查
             handleFullscreenChange();
+
+            // 定期检查（备用方案，每500ms检查一次）
+            // console.log('[Dify Debug] 启动定期检查（500ms）');
+            // this.fullscreenCheckInterval = setInterval(() => {
+            //     console.log('[Dify Debug] 🔄 定期检查全屏状态');
+            //     handleFullscreenChange();
+            // }, 500);
         }
     }
 
