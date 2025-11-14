@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         ifly-21tb 增强脚本 (视频控制+自动答题)
 // @namespace    http://tampermonkey.net/
-// @version      1.4
-// @description  视频页：左右键快进/回退，数字键调速。考试页：直接调用Dify API自动答题，无需本地代理服务，支持暂停/继续。
+// @version      1.4.1
+// @description  视频页：左右键快进/回退，数字键调速。考试页：直接调用Dify API自动答题，无需本地代理服务，支持暂停/继续、失败题目重试。
 // @author       yuan
 // @match        *://*.21tb.com/*
 // @connect      *
@@ -28,6 +28,13 @@
  *    - 无需本地代理服务，所有配置存储在浏览器中
  *    - 支持暂停/继续控制
  *    - 配置通过油猴菜单管理，方便快捷
+ *    - 失败题目重试功能（v1.5 新特性）
+ * 
+ * 更新日志 (v1.5)：
+ * - 新增失败题目重试功能
+ * - 自动记录答题失败的题目
+ * - 答题完成后显示失败题目数量和重试按钮
+ * - 支持多次重试，直到所有题目成功
  * 
  * 更新日志 (v1.4)：
  * - 移除对本地 proxy_iflyek.py 服务的依赖
@@ -582,15 +589,18 @@
             GM_addStyle(`
                 #auto-exam-panel { position: fixed; bottom: 20px; left: 20px; background-color: #f7f7f7; border: 1px solid #ccc; padding: 15px; z-index: 99999; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); font-family: Arial, sans-serif; width: 280px; }
                 #auto-exam-panel h3 { margin-top: 0; margin-bottom: 10px; color: #333; font-size: 16px; text-align: center; }
-                .exam-btn-group { display: flex; gap: 10px; }
+                .exam-btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
                 .exam-btn { flex-grow: 1; padding: 10px; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: background-color 0.3s; }
                 #start-exam-btn { background-color: #4CAF50; }
                 #start-exam-btn:hover { background-color: #45a049; }
                 #start-exam-btn:disabled { background-color: #aaa; cursor: not-allowed; }
                 #pause-exam-btn { background-color: #f44336; display: none; }
                 #pause-exam-btn:hover { background-color: #da190b; }
+                #retry-exam-btn { background-color: #ff9800; display: none; }
+                #retry-exam-btn:hover { background-color: #f57c00; }
                 #exam-status { margin-top: 10px; padding: 8px; background-color: #e9e9e9; border-radius: 4px; font-size: 13px; color: #555; text-align: center; min-height: 20px; }
                 #config-info { margin-top: 8px; padding: 6px; background-color: #e3f2fd; border-radius: 4px; font-size: 11px; color: #1976d2; text-align: center; }
+                #failed-questions-info { margin-top: 8px; padding: 6px; background-color: #fff3cd; border-radius: 4px; font-size: 11px; color: #856404; text-align: center; display: none; }
             `);
 
             const panel = document.createElement('div');
@@ -607,18 +617,25 @@
                 <div class="exam-btn-group">
                     <button id="start-exam-btn" class="exam-btn">开始自动答题</button>
                     <button id="pause-exam-btn" class="exam-btn">暂停</button>
+                    <button id="retry-exam-btn" class="exam-btn">重试失败题目</button>
                 </div>
                 <div id="exam-status">准备就绪</div>
                 <div id="config-info">
                     角色: ${getConfig('role')} | 能力: ${getConfig('ability')}<br/>
                     ${configStatus}
                 </div>
+                <div id="failed-questions-info"></div>
             `;
             document.body.appendChild(panel);
 
             const startBtn = document.getElementById('start-exam-btn');
             const pauseBtn = document.getElementById('pause-exam-btn');
+            const retryBtn = document.getElementById('retry-exam-btn');
             const statusDiv = document.getElementById('exam-status');
+            const failedInfoDiv = document.getElementById('failed-questions-info');
+
+            // 存储失败的题目信息
+            let failedQuestions = [];
 
             startBtn.addEventListener('click', startAnsweringProcess);
             pauseBtn.addEventListener('click', () => {
@@ -633,6 +650,7 @@
                     updateStatus('已恢复，继续答题...');
                 }
             });
+            retryBtn.addEventListener('click', retryFailedQuestions);
 
             function updateStatus(text) {
                 console.log(text);
@@ -733,13 +751,17 @@
             async function startAnsweringProcess() {
                 if (isRunning) return;
                 isRunning = true; isPaused = false;
+                failedQuestions = []; // 重置失败题目列表
                 startBtn.disabled = true; startBtn.textContent = '答题中...';
                 pauseBtn.style.display = 'block'; pauseBtn.textContent = '暂停'; pauseBtn.style.backgroundColor = '#f44336';
+                retryBtn.style.display = 'none'; // 隐藏重试按钮
+                failedInfoDiv.style.display = 'none'; // 隐藏失败信息
                 const questionElements = document.querySelectorAll('.question-panel-middle');
                 const total = questionElements.length;
                 updateStatus(`发现 ${total} 道题目，开始处理...`);
                 await delay(1000);
                 let count = 0;
+                let successCount = 0;
                 for (const el of questionElements) {
                     count++;
                     while (isPaused) { await delay(500); }
@@ -748,19 +770,142 @@
                     await delay(1000);
                     try {
                         const questionData = extractQuestionData(el);
-                        if (!questionData) { updateStatus(`第 ${count} 题: 无法识别题型，已跳过`); await delay(1000); continue; }
+                        if (!questionData) {
+                            updateStatus(`第 ${count} 题: 无法识别题型，已跳过`);
+                            // 记录为失败题目
+                            failedQuestions.push({
+                                element: el,
+                                index: count,
+                                questionData: null,
+                                error: '无法识别题型'
+                            });
+                            await delay(1000);
+                            continue;
+                        }
                         updateStatus(`第 ${count} 题: 已提取，请求答案...`);
                         updateStatus(JSON.stringify(questionData));
                         // console.log(`${JSON.stringify(questionData)}`)
                         const answerData = await fetchAnswer(questionData);
                         updateStatus(`第 ${count} 题: 收到答案 "${answerData.ans}"`);
                         selectAnswer(el, questionData.typeClass, answerData);
+                        successCount++;
                         await delay(1500);
-                    } catch (error) { updateStatus(`第 ${count} 题出错: ${error}`); await delay(2000); }
+                    } catch (error) {
+                        updateStatus(`第 ${count} 题出错: ${error}`);
+                        // 记录失败的题目
+                        const questionData = extractQuestionData(el);
+                        failedQuestions.push({
+                            element: el,
+                            index: count,
+                            questionData: questionData,
+                            error: error.toString()
+                        });
+                        await delay(2000);
+                    }
                 }
-                updateStatus('所有题目处理完毕！');
+
+                // 显示完成状态
+                if (failedQuestions.length === 0) {
+                    updateStatus(`所有题目处理完毕！成功: ${successCount}/${total}`);
+                } else {
+                    updateStatus(`答题完成！成功: ${successCount}/${total}，失败: ${failedQuestions.length}/${total}`);
+                    // 显示重试按钮和失败信息
+                    retryBtn.style.display = 'block';
+                    failedInfoDiv.style.display = 'block';
+                    failedInfoDiv.innerHTML = `⚠️ 有 ${failedQuestions.length} 道题目未成功回答，请点击"重试失败题目"按钮重试`;
+                }
+
                 startBtn.disabled = false; startBtn.textContent = '开始自动答题';
-                pauseBtn.style.display = 'none'; isRunning = false;
+                pauseBtn.style.display = 'none';
+                isRunning = false;
+            }
+
+            /**
+             * 重试失败的题目
+             */
+            async function retryFailedQuestions() {
+                if (isRunning) return;
+                if (failedQuestions.length === 0) {
+                    updateStatus('没有需要重试的题目');
+                    return;
+                }
+
+                isRunning = true;
+                isPaused = false;
+                startBtn.disabled = true;
+                retryBtn.disabled = true;
+                retryBtn.textContent = '重试中...';
+                pauseBtn.style.display = 'block';
+                pauseBtn.textContent = '暂停';
+                pauseBtn.style.backgroundColor = '#f44336';
+
+                const totalFailed = failedQuestions.length;
+                updateStatus(`开始重试 ${totalFailed} 道失败题目...`);
+                await delay(1000);
+
+                // 存储重试后仍然失败的题目
+                const stillFailed = [];
+                let retrySuccessCount = 0;
+
+                for (let i = 0; i < failedQuestions.length; i++) {
+                    const failed = failedQuestions[i];
+                    while (isPaused) { await delay(500); }
+
+                    updateStatus(`重试第 ${i + 1} / ${totalFailed} 题 (原第 ${failed.index} 题)...`);
+                    failed.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    await delay(1000);
+
+                    try {
+                        // 如果之前无法识别题型，再次尝试提取
+                        let questionData = failed.questionData;
+                        if (!questionData) {
+                            questionData = extractQuestionData(failed.element);
+                            if (!questionData) {
+                                updateStatus(`第 ${failed.index} 题: 仍然无法识别题型`);
+                                stillFailed.push({
+                                    ...failed,
+                                    questionData: null,
+                                    error: '仍然无法识别题型'
+                                });
+                                await delay(1000);
+                                continue;
+                            }
+                        }
+
+                        updateStatus(`第 ${failed.index} 题: 已提取，请求答案...`);
+                        const answerData = await fetchAnswer(questionData);
+                        updateStatus(`第 ${failed.index} 题: 收到答案 "${answerData.ans}"`);
+                        selectAnswer(failed.element, questionData.typeClass, answerData);
+                        retrySuccessCount++;
+                        await delay(1500);
+                    } catch (error) {
+                        updateStatus(`第 ${failed.index} 题重试失败: ${error}`);
+                        stillFailed.push({
+                            ...failed,
+                            error: `重试失败: ${error.toString()}`
+                        });
+                        await delay(2000);
+                    }
+                }
+
+                // 更新失败题目列表
+                failedQuestions = stillFailed;
+
+                // 显示重试结果
+                if (stillFailed.length === 0) {
+                    updateStatus(`重试完成！所有题目都已成功回答！`);
+                    retryBtn.style.display = 'none';
+                    failedInfoDiv.style.display = 'none';
+                } else {
+                    updateStatus(`重试完成！成功: ${retrySuccessCount}/${totalFailed}，仍有 ${stillFailed.length} 道题目失败`);
+                    failedInfoDiv.innerHTML = `⚠️ 仍有 ${stillFailed.length} 道题目未成功回答，可继续点击"重试失败题目"按钮重试`;
+                }
+
+                startBtn.disabled = false;
+                retryBtn.disabled = false;
+                retryBtn.textContent = '重试失败题目';
+                pauseBtn.style.display = 'none';
+                isRunning = false;
             }
 
             function extractQuestionData(el) {
