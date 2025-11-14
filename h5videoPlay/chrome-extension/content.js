@@ -235,83 +235,118 @@ function handleStreamInContentScript(streamId, sendResponse) {
     }
 
     // 使用 getUserMedia 获取实际的媒体流
-    navigator.mediaDevices.getUserMedia({
+    // 注意：对于 tabCapture，需要使用旧的 mandatory 格式
+    // 尝试两种格式：先尝试新格式，如果失败再尝试旧格式
+
+    // 方法1：尝试新格式（不使用 mandatory）
+    const constraintsNew = {
         audio: {
-            mandatory: {
-                chromeMediaSource: 'tab',
-                chromeMediaSourceId: streamId
-            }
+            chromeMediaSource: 'tab',
+            chromeMediaSourceId: streamId
         },
         video: false
-    }).then((stream) => {
-        console.log('[Extension字幕] ✅ 获取到音频流');
+    };
 
-        // 创建 MediaRecorder
-        const mediaRecorder = new MediaRecorder(stream, {
-            mimeType: 'audio/webm;codecs=opus',
-            audioBitsPerSecond: 128000
-        });
+    console.log('[Extension字幕] 调用 getUserMedia，尝试新格式，约束:', constraintsNew);
 
-        const recordedChunks = [];
-
-        mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-                recordedChunks.push(event.data);
-                console.log(`[Extension字幕] 📊 收到音频数据: ${event.data.size} bytes`);
-            }
-        };
-
-        mediaRecorder.onstop = async () => {
-            console.log('[Extension字幕] 录制停止，处理数据...');
-
-            if (recordedChunks.length > 0) {
-                const audioBlob = new Blob(recordedChunks, {
-                    type: 'audio/webm;codecs=opus'
-                });
-
-                console.log(`[Extension字幕] 音频大小: ${(audioBlob.size / 1024).toFixed(2)} KB`);
-
-                // 发送到后端处理
-                await subtitleService.processAudioBlob(audioBlob);
-            }
-
-            // 继续下一轮录制
-            if (subtitleService.contentStreamSession && subtitleService.contentStreamSession.isRunning) {
-                setTimeout(() => {
-                    if (mediaRecorder.state === 'inactive') {
-                        recordedChunks.length = 0;
-                        mediaRecorder.start(1000);
-                    }
-                }, 100);
-            }
-        };
-
-        // 保存会话
-        subtitleService.contentStreamSession = {
-            stream,
-            mediaRecorder,
-            isRunning: true
-        };
-
-        // 开始录制
-        mediaRecorder.start(1000); // 每秒触发 dataavailable
-        console.log('[Extension字幕] ✅ MediaRecorder 已启动');
-
-        // 5 秒后停止（模拟定时录制）
-        setTimeout(() => {
-            if (mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
-            }
-        }, 5000);
-
-        sendResponse({ success: true, message: '已在 content script 中设置流并开始录制' });
+    navigator.mediaDevices.getUserMedia(constraintsNew).then((stream) => {
+        // 使用统一的设置函数
+        setupMediaRecorder(stream, sendResponse);
     }).catch((error) => {
-        console.error('[Extension字幕] getUserMedia 失败:', error);
-        sendResponse({
-            success: false,
-            error: `getUserMedia 失败: ${error.message}`
+        console.warn('[Extension字幕] 新格式 getUserMedia 失败，尝试旧格式 mandatory:', error);
+        // 如果新格式失败，尝试旧格式（使用 mandatory）
+        const constraintsOld = {
+            audio: {
+                mandatory: {
+                    chromeMediaSource: 'tab',
+                    chromeMediaSourceId: streamId
+                }
+            },
+            video: false
+        };
+
+        console.log('[Extension字幕] 尝试旧格式 mandatory，约束:', constraintsOld);
+
+        navigator.mediaDevices.getUserMedia(constraintsOld).then((stream) => {
+            console.log('[Extension字幕] ✅ 使用旧格式获取到音频流');
+
+            // 使用相同的处理逻辑
+            setupMediaRecorder(stream, sendResponse);
+        }).catch((oldError) => {
+            console.error('[Extension字幕] getUserMedia 两种格式都失败:', oldError);
+            sendResponse({
+                success: false,
+                error: `getUserMedia 失败: ${oldError.message}`
+            });
         });
     });
+}
+
+/**
+ * 设置 MediaRecorder 并开始录制
+ */
+function setupMediaRecorder(stream, sendResponse) {
+    console.log('[Extension字幕] ✅ 获取到音频流');
+
+    // 创建 MediaRecorder
+    const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus',
+        audioBitsPerSecond: 128000
+    });
+
+    const recordedChunks = [];
+
+    mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+            console.log(`[Extension字幕] 📊 收到音频数据: ${event.data.size} bytes`);
+        }
+    };
+
+    mediaRecorder.onstop = async () => {
+        console.log('[Extension字幕] 录制停止，处理数据...');
+
+        if (recordedChunks.length > 0) {
+            const audioBlob = new Blob(recordedChunks, {
+                type: 'audio/webm;codecs=opus'
+            });
+
+            console.log(`[Extension字幕] 音频大小: ${(audioBlob.size / 1024).toFixed(2)} KB`);
+
+            // 发送到后端处理
+            await subtitleService.processAudioBlob(audioBlob);
+        }
+
+        // 继续下一轮录制
+        if (subtitleService.contentStreamSession && subtitleService.contentStreamSession.isRunning) {
+            setTimeout(() => {
+                if (mediaRecorder.state === 'inactive') {
+                    recordedChunks.length = 0;
+                    mediaRecorder.start(1000);
+                }
+            }, 100);
+        }
+    };
+
+    // 保存会话
+    subtitleService.contentStreamSession = {
+        stream,
+        mediaRecorder,
+        isRunning: true
+    };
+
+    // 开始录制
+    mediaRecorder.start(1000); // 每秒触发 dataavailable
+    console.log('[Extension字幕] ✅ MediaRecorder 已启动');
+
+    // 5 秒后停止（模拟定时录制）
+    setTimeout(() => {
+        if (mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+        }
+    }, 5000);
+
+    sendResponse({ success: true, message: '已在 content script 中设置流并开始录制' });
 }
 
 // 监听来自 background 的消息

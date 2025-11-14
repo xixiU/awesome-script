@@ -285,21 +285,54 @@ async function startAudioCapture(tabId, sendResponse) {
                         }
 
                         // 使用 getUserMedia 获取实际的媒体流
-                        navigator.mediaDevices.getUserMedia({
+                        // 注意：对于 tabCapture，可能需要使用旧的 mandatory 格式
+                        // 先尝试新格式
+                        const constraintsNew = {
                             audio: {
-                                mandatory: {
-                                    chromeMediaSource: 'tab',
-                                    chromeMediaSourceId: streamId
-                                }
+                                chromeMediaSource: 'tab',
+                                chromeMediaSourceId: streamId
                             },
                             video: false
-                        }).then((stream) => {
+                        };
+
+                        console.log('[Background] 尝试新格式 getUserMedia');
+                        navigator.mediaDevices.getUserMedia(constraintsNew).then((stream) => {
                             handleStream(stream, tabId, sendResponse);
                         }).catch((error) => {
-                            console.error('[Background] getUserMedia 失败:', error);
-                            sendResponse({
-                                success: false,
-                                error: `getUserMedia 失败: ${error.message}`
+                            console.warn('[Background] 新格式失败，尝试旧格式 mandatory:', error);
+                            // 如果新格式失败，尝试旧格式
+                            const constraintsOld = {
+                                audio: {
+                                    mandatory: {
+                                        chromeMediaSource: 'tab',
+                                        chromeMediaSourceId: streamId
+                                    }
+                                },
+                                video: false
+                            };
+
+                            navigator.mediaDevices.getUserMedia(constraintsOld).then((stream) => {
+                                handleStream(stream, tabId, sendResponse);
+                            }).catch((oldError) => {
+                                console.error('[Background] getUserMedia 两种格式都失败:', oldError);
+                                // 两种格式都失败，发送流 ID 到 content script
+                                console.log('[Background] 尝试在 content script 中处理流 ID');
+                                chrome.tabs.sendMessage(tabId, {
+                                    action: 'setupStream',
+                                    streamId: streamId
+                                }, (response) => {
+                                    if (chrome.runtime.lastError) {
+                                        console.error('[Background] 发送流 ID 失败:', chrome.runtime.lastError);
+                                        sendResponse({
+                                            success: false,
+                                            error: chrome.runtime.lastError.message
+                                        });
+                                    } else if (response && response.success) {
+                                        sendResponse({ success: true, message: '已在 content script 中设置流' });
+                                    } else {
+                                        sendResponse({ success: false, error: response?.error || '设置流失败' });
+                                    }
+                                });
                             });
                         });
                     };
