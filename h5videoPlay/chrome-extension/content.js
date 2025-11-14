@@ -190,6 +190,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true });
         return false;
     }
+
+    // 处理流 ID（如果 Service Worker 不支持 getUserMedia）
+    if (message.action === 'setupStream') {
+        console.log('[Extension字幕] 收到流 ID，在 content script 中设置流');
+        // 这里可以处理流，但通常 Service Worker 应该支持 getUserMedia
+        sendResponse({ success: false, error: 'content script 中暂不支持直接处理流' });
+        return false;
+    }
 });
 
 // 监听页面消息
