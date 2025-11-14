@@ -116,11 +116,18 @@ function handleStream(stream, tabId, sendResponse) {
 
 // 监听来自 content script 的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log('[Background] 收到消息:', message.action, 'from tab:', sender.tab?.id);
+    console.log('[Background] 收到消息:', message.action, 'from tab:', sender.tab?.id, 'message.tabId:', message.tabId);
 
     switch (message.action) {
         case 'startCapture':
-            startAudioCapture(sender.tab.id, sendResponse);
+            // 优先使用消息中传递的 tabId，否则使用 sender.tab.id
+            const tabId = message.tabId || sender.tab?.id;
+            if (!tabId) {
+                console.error('[Background] 无法获取标签页 ID');
+                sendResponse({ success: false, error: '无法获取标签页 ID' });
+                return false;
+            }
+            startAudioCapture(tabId, sendResponse);
             return true; // 异步响应
 
         case 'stopCapture':
@@ -173,14 +180,14 @@ async function startAudioCapture(tabId, sendResponse) {
             console.log('[Background] 准备捕获标签页:', tab.url, 'active:', tab.active);
 
             // 检查是否是 Chrome 内部页面（无法捕获）
-            if (tab.url && (tab.url.startsWith('chrome://') || 
-                           tab.url.startsWith('chrome-extension://') ||
-                           tab.url.startsWith('edge://') ||
-                           tab.url.startsWith('about:'))) {
+            if (tab.url && (tab.url.startsWith('chrome://') ||
+                tab.url.startsWith('chrome-extension://') ||
+                tab.url.startsWith('edge://') ||
+                tab.url.startsWith('about:'))) {
                 console.error('[Background] Chrome 内部页面无法捕获:', tab.url);
-                sendResponse({ 
-                    success: false, 
-                    error: 'Chrome 内部页面无法捕获音频。请在普通网页（如 YouTube、B站）上使用。' 
+                sendResponse({
+                    success: false,
+                    error: 'Chrome 内部页面无法捕获音频。请在普通网页（如 YouTube、B站）上使用。'
                 });
                 return;
             }
@@ -188,135 +195,157 @@ async function startAudioCapture(tabId, sendResponse) {
             // 检查权限：确保我们有访问该标签页的权限
             // 即使有 tabs 权限，某些情况下仍需要确保标签页可访问
             console.log('[Background] 检查权限... tabId:', tabId, 'url:', tab.url);
-            
-            // 确保标签页是活动的（提高权限激活的成功率）
-            if (!tab.active) {
-                console.log('[Background] 标签页未激活，尝试激活...');
-                chrome.tabs.update(tabId, { active: true }, () => {
-                    if (chrome.runtime.lastError) {
-                        console.warn('[Background] 无法激活标签页:', chrome.runtime.lastError);
-                    } else {
-                        console.log('[Background] 标签页已激活');
-                    }
-                });
-            }
 
-            // Manifest V3 使用 getMediaStreamId 方法
-            if (!chrome.tabCapture) {
-                sendResponse({ success: false, error: 'chrome.tabCapture API 不可用' });
-                return;
-            }
+            // 尝试访问标签页以确保权限（这可能会激活 activeTab）
+            // 通过执行一个简单的脚本（即使不执行任何操作）来激活权限
+            chrome.scripting.executeScript({
+                target: { tabId: tabId },
+                func: () => {
+                    // 空函数，只是为了激活 activeTab 权限
+                    console.log('[Extension] 权限已激活');
+                }
+            }).then(() => {
+                console.log('[Background] ✅ 通过 scripting.executeScript 激活权限');
+                // 继续执行捕获逻辑
+                continueCapture();
+            }).catch((scriptError) => {
+                console.warn('[Background] 无法通过 scripting 激活权限:', scriptError);
+                // 继续尝试，可能仍然可以工作
+                continueCapture();
+            });
 
-            // 方法1: 尝试使用 getMediaStreamId (Manifest V3 推荐)
-            if (typeof chrome.tabCapture.getMediaStreamId === 'function') {
-                console.log('[Background] 使用 getMediaStreamId 方法, tabId:', tabId, 'active:', tab.active);
+            function continueCapture() {
 
-                // 始终传递 targetTabId，因为我们有 tabs 权限
-                // 这样可以避免 activeTab 权限的激活问题
-                const options = { targetTabId: tabId };
-
-                const callback = (streamId) => {
-                    if (chrome.runtime.lastError) {
-                        console.error('[Background] 获取流 ID 失败:', chrome.runtime.lastError);
-                        sendResponse({
-                            success: false,
-                            error: chrome.runtime.lastError.message
-                        });
-                        return;
-                    }
-
-                    if (!streamId) {
-                        console.error('[Background] 未获取到流 ID');
-                        sendResponse({ success: false, error: '未获取到流 ID' });
-                        return;
-                    }
-
-                    console.log('[Background] ✅ 获取到流 ID:', streamId);
-
-                    // 检查 navigator.mediaDevices 是否可用（Service Worker 中可能不可用）
-                    if (!navigator || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        // Service Worker 中不可用，发送流 ID 到 content script 处理
-                        console.log('[Background] Service Worker 不支持 getUserMedia，发送流 ID 到 content script');
-                        chrome.tabs.sendMessage(tabId, {
-                            action: 'setupStream',
-                            streamId: streamId
-                        }, (response) => {
-                            if (chrome.runtime.lastError) {
-                                console.error('[Background] 发送流 ID 失败:', chrome.runtime.lastError);
-                                sendResponse({
-                                    success: false,
-                                    error: chrome.runtime.lastError.message
-                                });
-                            } else if (response && response.success) {
-                                // content script 会处理流，这里只是确认
-                                sendResponse({ success: true, message: '已在 content script 中设置流' });
-                            } else {
-                                sendResponse({ success: false, error: response?.error || '设置流失败' });
-                            }
-                        });
-                        return;
-                    }
-
-                    // 使用 getUserMedia 获取实际的媒体流
-                    navigator.mediaDevices.getUserMedia({
-                        audio: {
-                            mandatory: {
-                                chromeMediaSource: 'tab',
-                                chromeMediaSourceId: streamId
-                            }
-                        },
-                        video: false
-                    }).then((stream) => {
-                        handleStream(stream, tabId, sendResponse);
-                    }).catch((error) => {
-                        console.error('[Background] getUserMedia 失败:', error);
-                        sendResponse({
-                            success: false,
-                            error: `getUserMedia 失败: ${error.message}`
-                        });
-                    });
-                };
-
-                // 实际调用 getMediaStreamId，始终传递 targetTabId
-                chrome.tabCapture.getMediaStreamId(options, callback);
-                return;
-            }
-
-            // 方法2: 尝试使用 capture 方法 (旧版 API)
-            if (typeof chrome.tabCapture.capture === 'function') {
-                console.log('[Background] 使用 capture 方法（旧版）');
-                try {
-                    chrome.tabCapture.capture({
-                        audio: true,
-                        video: false
-                    }, (stream) => {
+                // 确保标签页是活动的（提高权限激活的成功率）
+                if (!tab.active) {
+                    console.log('[Background] 标签页未激活，尝试激活...');
+                    chrome.tabs.update(tabId, { active: true }, () => {
                         if (chrome.runtime.lastError) {
-                            console.error('[Background] 捕获失败:', chrome.runtime.lastError);
+                            console.warn('[Background] 无法激活标签页:', chrome.runtime.lastError);
+                        } else {
+                            console.log('[Background] 标签页已激活');
+                        }
+                    });
+                }
+
+                // Manifest V3 使用 getMediaStreamId 方法
+                if (!chrome.tabCapture) {
+                    sendResponse({ success: false, error: 'chrome.tabCapture API 不可用' });
+                    return;
+                }
+
+                // 方法1: 尝试使用 getMediaStreamId (Manifest V3 推荐)
+                if (typeof chrome.tabCapture.getMediaStreamId === 'function') {
+                    console.log('[Background] 使用 getMediaStreamId 方法, tabId:', tabId, 'active:', tab.active);
+
+                    // 始终传递 targetTabId，因为我们有 tabs 权限
+                    // 这样可以避免 activeTab 权限的激活问题
+                    const options = { targetTabId: tabId };
+
+                    const callback = (streamId) => {
+                        if (chrome.runtime.lastError) {
+                            console.error('[Background] 获取流 ID 失败:', chrome.runtime.lastError);
                             sendResponse({
                                 success: false,
                                 error: chrome.runtime.lastError.message
                             });
                             return;
                         }
-                        handleStream(stream, tabId, sendResponse);
-                    });
-                } catch (captureError) {
-                    console.error('[Background] capture 调用异常:', captureError);
-                    sendResponse({
-                        success: false,
-                        error: `capture 调用失败: ${captureError.message}`
-                    });
-                }
-                return;
-            }
 
-            // 如果都不支持
-            console.error('[Background] ❌ 不支持任何捕获方法');
-            sendResponse({
-                success: false,
-                error: '浏览器不支持标签页音频捕获'
-            });
-        });
+                        if (!streamId) {
+                            console.error('[Background] 未获取到流 ID');
+                            sendResponse({ success: false, error: '未获取到流 ID' });
+                            return;
+                        }
+
+                        console.log('[Background] ✅ 获取到流 ID:', streamId);
+
+                        // 检查 navigator.mediaDevices 是否可用（Service Worker 中可能不可用）
+                        if (!navigator || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                            // Service Worker 中不可用，发送流 ID 到 content script 处理
+                            console.log('[Background] Service Worker 不支持 getUserMedia，发送流 ID 到 content script');
+                            chrome.tabs.sendMessage(tabId, {
+                                action: 'setupStream',
+                                streamId: streamId
+                            }, (response) => {
+                                if (chrome.runtime.lastError) {
+                                    console.error('[Background] 发送流 ID 失败:', chrome.runtime.lastError);
+                                    sendResponse({
+                                        success: false,
+                                        error: chrome.runtime.lastError.message
+                                    });
+                                } else if (response && response.success) {
+                                    // content script 会处理流，这里只是确认
+                                    sendResponse({ success: true, message: '已在 content script 中设置流' });
+                                } else {
+                                    sendResponse({ success: false, error: response?.error || '设置流失败' });
+                                }
+                            });
+                            return;
+                        }
+
+                        // 使用 getUserMedia 获取实际的媒体流
+                        navigator.mediaDevices.getUserMedia({
+                            audio: {
+                                mandatory: {
+                                    chromeMediaSource: 'tab',
+                                    chromeMediaSourceId: streamId
+                                }
+                            },
+                            video: false
+                        }).then((stream) => {
+                            handleStream(stream, tabId, sendResponse);
+                        }).catch((error) => {
+                            console.error('[Background] getUserMedia 失败:', error);
+                            sendResponse({
+                                success: false,
+                                error: `getUserMedia 失败: ${error.message}`
+                            });
+                        });
+                    };
+
+                    // 实际调用 getMediaStreamId，始终传递 targetTabId
+                    chrome.tabCapture.getMediaStreamId(options, callback);
+                    return;
+                }
+
+                // 方法2: 尝试使用 capture 方法 (旧版 API)
+                if (typeof chrome.tabCapture.capture === 'function') {
+                    console.log('[Background] 使用 capture 方法（旧版）');
+                    try {
+                        chrome.tabCapture.capture({
+                            audio: true,
+                            video: false
+                        }, (stream) => {
+                            if (chrome.runtime.lastError) {
+                                console.error('[Background] 捕获失败:', chrome.runtime.lastError);
+                                sendResponse({
+                                    success: false,
+                                    error: chrome.runtime.lastError.message
+                                });
+                                return;
+                            }
+                            handleStream(stream, tabId, sendResponse);
+                        });
+                    } catch (captureError) {
+                        console.error('[Background] capture 调用异常:', captureError);
+                        sendResponse({
+                            success: false,
+                            error: `capture 调用失败: ${captureError.message}`
+                        });
+                    }
+                    return;
+                }
+
+                // 如果都不支持
+                console.error('[Background] ❌ 不支持任何捕获方法');
+                sendResponse({
+                    success: false,
+                    error: '浏览器不支持标签页音频捕获'
+                });
+            } // 结束 continueCapture 函数
+
+        }); // 结束 chrome.tabs.get 回调
 
     } catch (error) {
         console.error('[Background] 捕获失败:', error);

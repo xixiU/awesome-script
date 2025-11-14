@@ -22,6 +22,7 @@ class ExtensionSubtitleService {
         this.isRunning = false;
         this.config = null;
         this.subtitles = [];
+        this.contentStreamSession = null; // 存储 content script 中的录制会话
         this.loadConfig();
     }
 
@@ -60,8 +61,25 @@ class ExtensionSubtitleService {
             return { success: false, error: error.message };
         }
 
-        // 请求 background script 开始捕获
-        const result = await chrome.runtime.sendMessage({ action: 'startCapture' });
+        // 获取当前标签页的 tabId
+        let tabId = null;
+        try {
+            // 尝试从 sender 获取（但这只能在回调中获取）
+            // 所以我们先获取当前活动标签页
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tabs && tabs.length > 0) {
+                tabId = tabs[0].id;
+                console.log('[Extension字幕] 获取到当前标签页 ID:', tabId);
+            }
+        } catch (error) {
+            console.warn('[Extension字幕] 无法获取标签页 ID:', error);
+        }
+
+        // 请求 background script 开始捕获，传递 tabId
+        const result = await chrome.runtime.sendMessage({
+            action: 'startCapture',
+            tabId: tabId // 如果为 null，background 会尝试从 sender.tab.id 获取
+        });
 
         if (result.success) {
             this.isRunning = true;
@@ -73,9 +91,16 @@ class ExtensionSubtitleService {
             return { success: true };
         } else {
             console.error('[Extension字幕] 启动失败:', result.error);
+
+            // 检查是否是权限问题
+            let errorMessage = result.error;
+            if (result.error && result.error.includes('activeTab permission')) {
+                errorMessage = '⚠️ 权限未激活！请先点击扩展图标激活权限，然后再按 S 键。';
+            }
+
             this.sendToPage({
                 type: 'subtitleError',
-                message: '启动失败: ' + result.error
+                message: errorMessage
             });
             return { success: false, error: result.error };
         }
@@ -86,6 +111,20 @@ class ExtensionSubtitleService {
 
         console.log('[Extension字幕] 停止服务...');
 
+        // 停止 content script 中的录制
+        if (this.contentStreamSession && this.contentStreamSession.isRunning) {
+            this.contentStreamSession.isRunning = false;
+            if (this.contentStreamSession.mediaRecorder && this.contentStreamSession.mediaRecorder.state === 'recording') {
+                this.contentStreamSession.mediaRecorder.stop();
+            }
+            if (this.contentStreamSession.stream) {
+                this.contentStreamSession.stream.getTracks().forEach(track => track.stop());
+            }
+            this.contentStreamSession = null;
+            console.log('[Extension字幕] Content script 中的录制已停止');
+        }
+
+        // 停止 background 中的录制
         const result = await chrome.runtime.sendMessage({ action: 'stopCapture' });
 
         this.isRunning = false;
@@ -116,6 +155,11 @@ class ExtensionSubtitleService {
         console.log(`[Extension字幕] 音频大小: ${(audioBlob.size / 1024).toFixed(2)} KB`);
 
         // 发送到后端
+        await this.sendAudioToBackend(audioBlob);
+    }
+
+    async processAudioBlob(audioBlob) {
+        // 直接处理 Blob 对象（用于 content script 中的流处理）
         await this.sendAudioToBackend(audioBlob);
     }
 
@@ -177,6 +221,99 @@ class ExtensionSubtitleService {
 // 创建字幕服务实例
 const subtitleService = new ExtensionSubtitleService();
 
+/**
+ * 在 content script 中处理流 ID
+ */
+function handleStreamInContentScript(streamId, sendResponse) {
+    console.log('[Extension字幕] 在 content script 中使用流 ID 获取媒体流');
+
+    // 检查是否已经在录制
+    if (subtitleService.contentStreamSession && subtitleService.contentStreamSession.isRunning) {
+        console.warn('[Extension字幕] 已经在录制中');
+        sendResponse({ success: false, error: '已经在录制中' });
+        return;
+    }
+
+    // 使用 getUserMedia 获取实际的媒体流
+    navigator.mediaDevices.getUserMedia({
+        audio: {
+            mandatory: {
+                chromeMediaSource: 'tab',
+                chromeMediaSourceId: streamId
+            }
+        },
+        video: false
+    }).then((stream) => {
+        console.log('[Extension字幕] ✅ 获取到音频流');
+
+        // 创建 MediaRecorder
+        const mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'audio/webm;codecs=opus',
+            audioBitsPerSecond: 128000
+        });
+
+        const recordedChunks = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                recordedChunks.push(event.data);
+                console.log(`[Extension字幕] 📊 收到音频数据: ${event.data.size} bytes`);
+            }
+        };
+
+        mediaRecorder.onstop = async () => {
+            console.log('[Extension字幕] 录制停止，处理数据...');
+
+            if (recordedChunks.length > 0) {
+                const audioBlob = new Blob(recordedChunks, {
+                    type: 'audio/webm;codecs=opus'
+                });
+
+                console.log(`[Extension字幕] 音频大小: ${(audioBlob.size / 1024).toFixed(2)} KB`);
+
+                // 发送到后端处理
+                await subtitleService.processAudioBlob(audioBlob);
+            }
+
+            // 继续下一轮录制
+            if (subtitleService.contentStreamSession && subtitleService.contentStreamSession.isRunning) {
+                setTimeout(() => {
+                    if (mediaRecorder.state === 'inactive') {
+                        recordedChunks.length = 0;
+                        mediaRecorder.start(1000);
+                    }
+                }, 100);
+            }
+        };
+
+        // 保存会话
+        subtitleService.contentStreamSession = {
+            stream,
+            mediaRecorder,
+            isRunning: true
+        };
+
+        // 开始录制
+        mediaRecorder.start(1000); // 每秒触发 dataavailable
+        console.log('[Extension字幕] ✅ MediaRecorder 已启动');
+
+        // 5 秒后停止（模拟定时录制）
+        setTimeout(() => {
+            if (mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+        }, 5000);
+
+        sendResponse({ success: true, message: '已在 content script 中设置流并开始录制' });
+    }).catch((error) => {
+        console.error('[Extension字幕] getUserMedia 失败:', error);
+        sendResponse({
+            success: false,
+            error: `getUserMedia 失败: ${error.message}`
+        });
+    });
+}
+
 // 监听来自 background 的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'processAudio') {
@@ -193,10 +330,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // 处理流 ID（如果 Service Worker 不支持 getUserMedia）
     if (message.action === 'setupStream') {
-        console.log('[Extension字幕] 收到流 ID，在 content script 中设置流');
-        // 这里可以处理流，但通常 Service Worker 应该支持 getUserMedia
-        sendResponse({ success: false, error: 'content script 中暂不支持直接处理流' });
-        return false;
+        console.log('[Extension字幕] 收到流 ID，在 content script 中设置流:', message.streamId);
+        handleStreamInContentScript(message.streamId, sendResponse);
+        return true; // 异步响应
     }
 });
 
