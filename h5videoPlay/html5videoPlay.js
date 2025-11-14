@@ -22,7 +22,6 @@
 // @grant      GM_registerMenuCommand
 // @grant      GM_setValue
 // @grant      GM_getValue
-// @namespace  https://greasyfork.org/users/7036
 // @license    MIT
 // @thanks     https://greasyfork.org/users/7036
 // @downloadURL https://update.greasyfork.org/scripts/30545/HTML5%E8%A7%86%E9%A2%91%E6%92%AD%E6%94%BE%E5%B7%A5%E5%85%B7.user.js
@@ -531,55 +530,210 @@ class SubtitleService {
 
     async initAudioCapture() {
         try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            this.audioContext = new AudioContext();
+            console.log('[字幕] 初始化音频捕获...');
 
-            const stream = this.video.captureStream ? this.video.captureStream() : this.video.mozCaptureStream();
-            if (!stream) {
-                throw new Error('浏览器不支持音频捕获');
+            // 检查视频跨域属性
+            const videoSrc = this.video.currentSrc || this.video.src;
+            const videoOrigin = videoSrc ? new URL(videoSrc).origin : '';
+            const isCrossOrigin = videoOrigin && videoOrigin !== location.origin;
+
+            console.log('[字幕] 视频信息:', {
+                src: videoSrc,
+                origin: videoOrigin,
+                crossOrigin: isCrossOrigin,
+                crossOriginAttr: this.video.crossOrigin,
+                videoElement: this.video.tagName
+            });
+
+            // 如果是跨域视频，尝试设置 crossOrigin
+            if (isCrossOrigin && !this.video.crossOrigin) {
+                console.warn('[字幕] ⚠️ 检测到跨域视频，尝试设置 crossOrigin 属性');
+                // 注意：修改 crossOrigin 可能导致视频重新加载
+                // this.video.crossOrigin = 'anonymous';
+                tip('检测到跨域视频，可能无法捕获音频。建议使用同域视频。');
             }
 
-            this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+            // 检查 AudioContext 支持
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) {
+                throw new Error('浏览器不支持 AudioContext');
+            }
+            this.audioContext = new AudioContext();
+            console.log('[字幕] AudioContext 已创建, 状态:', this.audioContext.state);
+
+            // 检查 captureStream 支持
+            if (!this.video.captureStream && !this.video.mozCaptureStream) {
+                throw new Error('浏览器不支持 captureStream API');
+            }
+
+            // 尝试捕获流
+            let stream;
+            try {
+                stream = this.video.captureStream ? this.video.captureStream() : this.video.mozCaptureStream();
+            } catch (captureError) {
+                console.error('[字幕] captureStream 失败:', captureError);
+                throw new Error('无法捕获视频流（可能是跨域限制）: ' + captureError.message);
+            }
+
+            if (!stream) {
+                throw new Error('无法从视频捕获流');
+            }
+
+            const audioTracks = stream.getAudioTracks();
+            console.log('[字幕] 音频流已捕获, 音轨:', audioTracks.map(t => ({
+                id: t.id,
+                label: t.label,
+                enabled: t.enabled,
+                muted: t.muted,
+                readyState: t.readyState
+            })));
+
+            if (audioTracks.length === 0) {
+                throw new Error('视频没有音轨，无法识别字幕（可能是静音视频或跨域限制）');
+            }
+
+            // 尝试不同的 MIME 类型
+            const mimeTypes = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/ogg;codecs=opus',
+                'audio/mp4',
+                '' // 让浏览器自动选择
+            ];
+
+            let selectedMimeType = '';
+            for (const mimeType of mimeTypes) {
+                if (mimeType === '' || MediaRecorder.isTypeSupported(mimeType)) {
+                    selectedMimeType = mimeType;
+                    console.log('[字幕] 使用 MIME 类型:', mimeType || '(浏览器默认)');
+                    break;
+                }
+            }
+
+            // 创建 MediaRecorder
+            if (selectedMimeType) {
+                this.mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: selectedMimeType,
+                    audioBitsPerSecond: 128000  // 设置比特率
+                });
+            } else {
+                this.mediaRecorder = new MediaRecorder(stream);
+            }
+
+            console.log('[字幕] MediaRecorder 状态:', this.mediaRecorder.state);
 
             this.mediaRecorder.ondataavailable = (event) => {
+                console.log(`[字幕] 📊 ondataavailable 事件, 数据大小: ${event.data.size} bytes`);
                 if (event.data.size > 0) {
                     this.recordedChunks.push(event.data);
                 }
             };
 
             this.mediaRecorder.onstop = async () => {
+                console.log('[字幕] 录制停止事件触发');
                 await this.processRecordedAudio();
             };
 
-            console.log('[字幕] 音频捕获初始化成功');
+            this.mediaRecorder.onerror = (event) => {
+                console.error('[字幕] ❌ MediaRecorder 错误:', event.error);
+            };
+
+            this.mediaRecorder.onstart = () => {
+                console.log('[字幕] ✅ MediaRecorder 已启动');
+            };
+
+            console.log('[字幕] ✅ 音频捕获初始化成功');
             return true;
         } catch (error) {
-            console.error('[字幕] 音频捕获失败:', error);
-            tip('字幕功能需要浏览器支持音频捕获');
+            console.error('[字幕] ❌ 音频捕获失败:', error);
+            tip('音频捕获失败: ' + error.message);
             return false;
         }
     }
 
     startRecording() {
-        if (!this.mediaRecorder) return;
+        if (!this.mediaRecorder) {
+            console.error('[字幕] MediaRecorder 未初始化');
+            return;
+        }
 
-        this.recordedChunks = [];
-        this.mediaRecorder.start();
+        // 检查视频是否在播放
+        if (this.video.paused || this.video.ended) {
+            console.warn('[字幕] 视频未播放，等待播放后再录制');
+            // 等待视频开始播放
+            const waitForPlay = () => {
+                if (this.isRunning && !this.video.paused && !this.video.ended) {
+                    this.startRecording();
+                }
+            };
+            this.video.addEventListener('play', waitForPlay, { once: true });
+            return;
+        }
 
-        setTimeout(() => {
-            if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-                this.mediaRecorder.stop();
+        try {
+            this.recordedChunks = [];
+
+            // 启动录制，指定 timeslice 以定期触发 dataavailable 事件
+            // timeslice: 每隔多少毫秒触发一次 dataavailable
+            const timeslice = 1000; // 每 1 秒触发一次
+            this.mediaRecorder.start(timeslice);
+            console.log(`[字幕] ✅ 开始录制音频 (${this.config.captureInterval} 秒, timeslice: ${timeslice}ms)`);
+
+            setTimeout(() => {
+                if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+                    this.mediaRecorder.stop();
+                    console.log('[字幕] 停止录制，准备处理');
+                }
+            }, this.config.captureInterval * 1000);
+        } catch (error) {
+            console.error('[字幕] ❌ 录制启动失败:', error);
+
+            // 详细的错误诊断
+            const videoSrc = this.video.currentSrc || this.video.src;
+            const isCrossOrigin = videoSrc && new URL(videoSrc).origin !== location.origin;
+
+            console.error('[字幕] 错误诊断:', {
+                errorName: error.name,
+                errorMessage: error.message,
+                videoSrc: videoSrc,
+                videoDomain: videoSrc ? new URL(videoSrc).origin : 'unknown',
+                pageDomain: location.origin,
+                isCrossOrigin: isCrossOrigin,
+                videoState: {
+                    paused: this.video.paused,
+                    ended: this.video.ended,
+                    readyState: this.video.readyState,
+                    networkState: this.video.networkState,
+                    duration: this.video.duration,
+                    currentTime: this.video.currentTime
+                },
+                mediaRecorderState: this.mediaRecorder ? this.mediaRecorder.state : 'null'
+            });
+
+            if (isCrossOrigin) {
+                tip('⚠️ 跨域视频无法捕获音频。建议在 B站等网站使用字幕功能。');
+                console.warn('[字幕] 这是跨域视频，浏览器安全策略阻止音频捕获');
+                console.warn('[字幕] 建议：在 Bilibili 等同域视频网站使用字幕功能');
+            } else {
+                tip('录制失败: ' + error.message);
             }
-        }, this.config.captureInterval * 1000);
+
+            this.stop();
+        }
     }
 
     async processRecordedAudio() {
+        console.log(`[字幕] 处理音频数据，chunks: ${this.recordedChunks.length}`);
+
         if (this.recordedChunks.length === 0) {
+            console.warn('[字幕] 没有音频数据，跳过处理');
             if (this.isRunning) this.startRecording();
             return;
         }
 
         const audioBlob = new Blob(this.recordedChunks, { type: 'audio/webm;codecs=opus' });
+        console.log(`[字幕] 音频大小: ${(audioBlob.size / 1024).toFixed(2)} KB`);
+
         await this.sendAudioToBackend(audioBlob);
 
         if (this.isRunning) this.startRecording();
@@ -592,24 +746,45 @@ class SubtitleService {
             formData.append('translate_to', this.config.targetLanguage);
         }
 
+        console.log('[字幕] 发送音频到后端:', {
+            url: `${this.config.serverUrl}/transcribe`,
+            size: `${(audioBlob.size / 1024).toFixed(2)} KB`,
+            translate: this.config.autoTranslate,
+            targetLang: this.config.targetLanguage
+        });
+
         try {
+            const startTime = Date.now();
             const response = await fetch(`${this.config.serverUrl}/transcribe`, {
                 method: 'POST',
+                mode: 'cors',
                 body: formData
             });
 
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const elapsed = Date.now() - startTime;
+            console.log(`[字幕] 请求耗时: ${elapsed}ms, 状态: ${response.status}`);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[字幕] 后端返回错误:', response.status, errorText);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
 
             const data = await response.json();
+            console.log('[字幕] 后端响应:', data);
+
             if (data.success && data.subtitles && data.subtitles.length > 0) {
                 this.addSubtitles(data.subtitles);
-                console.log(`[字幕] 获取 ${data.subtitles.length} 条字幕`);
+                console.log(`[字幕] ✅ 获取 ${data.subtitles.length} 条字幕`);
+                tip(`获取 ${data.subtitles.length} 条字幕`);
+            } else {
+                console.warn('[字幕] 未获取到字幕数据');
             }
         } catch (error) {
-            console.error('[字幕] 服务连接失败:', error);
+            console.error('[字幕] ❌ 服务连接失败:', error);
             if (this.isRunning) {
-                tip('字幕服务连接失败，请检查后端是否运行');
-                this.stop();
+                tip('字幕服务连接失败: ' + error.message);
+                // 不自动停止，让用户决定
             }
         }
     }
@@ -631,11 +806,39 @@ class SubtitleService {
     }
 
     async start() {
-        if (this.isRunning) return;
+        if (this.isRunning) {
+            console.log('[字幕] 服务已在运行');
+            return;
+        }
 
-        console.log('[字幕] 启动服务...');
+        console.log('[字幕] 启动服务...', {
+            serverUrl: this.config.serverUrl,
+            targetLanguage: this.config.targetLanguage,
+            autoTranslate: this.config.autoTranslate
+        });
+
+        // 先测试后端连接
+        try {
+            const response = await fetch(`${this.config.serverUrl}/health`, {
+                method: 'GET',
+                mode: 'cors'
+            });
+            if (!response.ok) {
+                throw new Error(`后端服务不可用: ${response.status}`);
+            }
+            const data = await response.json();
+            console.log('[字幕] 后端服务状态:', data);
+        } catch (error) {
+            console.error('[字幕] 后端连接失败:', error);
+            tip('字幕服务连接失败，请检查后端是否运行在 ' + this.config.serverUrl);
+            return;
+        }
+
         const success = await this.initAudioCapture();
-        if (!success) return;
+        if (!success) {
+            tip('音频捕获失败，请检查浏览器权限');
+            return;
+        }
 
         this.isRunning = true;
         this.createSubtitleUI();
@@ -647,7 +850,7 @@ class SubtitleService {
         }
 
         tip('字幕识别已开启');
-        console.log('[字幕] 服务已启动');
+        console.log('[字幕] 服务已启动成功');
     }
 
     stop() {
@@ -1042,10 +1245,26 @@ const app = {
     },
     addSubtitleButton() {
         // 如果已经添加过按钮，不重复添加
-        if (d.querySelector('.gm-subtitle-btn')) return;
+        if (d.querySelector('.gm-subtitle-btn')) {
+            console.log('[字幕] 按钮已存在，跳过添加');
+            return;
+        }
+
+        // 延迟添加，等待控制栏生成
+        setTimeout(() => {
+            this.doAddSubtitleButton();
+        }, 1500);
+    },
+
+    doAddSubtitleButton() {
+        if (d.querySelector('.gm-subtitle-btn')) {
+            console.log('[字幕] 按钮已存在');
+            return;
+        }
 
         // 尝试找到控制栏
         let controlBar = null;
+        let matchedSelector = '';
         const selectors = [
             '.bpx-player-control-bottom-right',  // B站
             '.ytp-right-controls',               // YouTube
@@ -1053,18 +1272,36 @@ const app = {
             '.prism-controlbar',                 // 阿里播放器
             '.dplayer-icons-right',              // DPlayer
             '.vjs-control-bar',                  // Video.js
-            '.control-bar-right'                 // 通用
+            '.control-bar-right',                // 通用
+            '[class*="control"][class*="right"]', // 通用模式
+            '[class*="control-bar"]'             // 通用模式2
         ];
 
         for (const selector of selectors) {
             controlBar = q(selector);
-            if (controlBar) break;
+            if (controlBar && controlBar.offsetHeight > 0) {
+                matchedSelector = selector;
+                break;
+            }
         }
 
         if (!controlBar && cfg.mvShell) {
             // 尝试在播放器容器中查找控制栏
-            controlBar = cfg.mvShell.querySelector('[class*="control"]');
+            const controls = cfg.mvShell.querySelectorAll('[class*="control"]');
+            for (const ctrl of controls) {
+                if (ctrl.offsetHeight > 0 && ctrl.children.length > 0) {
+                    controlBar = ctrl;
+                    matchedSelector = '动态查找';
+                    break;
+                }
+            }
         }
+
+        console.log('[字幕] 控制栏查找结果:', {
+            found: !!controlBar,
+            selector: matchedSelector,
+            visible: controlBar ? controlBar.offsetHeight > 0 : false
+        });
 
         if (!controlBar) {
             console.log('[字幕] 未找到控制栏，使用浮动按钮');
@@ -1077,22 +1314,32 @@ const app = {
         btn.className = 'gm-subtitle-btn';
         btn.title = '开启字幕 (快捷键 S)';
         btn.style.cssText = `
-            display: inline-flex;
+            display: inline-flex !important;
             align-items: center;
             justify-content: center;
             width: 36px;
             height: 36px;
             cursor: pointer;
-            opacity: 0.8;
+            opacity: 0.9;
             transition: opacity 0.2s;
+            pointer-events: auto;
+            position: relative;
+            z-index: 1;
+            margin: 0 4px;
         `;
 
-        // SVG 字幕图标
-        btn.innerHTML = `
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/>
-            </svg>
-        `;
+        // 创建 SVG 字幕图标（使用安全的方式）
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '24');
+        svg.setAttribute('height', '24');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'white');
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z');
+
+        svg.appendChild(path);
+        btn.appendChild(svg);
 
         btn.addEventListener('mouseenter', () => btn.style.opacity = '1');
         btn.addEventListener('mouseleave', () => btn.style.opacity = '0.8');
@@ -1118,8 +1365,16 @@ const app = {
             }
         `);
 
-        controlBar.insertBefore(btn, controlBar.firstChild);
-        console.log('[字幕] 按钮已添加到控制栏');
+        // 添加到控制栏（appendChild 而不是 insertBefore，更兼容）
+        controlBar.appendChild(btn);
+        console.log('[字幕] 按钮已添加到控制栏:', controlBar.className, '按钮可见:', btn.offsetWidth > 0);
+
+        // 调试：检查按钮是否真的在 DOM 中
+        setTimeout(() => {
+            const checkBtn = d.querySelector('.gm-subtitle-btn');
+            console.log('[字幕] 按钮检查:', checkBtn ? '存在' : '不存在',
+                checkBtn ? `可见性: ${checkBtn.offsetWidth}x${checkBtn.offsetHeight}` : '');
+        }, 1000);
 
         // 如果有字幕服务实例，关联按钮
         if (subtitleService) {
@@ -1127,32 +1382,41 @@ const app = {
         }
     },
     addFloatingSubtitleButton() {
+        console.log('[字幕] 创建浮动按钮...');
+
         // 创建浮动字幕按钮
         const btn = d.createElement('div');
         btn.className = 'gm-subtitle-btn gm-floating-btn';
         btn.title = '开启字幕 (快捷键 S)';
         btn.style.cssText = `
-            position: fixed;
-            bottom: 100px;
-            right: 20px;
-            width: 48px;
-            height: 48px;
-            background: rgba(0, 0, 0, 0.7);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 9999;
-            transition: all 0.3s;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            position: fixed !important;
+            bottom: 100px !important;
+            right: 20px !important;
+            width: 48px !important;
+            height: 48px !important;
+            background: rgba(0, 0, 0, 0.7) !important;
+            border-radius: 50% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            cursor: pointer !important;
+            z-index: 999999 !important;
+            transition: all 0.3s !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
         `;
 
-        btn.innerHTML = `
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="white">
-                <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/>
-            </svg>
-        `;
+        // 创建 SVG（使用安全方式）
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '28');
+        svg.setAttribute('height', '28');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'white');
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z');
+
+        svg.appendChild(path);
+        btn.appendChild(svg);
 
         btn.addEventListener('mouseenter', () => {
             btn.style.transform = 'scale(1.1)';
@@ -1177,10 +1441,23 @@ const app = {
             .gm-floating-btn.subtitle-active {
                 background: rgba(0, 161, 214, 0.9) !important;
             }
+            .gm-floating-btn.subtitle-active svg {
+                fill: #FFD700 !important;
+            }
         `);
 
         by.appendChild(btn);
-        console.log('[字幕] 浮动按钮已创建');
+        console.log('[字幕] ✅ 浮动按钮已创建，位置: 右下角');
+
+        // 确认按钮可见
+        setTimeout(() => {
+            const checkBtn = d.querySelector('.gm-floating-btn');
+            console.log('[字幕] 浮动按钮检查:', {
+                exists: !!checkBtn,
+                visible: checkBtn ? `${checkBtn.offsetWidth}x${checkBtn.offsetHeight}` : '不存在',
+                position: checkBtn ? `bottom: ${checkBtn.style.bottom}, right: ${checkBtn.style.right}` : ''
+            });
+        }, 500);
 
         if (subtitleService) {
             subtitleService.subtitleButton = btn;
