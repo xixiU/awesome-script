@@ -1,0 +1,59 @@
+{
+    "manifest_version": 3,
+    "name": "HTML5视频播放工具",
+    "name__en": "HTML5 Video Player Tools",
+    "version": "3.0.0",
+    "description": "视频快捷键控制 + 实时字幕翻译。支持所有视频网站，突破跨域限制。",
+    "description__en": "Video hotkeys control + real-time subtitle translation. Support all video sites, bypass CORS restrictions.",
+    "permissions": [
+        "activeTab",
+        "tabCapture",
+        "storage",
+        "scripting"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_start",
+            "all_frames": false
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
+        },
+        "default_title": "HTML5视频播放工具"
+    },
+    "icons": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "injected.js"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ]
+}

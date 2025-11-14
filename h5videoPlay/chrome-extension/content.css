@@ -1,0 +1,114 @@
+/* Chrome 扩展样式 */
+
+/* 字幕按钮样式 */
+.h5video-subtitle-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    cursor: pointer;
+    opacity: 0.9;
+    transition: opacity 0.2s;
+    pointer-events: auto;
+    position: relative;
+    z-index: 1;
+    margin: 0 4px;
+}
+
+.h5video-subtitle-btn:hover {
+    opacity: 1 !important;
+}
+
+.h5video-subtitle-btn.subtitle-active {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-radius: 4px;
+}
+
+.h5video-subtitle-btn.subtitle-active svg {
+    fill: #00a1d6 !important;
+}
+
+/* 浮动按钮 */
+.h5video-floating-btn {
+    position: fixed !important;
+    bottom: 100px !important;
+    right: 20px !important;
+    width: 56px !important;
+    height: 56px !important;
+    background: rgba(0, 0, 0, 0.8) !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    z-index: 999999 !important;
+    transition: all 0.3s !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+.h5video-floating-btn:hover {
+    transform: scale(1.1) !important;
+    background: rgba(0, 0, 0, 0.95) !important;
+}
+
+.h5video-floating-btn.subtitle-active {
+    background: rgba(0, 161, 214, 0.9) !important;
+}
+
+.h5video-floating-btn.subtitle-active svg {
+    fill: #FFD700 !important;
+}
+
+/* 字幕显示 */
+.h5video-subtitle-container {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 80px;
+    text-align: center;
+    pointer-events: none;
+    z-index: 9998;
+    font-family: Arial, sans-serif;
+}
+
+.h5video-subtitle-text {
+    display: none;
+    margin: 0 auto;
+    padding: 10px 20px;
+    font-size: 22px;
+    font-weight: 500;
+    color: #FFFFFF;
+    background: rgba(0, 0, 0, 0.85);
+    border-radius: 6px;
+    max-width: 85%;
+    word-wrap: break-word;
+    line-height: 1.5;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.h5video-subtitle-text.show {
+    display: inline-block;
+}
+
+/* 提示信息 */
+.h5video-tip {
+    max-width: 455px;
+    min-width: 333px;
+    background: #EEE;
+    color: #111;
+    height: auto;
+    min-height: 28px;
+    padding: 6px 12px;
+    top: -50px;
+    left: 50%;
+    transform: translate(-50%, 0);
+    border-radius: 8px;
+    border: 1px solid #00a1d6;
+    text-align: center;
+    font-size: 15px;
+    position: fixed;
+    z-index: 2147483647;
+    transition: top 0.3s ease-out;
+}

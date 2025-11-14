@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            width: 350px;
+            padding: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            margin: 0;
+        }
+
+        h2 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            color: #333;
+        }
+
+        .section {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .section:last-child {
+            border-bottom: none;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: #00a1d6;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+
+        .checkbox-group input {
+            width: auto;
+            margin-right: 8px;
+            margin-bottom: 0;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #00a1d6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background: #0090c0;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .shortcuts {
+            font-size: 12px;
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .shortcuts strong {
+            color: #00a1d6;
+        }
+
+        .help-text {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>⚙️ HTML5视频播放工具</h2>
+
+    <div class="section">
+        <h3 style="font-size: 14px; margin: 0 0 10px 0; color: #00a1d6;">🌍 字幕翻译配置</h3>
+
+        <label>后端服务地址</label>
+        <input type="text" id="serverUrl" placeholder="http://localhost:8765">
+
+        <label>目标翻译语言</label>
+        <select id="targetLang">
+            <option value="zh-CN">简体中文 (zh-CN)</option>
+            <option value="zh-TW">繁体中文 (zh-TW)</option>
+            <option value="en">英语 (en)</option>
+            <option value="ja">日语 (ja)</option>
+            <option value="ko">韩语 (ko)</option>
+            <option value="fr">法语 (fr)</option>
+            <option value="de">德语 (de)</option>
+            <option value="es">西班牙语 (es)</option>
+            <option value="ru">俄语 (ru)</option>
+        </select>
+
+        <div class="checkbox-group">
+            <input type="checkbox" id="autoTranslate" checked>
+            <label for="autoTranslate" style="margin: 0;">自动翻译</label>
+        </div>
+
+        <button id="saveBtn">保存配置</button>
+        <div id="status" class="status" style="display: none;"></div>
+    </div>
+
+    <div class="section">
+        <h3 style="font-size: 14px; margin: 0 0 10px 0; color: #00a1d6;">⌨️ 常用快捷键</h3>
+        <div class="shortcuts">
+            <strong>S</strong> - 开启/关闭字幕<br>
+            <strong>V/X/Z</strong> - 加速/减速/切换速度<br>
+            <strong>←/→</strong> - 快退/快进 5秒<br>
+            <strong>P</strong> - 截图<br>
+            <strong>I</strong> - 画中画<br>
+            <strong>Enter</strong> - 全屏
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="help-text">
+            💡 提示：访问视频网站，播放视频后按 S 键即可使用字幕功能
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

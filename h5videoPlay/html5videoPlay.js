@@ -86,6 +86,7 @@ const shouldEnableScript = () => {
     ];
 
     if (knownVideoSites.some(site => host.includes(site))) {
+        console.log('[HTML5视频工具] 识别为已知视频网站:', host);
         return true;
     }
 
