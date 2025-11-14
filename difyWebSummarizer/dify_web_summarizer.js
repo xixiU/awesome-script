@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.5.1
-// @description  使用Dify工作流或Chrome Gemini AI智能总结网页内容，支持各类知识型网站
+// @version      1.5.3
+// @description  使用Dify工作流或Chrome Gemini AI智能总结网页内容，支持全文总结和选中文本总结
 // @author       xixiu
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
@@ -60,6 +60,8 @@
             width: 40px !important;
             height: auto !important;
             min-height: 40px !important;
+            max-width: 200px !important;
+            max-height: 60px !important;
             overflow: hidden !important;
             white-space: nowrap !important;
             display: flex !important;
@@ -946,6 +948,7 @@ ${newsContent}
             const btn = document.createElement('button');
             btn.id = 'dify-summarizer-btn';
             btn.classList.add('edge-mode'); // 默认贴边模式
+            btn.title = '点击总结全文，或选中文本后点击总结选中部分';
 
             // 使用 DOM API 创建元素，避免 TrustedHTML 问题
             const iconSpan = document.createElement('span');
@@ -961,6 +964,10 @@ ${newsContent}
 
             document.body.appendChild(btn);
             this.button = btn;
+            this.buttonTextSpan = textSpan;
+
+            // 监听文本选择变化，动态更新按钮提示
+            this.setupSelectionListener();
 
             // 加载保存的位置
             this.loadButtonPosition();
@@ -984,6 +991,45 @@ ${newsContent}
                     this.handleSummarize();
                 }
             });
+        }
+
+        setupSelectionListener() {
+            // 监听文本选择事件
+            let selectionTimeout;
+            const updateButtonText = () => {
+                // 防抖处理
+                clearTimeout(selectionTimeout);
+                selectionTimeout = setTimeout(() => {
+                    // 如果按钮正在加载或被隐藏（全屏等场景），不更新按钮文本
+                    if (this.button.classList.contains('loading') || this.button.classList.contains('hidden')) {
+                        return;
+                    }
+
+                    const selection = window.getSelection();
+                    const selectedText = selection ? selection.toString().trim() : '';
+
+                    const iconSpan = this.button.querySelector('.btn-icon');
+                    const textSpan = this.button.querySelector('.btn-text');
+
+                    if (selectedText && selectedText.length >= 50) {
+                        // 有选中文本
+                        if (iconSpan) iconSpan.textContent = '✂️';
+                        if (textSpan) textSpan.textContent = '总结选中';
+                        this.button.title = `总结选中的文本（${selectedText.length} 字符）`;
+                    } else {
+                        // 没有选中或文本太短
+                        if (iconSpan) iconSpan.textContent = '📝';
+                        if (textSpan) textSpan.textContent = 'AI总结';
+                        this.button.title = '点击总结全文，或选中文本后点击总结选中部分';
+                    }
+                }, 100);
+            };
+
+            // 监听选择变化
+            document.addEventListener('selectionchange', updateButtonText);
+
+            // 监听鼠标抬起（处理拖动选择的情况）
+            document.addEventListener('mouseup', updateButtonText);
         }
 
         loadButtonPosition() {
@@ -1137,6 +1183,7 @@ ${newsContent}
             header.id = 'dify-panel-header';
 
             const title = document.createElement('h3');
+            title.id = 'dify-panel-title';
             title.textContent = '📝 AI总结结果';
 
             const actionsDiv = document.createElement('div');
@@ -1160,7 +1207,7 @@ ${newsContent}
             // 创建全屏按钮
             const fullscreenBtn = document.createElement('button');
             fullscreenBtn.id = 'dify-fullscreen-btn';
-            fullscreenBtn.innerHTML = '⤢';
+            fullscreenBtn.textContent = '⤢';
             fullscreenBtn.title = '全屏显示';
 
             // 创建关闭按钮
@@ -1408,17 +1455,34 @@ ${newsContent}
                 // 显示面板并展示加载动画
                 this.showLoadingPanel();
 
-                // 提取网页内容
-                const extractor = new ContentExtractor();
-                const newsContent = extractor.extract();
+                // 优先检查是否有选中的文本
+                const selection = window.getSelection();
+                const selectedText = selection ? selection.toString().trim() : '';
+
+                let newsContent = '';
+                let isSelectionMode = false;
+
+                if (selectedText && selectedText.length >= 50) {
+                    // 使用选中的文本
+                    newsContent = selectedText;
+                    isSelectionMode = true;
+                    console.log('使用选中文本，长度:', newsContent.length);
+                } else {
+                    // 提取全文内容
+                    const extractor = new ContentExtractor();
+                    newsContent = extractor.extract();
+                    console.log('提取全文内容，长度:', newsContent.length);
+                    console.log('内容预览:', newsContent.substring(0, 500));
+                }
+
                 const newsUrl = window.location.href;
 
-                console.log('提取的内容长度:', newsContent.length);
-                console.log('内容预览:', newsContent.substring(0, 500));
-
                 if (!newsContent || newsContent.length < 50) {
-                    throw new Error('未能提取到有效的网页内容，请刷新页面后重试');
+                    throw new Error('未能提取到有效的内容，请刷新页面后重试');
                 }
+
+                // 保存总结模式（用于显示标题）
+                this.currentSummaryMode = isSelectionMode ? 'selection' : 'full';
 
                 // 根据配置选择 AI 提供商
                 let result;
@@ -1440,10 +1504,17 @@ ${newsContent}
             } finally {
                 // 恢复按钮状态
                 this.button.classList.remove('loading');
+
+                // 清除文本选择（如果是选中文本总结的话）
+                if (this.currentSummaryMode === 'selection') {
+                    window.getSelection().removeAllRanges();
+                }
+
                 const iconSpan = this.button.querySelector('.btn-icon');
                 const textSpan = this.button.querySelector('.btn-text');
                 if (iconSpan) iconSpan.textContent = '📝';
                 if (textSpan) textSpan.textContent = 'AI总结';
+                this.button.title = '点击总结全文，或选中文本后点击总结选中部分';
             }
         }
 
@@ -1471,6 +1542,14 @@ ${newsContent}
         }
 
         showResultPanel(result) {
+            // 更新面板标题
+            const titleElement = this.panel.querySelector('#dify-panel-title');
+            if (this.currentSummaryMode === 'selection') {
+                titleElement.textContent = '📝 AI总结结果（选中文本）';
+            } else {
+                titleElement.textContent = '📝 AI总结结果（全文）';
+            }
+
             // 显示总结结果
             const contentDiv = this.panel.querySelector('#dify-panel-content');
             contentDiv.textContent = ''; // 清空内容
@@ -1522,14 +1601,14 @@ ${newsContent}
                 this.panel.classList.add('fullscreen');
                 this.panel.classList.remove('draggable');
                 this.panelHeader.classList.remove('draggable');
-                this.fullscreenBtn.innerHTML = '⤓';
+                this.fullscreenBtn.textContent = '⤓';
                 this.fullscreenBtn.title = '退出全屏';
             } else {
                 // 退出全屏
                 this.panel.classList.remove('fullscreen');
                 this.panel.classList.add('draggable');
                 this.panelHeader.classList.add('draggable');
-                this.fullscreenBtn.innerHTML = '⤢';
+                this.fullscreenBtn.textContent = '⤢';
                 this.fullscreenBtn.title = '全屏显示';
                 // 恢复居中位置
                 this.panel.style.top = '50%';
@@ -1961,12 +2040,14 @@ ${newsContent}
 
                     if (isFullscreen) {
                         // 全屏时隐藏按钮
-                        this.button.classList.add('hidden');
-                        //console.log('检测到全屏状态，隐藏AI总结按钮');
+                        if (!this.button.classList.contains('hidden')) {
+                            this.button.classList.add('hidden');
+                        }
                     } else {
                         // 退出全屏时显示按钮
-                        this.button.classList.remove('hidden');
-                        //console.log('退出全屏状态，显示AI总结按钮');
+                        if (this.button.classList.contains('hidden')) {
+                            this.button.classList.remove('hidden');
+                        }
                     }
                 }
             };
@@ -1977,8 +2058,22 @@ ${newsContent}
             document.addEventListener('mozfullscreenchange', handleFullscreenChange);
             document.addEventListener('MSFullscreenChange', handleFullscreenChange);
 
+
+            // 监听窗口大小变化（用于检测伪全屏）
+            window.addEventListener('resize', () => {
+                console.log('[Dify Debug] 📢 窗口大小变化');
+                handleFullscreenChange();
+            });
+
             // 初始检查
             handleFullscreenChange();
+
+            // 定期检查（备用方案，每500ms检查一次）
+            // console.log('[Dify Debug] 启动定期检查（500ms）');
+            // this.fullscreenCheckInterval = setInterval(() => {
+            //     console.log('[Dify Debug] 🔄 定期检查全屏状态');
+            //     handleFullscreenChange();
+            // }, 500);
         }
     }
 
