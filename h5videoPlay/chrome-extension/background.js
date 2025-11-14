@@ -172,6 +172,35 @@ async function startAudioCapture(tabId, sendResponse) {
 
             console.log('[Background] 准备捕获标签页:', tab.url, 'active:', tab.active);
 
+            // 检查是否是 Chrome 内部页面（无法捕获）
+            if (tab.url && (tab.url.startsWith('chrome://') || 
+                           tab.url.startsWith('chrome-extension://') ||
+                           tab.url.startsWith('edge://') ||
+                           tab.url.startsWith('about:'))) {
+                console.error('[Background] Chrome 内部页面无法捕获:', tab.url);
+                sendResponse({ 
+                    success: false, 
+                    error: 'Chrome 内部页面无法捕获音频。请在普通网页（如 YouTube、B站）上使用。' 
+                });
+                return;
+            }
+
+            // 检查权限：确保我们有访问该标签页的权限
+            // 即使有 tabs 权限，某些情况下仍需要确保标签页可访问
+            console.log('[Background] 检查权限... tabId:', tabId, 'url:', tab.url);
+            
+            // 确保标签页是活动的（提高权限激活的成功率）
+            if (!tab.active) {
+                console.log('[Background] 标签页未激活，尝试激活...');
+                chrome.tabs.update(tabId, { active: true }, () => {
+                    if (chrome.runtime.lastError) {
+                        console.warn('[Background] 无法激活标签页:', chrome.runtime.lastError);
+                    } else {
+                        console.log('[Background] 标签页已激活');
+                    }
+                });
+            }
+
             // Manifest V3 使用 getMediaStreamId 方法
             if (!chrome.tabCapture) {
                 sendResponse({ success: false, error: 'chrome.tabCapture API 不可用' });
@@ -180,11 +209,13 @@ async function startAudioCapture(tabId, sendResponse) {
 
             // 方法1: 尝试使用 getMediaStreamId (Manifest V3 推荐)
             if (typeof chrome.tabCapture.getMediaStreamId === 'function') {
-                console.log('[Background] 使用 getMediaStreamId 方法');
+                console.log('[Background] 使用 getMediaStreamId 方法, tabId:', tabId, 'active:', tab.active);
 
-                chrome.tabCapture.getMediaStreamId({
-                    targetTabId: tabId
-                }, (streamId) => {
+                // 始终传递 targetTabId，因为我们有 tabs 权限
+                // 这样可以避免 activeTab 权限的激活问题
+                const options = { targetTabId: tabId };
+
+                const callback = (streamId) => {
                     if (chrome.runtime.lastError) {
                         console.error('[Background] 获取流 ID 失败:', chrome.runtime.lastError);
                         sendResponse({
@@ -244,7 +275,10 @@ async function startAudioCapture(tabId, sendResponse) {
                             error: `getUserMedia 失败: ${error.message}`
                         });
                     });
-                });
+                };
+
+                // 实际调用 getMediaStreamId，始终传递 targetTabId
+                chrome.tabCapture.getMediaStreamId(options, callback);
                 return;
             }
 

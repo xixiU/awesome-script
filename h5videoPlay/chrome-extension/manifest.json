@@ -7,6 +7,7 @@
     "description__en": "Video hotkeys control + real-time subtitle translation. Support all video sites, bypass CORS restrictions.",
     "permissions": [
         "activeTab",
+        "tabs",
         "tabCapture",
         "storage",
         "scripting"
