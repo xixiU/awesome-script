@@ -3,10 +3,10 @@
 // @name       HTML5视频播放工具
 // @name:en	   HTML5 Video Playing Tools
 // @name:it    Strumenti di riproduzione video HTML5
-// @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
-// @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
-// @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.1.0
+// @description 视频截图；切换画中画；缓存视频；万能网页全屏；实时字幕翻译；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
+// @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; real-time subtitle translation; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
+// @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; traduzione dei sottotitoli in tempo reale; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
+// @version    2.2.0
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -15,6 +15,7 @@
 // @require    https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js
 // @require    https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js
 // @grant      GM_addStyle
+// @grant      GM_xmlhttpRequest
 // @grant      window.onurlchange
 // @grant      unsafeWindow
 // @grant      GM_registerMenuCommand
@@ -165,6 +166,7 @@ const i18n = {
         'helpMenuOption': '脚本功能快捷键表',
         'helpBody': `双击(控制栏)：切换（网页）全屏         鼠标中键：快进5秒
 P：视频截图    i：切换画中画   M：(停止)缓存视频
+S：开启/关闭实时字幕翻译 🆕
 chrome类浏览器加启动参数设置媒体缓存为840MB： --media-cache-size=880008000
 
 ← →方向键：快退、快进5秒;   方向键 + shift: 20秒
@@ -172,7 +174,12 @@ chrome类浏览器加启动参数设置媒体缓存为840MB： --media-cache-siz
 空格键：暂停/播放      N：播放下一集
 回车键：切换全屏;      回车键 + shift: 切换网页全屏
 C(抖音、youtube用V键)：加速0.1倍  X(抖音S)：减速0.1倍  Z(抖音A)：切换加速状态
-D：上一帧     F：下一帧(youtube.com用E键)`
+D：上一帧     F：下一帧(youtube.com用E键)
+
+【字幕功能使用说明】
+1. 启动后端服务: cd subtitle_backend && ./start.sh
+2. 按 S 键或点击控制栏字幕按钮开启字幕
+3. 在油猴菜单中可配置服务地址和目标语言`
     },
     'en': {
         'console': '%cScript[%s] Feedback：%s\n%s',
@@ -194,6 +201,7 @@ Middle mouse button: fast forward 5 seconds
 P key： Take a screenshot
 I key： Enter/Exit picture-in-picture mode
 M key： Enable/disable caching of video
+S key： Toggle real-time subtitle translation 🆕
 Chrome browsers add startup parameters to set the media cache to 840MB： --media-cache-size=880008000
 
 Arrow keys ← and →： Fast forward or rewind by 5 seconds
@@ -211,7 +219,12 @@ X key: Slow down video playback by 0.1
 Z key, Set video playback speed: 1.0 ←→ X
 D key: Previous frame
 F key: Next frame (except on YouTube)
-E key: Next frame (YouTube only)`
+E key: Next frame (YouTube only)
+
+【Subtitle Feature】
+1. Start backend: cd subtitle_backend && ./start.sh
+2. Press S key or click subtitle button to enable
+3. Configure in Tampermonkey menu`
     },
     'it': {
         'console': '%cScript[%s] Feedback：%s\n%s',
@@ -233,6 +246,7 @@ Pulsante centrale del mouse: avanzamento rapido di 5 secondi
 Tasto P: Esegui uno screenshot
 Tasto I： Attiva modalità picture-in-picture
 Tasto M： Attiva/disattiva memorizzazione del video nella cache
+Tasto S： Attiva/disattiva traduzione sottotitoli in tempo reale 🆕
 I browser Chrome aggiungono parametri di avvio per impostare la cache multimediale a 840MB： --media-cache-size=880008000
 
 Tasti freccia ← e →： Avanza o riavvolgi di 5 secondi
@@ -249,7 +263,12 @@ Tasto X: Rallenta riproduzione video di 0,1
 Tasto Z, Impostare la velocità di riproduzione video: 1,0 ←→ X
 Tasto D: Vai al frame precedente
 Tasto F: Vai al frame successivo (escluso YouTube)
-Tasto E: Vai al frame successivo (solo su YouTube)`
+Tasto E: Vai al frame successivo (solo su YouTube)
+
+【Funzione Sottotitoli】
+1. Avvia backend: cd subtitle_backend && ./start.sh
+2. Premi S o clicca il pulsante sottotitoli
+3. Configura nel menu Tampermonkey`
     }
 };
 const MSG = i18n[curLang] || i18n.en;
@@ -426,6 +445,253 @@ const tip = (msg) => {
         .animate({ top: '+=9px' }, 1900)
         .animate({ top: '-30px' });
 };
+
+// ==================== 实时字幕翻译功能 ====================
+class SubtitleService {
+    constructor(video) {
+        this.video = video;
+        this.isRunning = false;
+        this.config = {
+            serverUrl: GM_getValue('subtitle_serverUrl', 'http://localhost:8765'),
+            targetLanguage: GM_getValue('subtitle_targetLang', 'zh-CN'),
+            autoTranslate: GM_getValue('subtitle_autoTranslate', true),
+            captureInterval: GM_getValue('subtitle_captureInterval', 5)
+        };
+        this.audioContext = null;
+        this.mediaRecorder = null;
+        this.recordedChunks = [];
+        this.subtitles = [];
+        this.currentSubtitle = '';
+        this.subtitleElement = null;
+        this.subtitleButton = null;
+    }
+
+    createSubtitleUI() {
+        // 创建字幕显示元素
+        const container = d.createElement('div');
+        container.style.cssText = `
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 80px;
+            text-align: center;
+            pointer-events: none;
+            z-index: 9998;
+            font-family: Arial, sans-serif;
+        `;
+
+        this.subtitleElement = d.createElement('div');
+        this.subtitleElement.style.cssText = `
+            display: none;
+            margin: 0 auto;
+            padding: 8px 16px;
+            font-size: 20px;
+            color: #FFFFFF;
+            background: rgba(0, 0, 0, 0.75);
+            border-radius: 4px;
+            max-width: 80%;
+            word-wrap: break-word;
+            line-height: 1.4;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+        `;
+
+        container.appendChild(this.subtitleElement);
+
+        const videoParent = this.video.parentElement;
+        if (videoParent) {
+            if (!videoParent.style.position || videoParent.style.position === 'static') {
+                videoParent.style.position = 'relative';
+            }
+            videoParent.appendChild(container);
+        }
+
+        // 开始更新字幕显示
+        this.updateInterval = setInterval(() => {
+            const currentTime = this.video.currentTime;
+            let foundSubtitle = '';
+
+            for (const sub of this.subtitles) {
+                if (currentTime >= sub.start && currentTime <= sub.end) {
+                    foundSubtitle = sub.text;
+                    break;
+                }
+            }
+
+            if (foundSubtitle) {
+                this.subtitleElement.textContent = foundSubtitle;
+                this.subtitleElement.style.display = 'inline-block';
+            } else {
+                this.subtitleElement.style.display = 'none';
+            }
+        }, 100);
+    }
+
+    async initAudioCapture() {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.audioContext = new AudioContext();
+
+            const stream = this.video.captureStream ? this.video.captureStream() : this.video.mozCaptureStream();
+            if (!stream) {
+                throw new Error('浏览器不支持音频捕获');
+            }
+
+            this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+
+            this.mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    this.recordedChunks.push(event.data);
+                }
+            };
+
+            this.mediaRecorder.onstop = async () => {
+                await this.processRecordedAudio();
+            };
+
+            console.log('[字幕] 音频捕获初始化成功');
+            return true;
+        } catch (error) {
+            console.error('[字幕] 音频捕获失败:', error);
+            tip('字幕功能需要浏览器支持音频捕获');
+            return false;
+        }
+    }
+
+    startRecording() {
+        if (!this.mediaRecorder) return;
+
+        this.recordedChunks = [];
+        this.mediaRecorder.start();
+
+        setTimeout(() => {
+            if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+                this.mediaRecorder.stop();
+            }
+        }, this.config.captureInterval * 1000);
+    }
+
+    async processRecordedAudio() {
+        if (this.recordedChunks.length === 0) {
+            if (this.isRunning) this.startRecording();
+            return;
+        }
+
+        const audioBlob = new Blob(this.recordedChunks, { type: 'audio/webm;codecs=opus' });
+        await this.sendAudioToBackend(audioBlob);
+
+        if (this.isRunning) this.startRecording();
+    }
+
+    async sendAudioToBackend(audioBlob) {
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'audio.webm');
+        if (this.config.autoTranslate) {
+            formData.append('translate_to', this.config.targetLanguage);
+        }
+
+        try {
+            const response = await fetch(`${this.config.serverUrl}/transcribe`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+            const data = await response.json();
+            if (data.success && data.subtitles && data.subtitles.length > 0) {
+                this.addSubtitles(data.subtitles);
+                console.log(`[字幕] 获取 ${data.subtitles.length} 条字幕`);
+            }
+        } catch (error) {
+            console.error('[字幕] 服务连接失败:', error);
+            if (this.isRunning) {
+                tip('字幕服务连接失败，请检查后端是否运行');
+                this.stop();
+            }
+        }
+    }
+
+    addSubtitles(newSubtitles) {
+        const currentTime = this.video.currentTime;
+        const adjustedSubtitles = newSubtitles.map(sub => ({
+            ...sub,
+            start: currentTime + sub.start - this.config.captureInterval,
+            end: currentTime + sub.end - this.config.captureInterval
+        }));
+
+        this.subtitles.push(...adjustedSubtitles);
+        this.subtitles.sort((a, b) => a.start - b.start);
+
+        // 清理过期字幕（保留最近2分钟）
+        const minTime = currentTime - 120;
+        this.subtitles = this.subtitles.filter(sub => sub.end > minTime);
+    }
+
+    async start() {
+        if (this.isRunning) return;
+
+        console.log('[字幕] 启动服务...');
+        const success = await this.initAudioCapture();
+        if (!success) return;
+
+        this.isRunning = true;
+        this.createSubtitleUI();
+        this.startRecording();
+
+        if (this.subtitleButton) {
+            this.subtitleButton.classList.add('subtitle-active');
+            this.subtitleButton.title = '关闭字幕 (快捷键 S)';
+        }
+
+        tip('字幕识别已开启');
+        console.log('[字幕] 服务已启动');
+    }
+
+    stop() {
+        if (!this.isRunning) return;
+
+        console.log('[字幕] 停止服务...');
+        this.isRunning = false;
+
+        if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+            this.mediaRecorder.stop();
+        }
+
+        if (this.audioContext) {
+            this.audioContext.close();
+            this.audioContext = null;
+        }
+
+        if (this.updateInterval) {
+            clearInterval(this.updateInterval);
+            this.updateInterval = null;
+        }
+
+        if (this.subtitleElement) {
+            this.subtitleElement.style.display = 'none';
+        }
+
+        if (this.subtitleButton) {
+            this.subtitleButton.classList.remove('subtitle-active');
+            this.subtitleButton.title = '开启字幕 (快捷键 S)';
+        }
+
+        this.subtitles = [];
+        tip('字幕识别已关闭');
+        console.log('[字幕] 服务已停止');
+    }
+
+    toggle() {
+        if (this.isRunning) {
+            this.stop();
+        } else {
+            this.start();
+        }
+    }
+}
+
+let subtitleService = null;
+
 const u = getMainDomain(host);
 const cfg = {
     isLive: !1,
@@ -650,6 +916,12 @@ actList.set(90, _ => { //按键Z: 切换加速状态
         if (self != top) top.postMessage({ id: 'gm-h5-play-next' }, '*');
         else if (cfg.btnNext) doClick(cfg.btnNext);
         else if (cfg.isNumURL) goNextMV();
+    })
+    .set(83, _ => {// S 切换字幕
+        if (!subtitleService) {
+            subtitleService = new SubtitleService(v);
+        }
+        subtitleService.toggle();
     });
 
 const app = {
@@ -760,6 +1032,155 @@ const app = {
 
         if (cfg.nextCSS && (!validEl(cfg.btnNext) || !cfg.btnNext.matches(cfg.nextCSS))) cfg.btnNext = q(cfg.nextCSS);
         if (cfg.playCSS && !validEl(cfg.btnPlay)) cfg.btnPlay = q(cfg.playCSS);
+
+        // 添加字幕按钮
+        this.addSubtitleButton();
+    },
+    addSubtitleButton() {
+        // 如果已经添加过按钮，不重复添加
+        if (d.querySelector('.gm-subtitle-btn')) return;
+
+        // 尝试找到控制栏
+        let controlBar = null;
+        const selectors = [
+            '.bpx-player-control-bottom-right',  // B站
+            '.ytp-right-controls',               // YouTube
+            '.xgplayer-controls',                // 西瓜视频/抖音
+            '.prism-controlbar',                 // 阿里播放器
+            '.dplayer-icons-right',              // DPlayer
+            '.vjs-control-bar',                  // Video.js
+            '.control-bar-right'                 // 通用
+        ];
+
+        for (const selector of selectors) {
+            controlBar = q(selector);
+            if (controlBar) break;
+        }
+
+        if (!controlBar && cfg.mvShell) {
+            // 尝试在播放器容器中查找控制栏
+            controlBar = cfg.mvShell.querySelector('[class*="control"]');
+        }
+
+        if (!controlBar) {
+            console.log('[字幕] 未找到控制栏，使用浮动按钮');
+            this.addFloatingSubtitleButton();
+            return;
+        }
+
+        // 创建字幕按钮
+        const btn = d.createElement('div');
+        btn.className = 'gm-subtitle-btn';
+        btn.title = '开启字幕 (快捷键 S)';
+        btn.style.cssText = `
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        `;
+
+        // SVG 字幕图标
+        btn.innerHTML = `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/>
+            </svg>
+        `;
+
+        btn.addEventListener('mouseenter', () => btn.style.opacity = '1');
+        btn.addEventListener('mouseleave', () => btn.style.opacity = '0.8');
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!subtitleService) {
+                subtitleService = new SubtitleService(v);
+            }
+            if (subtitleService) {
+                subtitleService.subtitleButton = btn;
+            }
+            subtitleService.toggle();
+        });
+
+        // 添加激活状态样式
+        GM_addStyle(`
+            .gm-subtitle-btn.subtitle-active {
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 4px;
+            }
+            .gm-subtitle-btn.subtitle-active svg {
+                fill: #00a1d6 !important;
+            }
+        `);
+
+        controlBar.insertBefore(btn, controlBar.firstChild);
+        console.log('[字幕] 按钮已添加到控制栏');
+
+        // 如果有字幕服务实例，关联按钮
+        if (subtitleService) {
+            subtitleService.subtitleButton = btn;
+        }
+    },
+    addFloatingSubtitleButton() {
+        // 创建浮动字幕按钮
+        const btn = d.createElement('div');
+        btn.className = 'gm-subtitle-btn gm-floating-btn';
+        btn.title = '开启字幕 (快捷键 S)';
+        btn.style.cssText = `
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            width: 48px;
+            height: 48px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 9999;
+            transition: all 0.3s;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        `;
+
+        btn.innerHTML = `
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="white">
+                <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/>
+            </svg>
+        `;
+
+        btn.addEventListener('mouseenter', () => {
+            btn.style.transform = 'scale(1.1)';
+            btn.style.background = 'rgba(0, 0, 0, 0.9)';
+        });
+        btn.addEventListener('mouseleave', () => {
+            btn.style.transform = 'scale(1)';
+            btn.style.background = 'rgba(0, 0, 0, 0.7)';
+        });
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!subtitleService) {
+                subtitleService = new SubtitleService(v);
+            }
+            if (subtitleService) {
+                subtitleService.subtitleButton = btn;
+            }
+            subtitleService.toggle();
+        });
+
+        GM_addStyle(`
+            .gm-floating-btn.subtitle-active {
+                background: rgba(0, 161, 214, 0.9) !important;
+            }
+        `);
+
+        by.appendChild(btn);
+        console.log('[字幕] 浮动按钮已创建');
+
+        if (subtitleService) {
+            subtitleService.subtitleButton = btn;
+        }
     },
     onGrowVList() {
         if (this.vList.length == this.vCount) return;
@@ -1145,6 +1566,50 @@ Reflect.defineProperty(navigator, 'plugins', {
         GM_registerMenuCommand(MSG.helpMenuOption, () => {
             console.log(MSG.helpBody);
             tip('快捷键帮助已输出到控制台，请按 F12 查看');
+        });
+
+        // 注册字幕配置菜单
+        GM_registerMenuCommand('⚙️ 字幕翻译配置', () => {
+            const currentServer = GM_getValue('subtitle_serverUrl', 'http://localhost:8765');
+            const currentLang = GM_getValue('subtitle_targetLang', 'zh-CN');
+            const currentAutoTranslate = GM_getValue('subtitle_autoTranslate', true);
+
+            const newServer = prompt('后端服务地址:\n(请确保服务已启动)', currentServer);
+            if (newServer && newServer !== currentServer) {
+                GM_setValue('subtitle_serverUrl', newServer);
+                tip('服务地址已更新');
+            }
+
+            const newLang = prompt('目标翻译语言:\n支持: zh-CN, en, ja, ko, fr, de, es, ru 等', currentLang);
+            if (newLang && newLang !== currentLang) {
+                GM_setValue('subtitle_targetLang', newLang);
+                tip('目标语言已更新为: ' + newLang);
+            }
+
+            const autoTranslate = confirm('是否自动翻译字幕?\n(点击"确定"开启，"取消"关闭)');
+            if (autoTranslate !== currentAutoTranslate) {
+                GM_setValue('subtitle_autoTranslate', autoTranslate);
+                tip(autoTranslate ? '已开启自动翻译' : '已关闭自动翻译');
+            }
+
+            // 如果字幕服务正在运行，更新配置
+            if (subtitleService) {
+                subtitleService.config.serverUrl = GM_getValue('subtitle_serverUrl', 'http://localhost:8765');
+                subtitleService.config.targetLanguage = GM_getValue('subtitle_targetLang', 'zh-CN');
+                subtitleService.config.autoTranslate = GM_getValue('subtitle_autoTranslate', true);
+            }
+        });
+
+        // 注册字幕服务状态菜单
+        GM_registerMenuCommand('🔄 重启字幕服务', () => {
+            if (subtitleService) {
+                subtitleService.stop();
+                setTimeout(() => {
+                    subtitleService.start();
+                }, 500);
+            } else {
+                tip('字幕服务未启动');
+            }
         });
     } catch (e) {
         console.warn('无法注册菜单命令:', e);
