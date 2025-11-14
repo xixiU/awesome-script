@@ -14,6 +14,7 @@
 // @inject-into content
 // @require    https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js
 // @require    https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js
+// @require      https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/common/config_manager.js
 // @grant      GM_addStyle
 // @grant      GM_xmlhttpRequest
 // @grant      window.onurlchange
@@ -448,14 +449,16 @@ const tip = (msg) => {
 
 // ==================== 实时字幕翻译功能 ====================
 class SubtitleService {
-    constructor(video) {
+    constructor(video, configManager) {
         this.video = video;
+        this.configManager = configManager;
         this.isRunning = false;
+        // 从 ConfigManager 获取配置
         this.config = {
-            serverUrl: GM_getValue('subtitle_serverUrl', 'http://localhost:8765'),
-            targetLanguage: GM_getValue('subtitle_targetLang', 'zh-CN'),
-            autoTranslate: GM_getValue('subtitle_autoTranslate', true),
-            captureInterval: GM_getValue('subtitle_captureInterval', 5)
+            serverUrl: this.configManager.get('subtitle_serverUrl'),
+            targetLanguage: this.configManager.get('subtitle_targetLang'),
+            autoTranslate: this.configManager.get('subtitle_autoTranslate'),
+            captureInterval: this.configManager.get('subtitle_captureInterval')
         };
         this.audioContext = null;
         this.mediaRecorder = null;
@@ -691,6 +694,7 @@ class SubtitleService {
 }
 
 let subtitleService = null;
+let bRateEnabled = true; // 记忆播放速度功能开关
 
 const u = getMainDomain(host);
 const cfg = {
@@ -919,7 +923,7 @@ actList.set(90, _ => { //按键Z: 切换加速状态
     })
     .set(83, _ => {// S 切换字幕
         if (!subtitleService) {
-            subtitleService = new SubtitleService(v);
+            subtitleService = new SubtitleService(v, videoConfigManager);
         }
         subtitleService.toggle();
     });
@@ -1095,7 +1099,7 @@ const app = {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (!subtitleService) {
-                subtitleService = new SubtitleService(v);
+                subtitleService = new SubtitleService(v, videoConfigManager);
             }
             if (subtitleService) {
                 subtitleService.subtitleButton = btn;
@@ -1161,7 +1165,7 @@ const app = {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (!subtitleService) {
-                subtitleService = new SubtitleService(v);
+                subtitleService = new SubtitleService(v, videoConfigManager);
             }
             if (subtitleService) {
                 subtitleService.subtitleButton = btn;
@@ -1223,11 +1227,10 @@ const app = {
         v = v || this.findMV();
         log('bind event\n', v);
         bus.$emit('foundMV');
-        const bRate = gmFuncOfCheckMenu(MSG.rememberRateMenuOption, 'remberRate');
         window.addEventListener('urlchange', async (info) => { //TM event: info.url
             await sleep(990);
             this.checkMV();
-            if (bRate) v.playbackRate = +localStorage.mvPlayRate || 1;
+            if (bRateEnabled) v.playbackRate = +localStorage.mvPlayRate || 1;
             bus.$emit('urlchange');
         });
         if (top != self) {
@@ -1245,9 +1248,9 @@ const app = {
             cfg.isLive = cfg.isLive || v.duration == Infinity;
             if (cfg.isLive) for (const k of [37, 1061, 39, 1063, 67, 77, 78, 88, 90]) actList.delete(k);
             else {
-                if (bRate) v.playbackRate = +localStorage.mvPlayRate || 1;
+                if (bRateEnabled) v.playbackRate = +localStorage.mvPlayRate || 1;
                 v.addEventListener('ratechange', ev => {
-                    if (bRate && v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
+                    if (bRateEnabled && v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
                 });
             }
 
@@ -1548,6 +1551,73 @@ Reflect.defineProperty(navigator, 'plugins', {
     get() { return { length: 0 } }
 });
 
+// ==================== 配置管理器初始化 ====================
+const videoConfigManager = new ConfigManager('HTML5视频工具', {
+    subtitle_serverUrl: 'http://localhost:8765',
+    subtitle_targetLang: 'zh-CN',
+    subtitle_autoTranslate: true,
+    subtitle_captureInterval: 5,
+    remberRate: true
+}, {
+    lang: curLang,
+    i18n: {
+        'zh': {
+            'helpMenuOption': '脚本功能快捷键表',
+            'subtitleConfig': '字幕翻译配置',
+            'restartSubtitle': '重启字幕服务',
+            'rememberRate': '记忆播放速度',
+            'serverUrl': '后端服务地址',
+            'targetLang': '目标翻译语言',
+            'autoTranslate': '自动翻译',
+            'serverUrlHelp': '(请确保服务已启动)',
+            'targetLangHelp': '支持: zh-CN, en, ja, ko, fr, de, es, ru 等',
+            'autoTranslateConfirm': '是否自动翻译字幕?',
+            'serverUpdated': '服务地址已更新',
+            'langUpdated': '目标语言已更新为',
+            'autoTranslateEnabled': '已开启自动翻译',
+            'autoTranslateDisabled': '已关闭自动翻译',
+            'subtitleNotStarted': '字幕服务未启动',
+            'clickOkToEnable': '点击"确定"开启，"取消"关闭'
+        },
+        'en': {
+            'helpMenuOption': 'Hotkeys list',
+            'subtitleConfig': 'Subtitle Translation Config',
+            'restartSubtitle': 'Restart Subtitle Service',
+            'rememberRate': 'Remember playback speed',
+            'serverUrl': 'Backend Server URL',
+            'targetLang': 'Target Translation Language',
+            'autoTranslate': 'Auto Translate',
+            'serverUrlHelp': '(Make sure the service is running)',
+            'targetLangHelp': 'Supported: zh-CN, en, ja, ko, fr, de, es, ru, etc',
+            'autoTranslateConfirm': 'Auto translate subtitles?',
+            'serverUpdated': 'Server URL updated',
+            'langUpdated': 'Target language updated to',
+            'autoTranslateEnabled': 'Auto translate enabled',
+            'autoTranslateDisabled': 'Auto translate disabled',
+            'subtitleNotStarted': 'Subtitle service not started',
+            'clickOkToEnable': 'Click OK to enable, Cancel to disable'
+        },
+        'it': {
+            'helpMenuOption': 'Elenco dei tasti di scelta rapida',
+            'subtitleConfig': 'Configurazione traduzione sottotitoli',
+            'restartSubtitle': 'Riavvia servizio sottotitoli',
+            'rememberRate': 'Memorizza velocità di riproduzione',
+            'serverUrl': 'URL server backend',
+            'targetLang': 'Lingua di traduzione target',
+            'autoTranslate': 'Traduzione automatica',
+            'serverUrlHelp': '(Assicurati che il servizio sia in esecuzione)',
+            'targetLangHelp': 'Supportati: zh-CN, en, ja, ko, fr, de, es, ru, ecc',
+            'autoTranslateConfirm': 'Tradurre automaticamente i sottotitoli?',
+            'serverUpdated': 'URL server aggiornato',
+            'langUpdated': 'Lingua di destinazione aggiornata a',
+            'autoTranslateEnabled': 'Traduzione automatica abilitata',
+            'autoTranslateDisabled': 'Traduzione automatica disabilitata',
+            'subtitleNotStarted': 'Servizio sottotitoli non avviato',
+            'clickOkToEnable': 'Clicca OK per abilitare, Annulla per disabilitare'
+        }
+    }
+});
+
 // ===== 主入口：智能启动脚本 =====
 (async function main() {
     // 先进行快速检测
@@ -1561,58 +1631,74 @@ Reflect.defineProperty(navigator, 'plugins', {
         return;
     }
 
-    // 注册菜单命令
+    // 使用 ConfigManager 注册菜单命令
     try {
-        GM_registerMenuCommand(MSG.helpMenuOption, () => {
+        // 1. 快捷键帮助菜单
+        videoConfigManager.registerMenuCommand('helpMenuOption', () => {
             console.log(MSG.helpBody);
             tip('快捷键帮助已输出到控制台，请按 F12 查看');
         });
 
-        // 注册字幕配置菜单
-        GM_registerMenuCommand('⚙️ 字幕翻译配置', () => {
-            const currentServer = GM_getValue('subtitle_serverUrl', 'http://localhost:8765');
-            const currentLang = GM_getValue('subtitle_targetLang', 'zh-CN');
-            const currentAutoTranslate = GM_getValue('subtitle_autoTranslate', true);
+        // 2. 记忆播放速度菜单（切换型）
+        bRateEnabled = videoConfigManager.createToggleMenu('rememberRate', 'remberRate', true);
 
-            const newServer = prompt('后端服务地址:\n(请确保服务已启动)', currentServer);
-            if (newServer && newServer !== currentServer) {
-                GM_setValue('subtitle_serverUrl', newServer);
-                tip('服务地址已更新');
+        // 3. 字幕翻译配置菜单
+        const subtitleConfigDialog = videoConfigManager.createSimpleDialog([
+            {
+                key: 'subtitle_serverUrl',
+                labelKey: 'serverUrl',
+                type: 'text',
+                help: videoConfigManager.t('serverUrlHelp')
+            },
+            {
+                key: 'subtitle_targetLang',
+                labelKey: 'targetLang',
+                type: 'text',
+                help: videoConfigManager.t('targetLangHelp')
+            },
+            {
+                key: 'subtitle_autoTranslate',
+                labelKey: 'autoTranslate',
+                type: 'checkbox'
             }
-
-            const newLang = prompt('目标翻译语言:\n支持: zh-CN, en, ja, ko, fr, de, es, ru 等', currentLang);
-            if (newLang && newLang !== currentLang) {
-                GM_setValue('subtitle_targetLang', newLang);
-                tip('目标语言已更新为: ' + newLang);
+        ], (updates) => {
+            // 配置保存后的回调
+            if (updates.subtitle_serverUrl) {
+                tip(videoConfigManager.t('serverUpdated'));
             }
-
-            const autoTranslate = confirm('是否自动翻译字幕?\n(点击"确定"开启，"取消"关闭)');
-            if (autoTranslate !== currentAutoTranslate) {
-                GM_setValue('subtitle_autoTranslate', autoTranslate);
-                tip(autoTranslate ? '已开启自动翻译' : '已关闭自动翻译');
+            if (updates.subtitle_targetLang) {
+                tip(videoConfigManager.t('langUpdated') + ': ' + updates.subtitle_targetLang);
+            }
+            if (typeof updates.subtitle_autoTranslate !== 'undefined') {
+                tip(updates.subtitle_autoTranslate ?
+                    videoConfigManager.t('autoTranslateEnabled') :
+                    videoConfigManager.t('autoTranslateDisabled'));
             }
 
             // 如果字幕服务正在运行，更新配置
             if (subtitleService) {
-                subtitleService.config.serverUrl = GM_getValue('subtitle_serverUrl', 'http://localhost:8765');
-                subtitleService.config.targetLanguage = GM_getValue('subtitle_targetLang', 'zh-CN');
-                subtitleService.config.autoTranslate = GM_getValue('subtitle_autoTranslate', true);
+                subtitleService.config.serverUrl = videoConfigManager.get('subtitle_serverUrl');
+                subtitleService.config.targetLanguage = videoConfigManager.get('subtitle_targetLang');
+                subtitleService.config.autoTranslate = videoConfigManager.get('subtitle_autoTranslate');
             }
         });
 
-        // 注册字幕服务状态菜单
-        GM_registerMenuCommand('🔄 重启字幕服务', () => {
+        videoConfigManager.registerMenuCommand('subtitleConfig', subtitleConfigDialog, '⚙️');
+
+        // 4. 重启字幕服务菜单
+        videoConfigManager.registerMenuCommand('restartSubtitle', () => {
             if (subtitleService) {
                 subtitleService.stop();
                 setTimeout(() => {
                     subtitleService.start();
                 }, 500);
             } else {
-                tip('字幕服务未启动');
+                tip(videoConfigManager.t('subtitleNotStarted'));
             }
-        });
+        }, '🔄');
+
     } catch (e) {
-        console.warn('无法注册菜单命令:', e);
+        console.warn('[菜单注册] 无法注册菜单命令:', e);
     }
 
     // 初始化脚本

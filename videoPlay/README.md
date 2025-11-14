@@ -249,12 +249,67 @@ cd subtitle_backend
 
 ## 💻 开发信息
 
-- **版本**：2.1.0
+- **版本**：2.2.0
 - **作者**：基于 Greasyfork 用户 7036 的脚本改进
 - **许可**：MIT License
 - **主页**：<https://bbs.kafan.cn/thread-2093014-1-1.html>
 
 ## 📋 更新日志 (Changelog)
+
+### v2.2.0 (2024-11-14)
+
+#### 🌍 实时字幕翻译功能（重大更新）
+
+**新增功能：**
+
+- ✅ 集成实时字幕识别和翻译系统
+- ✅ 基于 faster-whisper 的语音识别
+- ✅ 支持 12+ 种语言翻译
+- ✅ 智能控制栏按钮（自动适配多种播放器）
+- ✅ 浮动按钮（兼容方案）
+- ✅ S 键快捷键控制
+
+**技术实现：**
+
+- Python 后端服务（FastAPI + faster-whisper）
+- MediaRecorder API 音频捕获
+- 实时字幕显示UI
+- 配置持久化存储
+
+**支持的播放器：**
+
+- Bilibili、YouTube、西瓜视频、抖音
+- DPlayer、Video.js、阿里播放器
+- 所有通用 HTML5 播放器
+
+#### 🔧 配置管理优化
+
+**集成 ConfigManager：**
+
+- ✅ 使用统一的配置管理模块
+- ✅ 完整的国际化支持（中英意三语）
+- ✅ 简化菜单注册逻辑（代码减少 60%）
+- ✅ 统一的配置界面
+
+**增强的 ConfigManager 功能：**
+
+- 国际化文本支持 `t(key, defaultText)`
+- 国际化菜单注册 `registerMenuCommand(textKey, callback, icon)`
+- 简化对话框创建 `createSimpleDialog(fields, onSave)`
+- 切换型菜单 `createToggleMenu(titleKey, saveKey, defaultValue)`
+
+**向后兼容：**
+
+- ✅ 不影响其他使用 ConfigManager 的脚本
+- ✅ 所有原有功能保持不变
+- ✅ 可选的功能增强
+
+#### 📝 其他改进
+
+- 更新多语言帮助文本（添加字幕功能说明）
+- 优化菜单结构和组织
+- 改进代码可读性和注释
+- 完善错误处理机制
 
 ### v2.1.0 (2024-11-14)
 

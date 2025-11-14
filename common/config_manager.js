@@ -16,13 +16,20 @@
 
     // ==================== 通用配置管理模块 ====================
     class ConfigManager {
-        constructor(configName, defaultConfig = {}) {
+        constructor(configName, defaultConfig = {}, options = {}) {
             this.configName = configName;
             this.defaultConfig = defaultConfig;
             this.config = this.loadConfig();
             this.panel = null;
             this.overlay = null;
             this.isInitialized = false;
+
+            // 国际化支持
+            this.i18n = options.i18n || {};
+            this.currentLang = options.lang || navigator.language.slice(0, 2) || 'zh';
+
+            // 菜单命令
+            this.menuCommands = [];
         }
 
         // 加载配置
@@ -571,6 +578,146 @@
                 this.overlay = null;
             }
             this.isInitialized = false;
+        }
+
+        // ==================== 国际化菜单注册功能 ====================
+
+        /**
+         * 获取国际化文本
+         * @param {string} key - 文本键
+         * @param {string} defaultText - 默认文本
+         * @returns {string} 国际化后的文本
+         */
+        t(key, defaultText = '') {
+            if (this.i18n[this.currentLang] && this.i18n[this.currentLang][key]) {
+                return this.i18n[this.currentLang][key];
+            }
+            // 降级到默认语言
+            if (this.i18n['zh'] && this.i18n['zh'][key]) {
+                return this.i18n['zh'][key];
+            }
+            return defaultText || key;
+        }
+
+        /**
+         * 注册菜单命令（支持国际化）
+         * @param {string} textKey - 文本键或直接文本
+         * @param {Function} callback - 回调函数
+         * @param {string} icon - 图标（可选）
+         */
+        registerMenuCommand(textKey, callback, icon = '') {
+            const text = icon ? `${icon} ${this.t(textKey, textKey)}` : this.t(textKey, textKey);
+
+            if (typeof GM_registerMenuCommand !== 'undefined') {
+                try {
+                    GM_registerMenuCommand(text, callback);
+                    this.menuCommands.push({ textKey, callback, icon, text });
+                } catch (e) {
+                    console.warn(`[ConfigManager] 注册菜单命令失败: ${text}`, e);
+                }
+            }
+        }
+
+        /**
+         * 批量注册菜单命令
+         * @param {Array} commands - 菜单命令数组
+         * 格式: [{ textKey: '', callback: fn, icon: '' }]
+         */
+        registerMenuCommands(commands) {
+            commands.forEach(cmd => {
+                this.registerMenuCommand(cmd.textKey, cmd.callback, cmd.icon);
+            });
+        }
+
+        /**
+         * 创建简单的配置对话框
+         * @param {Array} fields - 配置字段数组
+         * 格式: [{ key: '', labelKey: '', type: 'text|checkbox|select', options: [] }]
+         * @param {Function} onSave - 保存回调
+         */
+        createSimpleDialog(fields, onSave) {
+            const dialogContent = fields.map(field => {
+                const label = this.t(field.labelKey, field.labelKey);
+                const currentValue = this.get(field.key);
+
+                if (field.type === 'checkbox') {
+                    return {
+                        label,
+                        currentValue,
+                        prompt: (current) => confirm(`${label}\n${this.t('clickOkToEnable', '点击"确定"开启，"取消"关闭')}`),
+                        parse: (value) => value
+                    };
+                } else if (field.type === 'select' && field.options) {
+                    const optionsText = field.options.map(opt =>
+                        typeof opt === 'object' ? `${opt.value}: ${opt.label}` : opt
+                    ).join(', ');
+                    return {
+                        label,
+                        currentValue,
+                        prompt: (current) => prompt(`${label}\n${this.t('supportedOptions', '支持')}: ${optionsText}`, current),
+                        parse: (value) => value
+                    };
+                } else {
+                    return {
+                        label,
+                        currentValue,
+                        prompt: (current) => prompt(`${label}\n${field.help || ''}`, current),
+                        parse: (value) => value
+                    };
+                }
+            }).filter(f => f);
+
+            return () => {
+                const updates = {};
+                let hasChanges = false;
+
+                dialogContent.forEach((dialog, index) => {
+                    const field = fields[index];
+                    const newValue = dialog.prompt(dialog.currentValue);
+
+                    if (field.type === 'checkbox') {
+                        if (newValue !== dialog.currentValue) {
+                            updates[field.key] = newValue;
+                            hasChanges = true;
+                        }
+                    } else if (newValue && newValue !== dialog.currentValue) {
+                        updates[field.key] = dialog.parse(newValue);
+                        hasChanges = true;
+                    }
+                });
+
+                if (hasChanges) {
+                    Object.keys(updates).forEach(key => {
+                        this.set(key, updates[key]);
+                    });
+
+                    if (onSave) {
+                        onSave(updates);
+                    }
+
+                    return updates;
+                }
+                return null;
+            };
+        }
+
+        /**
+         * 创建记忆选择菜单
+         * @param {string} titleKey - 标题键
+         * @param {string} saveKey - 保存键
+         * @param {boolean} defaultValue - 默认值
+         * @returns {boolean} 当前值
+         */
+        createToggleMenu(titleKey, saveKey, defaultValue = true) {
+            const currentValue = GM_getValue(saveKey, defaultValue);
+            const title = currentValue ? '√  ' + this.t(titleKey, titleKey) : this.t(titleKey, titleKey);
+
+            this.registerMenuCommand(titleKey, () => {
+                GM_setValue(saveKey, !currentValue);
+                location.reload();
+            }, currentValue ? '✓' : '');
+
+            return currentValue;
         }
     }
 
