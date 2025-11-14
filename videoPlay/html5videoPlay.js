@@ -6,66 +6,15 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.0.2
-// @homepage https://bbs.kafan.cn/thread-2093014-1-1.html
-// @match    https://*.qq.com/*
+// @version    2.1.0
+// @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
-// @match    https://www.weiyun.com/video_*
-// @match    https://v.youku.com/v*
-// @match    https://m.youku.com/*
-// @match    https://vku.youku.com/live/*
-// @match    https://video.tudou.com/v/*
-// @match    https://www.iqiyi.com/*
-// @match    https://live.bilibili.com/*
-// @match    https://www.bilibili.com/*
-// @match    https://www.ixigua.com/*
-// @match    https://www.toutiao.com/video/*
-// @match    https://www.acfun.cn/*
-// @match    https://live.acfun.cn/live/*
-// @match    http://v.pptv.com/show/*
-// @match    https://v.pptv.com/show/*
-// @match    https://www.miguvideo.com/*
-// @match    https://tv.sohu.com/*
-// @match    https://film.sohu.com/album/*
-// @match    https://www.mgtv.com/*
-// @match    https://movie.douban.com/subject/*
-// @match    https://pan.baidu.com/*
-// @match    https://yun.baidu.com/*
-// @match    https://*.163.com/*
-// @match    https://*.icourse163.org/*
-// @match    http://video.sina.*/*
-// @match    https://video.sina.*/*
-// @match    http://k.sina.*/*
-// @match    https://k.sina.*/*
-// @match    https://weibo.com/*
-// @match    https://*.weibo.com/*
-// @match    https://pan.baidu.com/*
-// @match    https://yun.baidu.com/*
-// @match    http://v.ifeng.com/*
-// @match    https://v.ifeng.com/*
-// @match    http://news.mtime.com/*
-// @match    http://video.mtime.com/*
-// @GM_info
-// @match    https://www.youtube.com/*
-// @match    https://www.ted.com/talks/*
-// @match    https://www.twitch.tv/*
-// @inject-into content
-// @match    https://www.yy.com/*
-// @match    https://www.huya.com/*
-// @match    https://v.douyu.com/*
-// @match    https://www.douyu.com/*
-// @match    https://live.douyin.com/*
-// @match    https://www.douyin.com/*
-// @match    https://www.longzhu.com/*
-// @match    https://www.zhanqi.tv/*
-// @match    https://lemonlive*/*
+// @exclude  https://www.dj92cc.net/dance/play/id/*
 // @run-at     document-start
+// @inject-into content
 // @require    https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js
 // @require    https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js
 // @grant      GM_addStyle
-// @include    */play*
-// @include    *play/*
-// @exclude    https://www.dj92cc.net/dance/play/id/*
 // @grant      window.onurlchange
 // @grant      unsafeWindow
 // @grant      GM_registerMenuCommand
@@ -105,6 +54,96 @@ const safeSetHTML = (element, htmlString) => {
         console.warn('设置 HTML 内容失败，使用 textContent:', e);
         element.textContent = htmlString.replace(/<[^>]*>/g, '');
     }
+};
+
+// ===== 智能检测：判断页面是否需要启用脚本 =====
+const shouldEnableScript = () => {
+    const { host, pathname } = location;
+
+    // 排除列表：明确不需要脚本的网站
+    const excludePatterns = [
+        /^(www\.)?(google|bing|baidu|so|sogou)\./,  // 搜索引擎
+        /^(mail|outlook|gmail)\./,                   // 邮箱
+        /^(github|gitlab|bitbucket)\./,              // 代码托管
+        /^(docs|drive|dropbox|onedrive)\./,          // 文档/云盘（排除视频云盘）
+        /^(amazon|ebay|taobao|jd|tmall)\./,          // 电商
+        /^localhost$/,                                // 本地开发
+    ];
+
+    // 如果在排除列表中，不启用
+    if (excludePatterns.some(pattern => pattern.test(host))) {
+        return false;
+    }
+
+    // 检测已知视频网站（快速路径）
+    const knownVideoSites = [
+        'youtube', 'bilibili', 'youku', 'iqiyi', 'qq.com', 'douyin',
+        'tencent', 'acfun', 'mgtv', 'ixigua', 'toutiao',
+        'douyu', 'huya', 'twitch', 'ted.com',
+        'weibo', 'sina', 'sohu', 'ifeng',
+        'miguvideo', 'pptv', 'longzhu', 'zhanqi'
+    ];
+
+    if (knownVideoSites.some(site => host.includes(site))) {
+        return true;
+    }
+
+    // 通过 URL 路径判断（包含常见的视频相关关键词）
+    const videoKeywords = [
+        '/video', '/play', '/watch', '/live', '/mv',
+        '/player', '/v/', '/movie', '/film', '/show'
+    ];
+
+    if (videoKeywords.some(keyword => pathname.includes(keyword))) {
+        return true;
+    }
+
+    // 检查页面中是否有 video 标签（延迟检测）
+    return new Promise((resolve) => {
+        const checkVideo = () => {
+            const videos = document.getElementsByTagName('video');
+            if (videos.length > 0) {
+                console.log(`[HTML5视频工具] 检测到 ${videos.length} 个视频元素，启用脚本`);
+                resolve(true);
+                return true;
+            }
+            return false;
+        };
+
+        // 立即检查一次
+        if (checkVideo()) return;
+
+        // 如果立即没找到，观察 DOM 变化
+        let checkCount = 0;
+        const maxChecks = 20; // 最多检查 20 次（约 10 秒）
+
+        const observer = new MutationObserver(() => {
+            checkCount++;
+            if (checkVideo() || checkCount >= maxChecks) {
+                observer.disconnect();
+                if (checkCount >= maxChecks) {
+                    console.log('[HTML5视频工具] 未检测到视频元素，不启用脚本');
+                    resolve(false);
+                }
+            }
+        });
+
+        // 开始观察
+        if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: true });
+        } else {
+            // 如果 body 还没准备好，等待 DOMContentLoaded
+            document.addEventListener('DOMContentLoaded', () => {
+                observer.observe(document.body, { childList: true, subtree: true });
+            });
+        }
+
+        // 10 秒后超时
+        setTimeout(() => {
+            observer.disconnect();
+            resolve(false);
+        }, 10000);
+    });
 };
 
 const curLang = navigator.language.slice(0, 2);
@@ -1088,17 +1127,31 @@ Reflect.defineProperty(navigator, 'plugins', {
     get() { return { length: 0 } }
 });
 
-// 使用安全的方式注册菜单命令
-try {
-    GM_registerMenuCommand(MSG.helpMenuOption, () => {
-        // 使用 console.log 或创建自定义对话框来显示帮助信息
-        // 避免在 Trusted Types 环境中使用 alert
-        console.log(MSG.helpBody);
-        tip('快捷键帮助已输出到控制台，请按 F12 查看');
-    });
-} catch (e) {
-    console.warn('无法注册菜单命令:', e);
-}
+// ===== 主入口：智能启动脚本 =====
+(async function main() {
+    // 先进行快速检测
+    const shouldEnable = shouldEnableScript();
 
-if (!router[u] || !router[u]()) app.init();
-if (!router[u] && !cfg.isNumURL) cfg.isNumURL = /[_\W]\d+(\/|\.[a-z]{3,8})?$/.test(path);
+    // 如果是 Promise（需要延迟检测），等待结果
+    const enabled = shouldEnable instanceof Promise ? await shouldEnable : shouldEnable;
+
+    if (!enabled) {
+        console.log('[HTML5视频工具] 当前页面不需要启用脚本');
+        return;
+    }
+
+    // 注册菜单命令
+    try {
+        GM_registerMenuCommand(MSG.helpMenuOption, () => {
+            console.log(MSG.helpBody);
+            tip('快捷键帮助已输出到控制台，请按 F12 查看');
+        });
+    } catch (e) {
+        console.warn('无法注册菜单命令:', e);
+    }
+
+    // 初始化脚本
+    console.log('[HTML5视频工具] 脚本已启用，站点:', location.host);
+    if (!router[u] || !router[u]()) app.init();
+    if (!router[u] && !cfg.isNumURL) cfg.isNumURL = /[_\W]\d+(\/|\.[a-z]{3,8})?$/.test(path);
+})();
