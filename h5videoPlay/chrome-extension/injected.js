@@ -149,15 +149,52 @@
         }
     }
 
-    // 查找视频元素
+    // 查找视频元素（包括 iframe 中的视频）
     function findVideo() {
+        // 先查找当前页面的视频
         const videos = document.getElementsByTagName('video');
         for (const v of videos) {
             if (v.offsetWidth > 100) {
                 return v;
             }
         }
-        return videos[0];
+        if (videos.length > 0) {
+            return videos[0];
+        }
+
+        // 如果当前页面没有视频，查找 iframe 中的视频（同源 iframe）
+        const iframes = document.getElementsByTagName('iframe');
+        for (let i = 0; i < iframes.length; i++) {
+            try {
+                const iframe = iframes[i];
+                // 尝试访问 iframe 内容（如果同源则可以访问）
+                if (iframe.contentDocument || iframe.contentWindow) {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    const iframeVideos = iframeDoc.getElementsByTagName('video');
+
+                    // 查找尺寸合适的视频
+                    for (const v of iframeVideos) {
+                        if (v.offsetWidth > 100) {
+                            console.log('[H5Video] 在 iframe 中找到视频元素');
+                            return v;
+                        }
+                    }
+                    // 如果没找到尺寸合适的，返回第一个
+                    if (iframeVideos.length > 0) {
+                        console.log('[H5Video] 在 iframe 中找到视频元素');
+                        return iframeVideos[0];
+                    }
+                }
+            } catch (e) {
+                // 跨域 iframe，无法访问内容（这是正常的）
+                // 跨域 iframe 中的视频无法直接控制
+                if (iframes[i].offsetWidth > 100 && iframes[i].offsetHeight > 100) {
+                    console.log('[H5Video] 检测到跨域 iframe（可能包含视频，但无法直接访问）');
+                }
+            }
+        }
+
+        return null;
     }
 
     // 创建字幕UI
@@ -289,7 +326,7 @@
         // 创建字幕UI
         createSubtitleUI();
 
-        // 监听视频变化（单页应用）
+        // 监听视频变化（单页应用和 iframe）
         const observer = new MutationObserver(() => {
             const newVideo = findVideo();
             if (newVideo && newVideo !== video) {
@@ -303,6 +340,25 @@
             childList: true,
             subtree: true
         });
+
+        // 监听 iframe 的加载（当 iframe 加载完成后，检查其中是否有视频）
+        const iframes = document.getElementsByTagName('iframe');
+        for (let i = 0; i < iframes.length; i++) {
+            const iframe = iframes[i];
+            // 如果 iframe 还未加载完成，等待加载完成
+            if (!iframe.contentDocument && !iframe.contentWindow) {
+                iframe.addEventListener('load', () => {
+                    setTimeout(() => {
+                        const newVideo = findVideo();
+                        if (newVideo && newVideo !== video) {
+                            console.log('[H5Video] iframe 加载完成，检测到新视频');
+                            video = newVideo;
+                            createSubtitleUI();
+                        }
+                    }, 500); // 延迟一点，让视频元素完全加载
+                }, { once: true });
+            }
+        }
 
         console.log('[H5Video] ✅ 初始化完成');
         showTip('HTML5视频工具已就绪');
