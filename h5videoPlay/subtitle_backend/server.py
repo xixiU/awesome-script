@@ -209,7 +209,7 @@ class SubtitleService:
 
 
 # 初始化服务
-subtitle_service = SubtitleService(model_size="base")
+subtitle_service = SubtitleService(model_size="distil-large-v3")
 
 
 @app.on_event("startup")
