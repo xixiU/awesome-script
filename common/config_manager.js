@@ -975,24 +975,84 @@
             // 创建遮罩层
             const overlay = document.createElement('div');
             overlay.className = 'config-help-overlay';
+            overlay.style.cssText = `
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                background: rgba(0, 0, 0, 0.6) !important;
+                backdrop-filter: blur(4px) !important;
+            `;
             overlay.addEventListener('click', () => this.closeHelpDialog(helpDialog, overlay));
 
             // 创建对话框主体
             const dialogContent = document.createElement('div');
             dialogContent.className = 'config-help-content';
+            // 确保对话框内容区域有正确的样式（内联样式作为备用）
+            dialogContent.style.cssText = `
+                position: relative !important;
+                width: 700px !important;
+                max-width: 90vw !important;
+                max-height: 85vh !important;
+                background: white !important;
+                border-radius: 16px !important;
+                box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25) !important;
+                display: flex !important;
+                flex-direction: column !important;
+                overflow: hidden !important;
+                z-index: 1 !important;
+            `;
 
             // 创建标题栏
             const header = document.createElement('div');
             header.className = 'config-help-header';
+            header.style.cssText = `
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+                color: white !important;
+                padding: 20px 24px !important;
+                display: flex !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+                flex-shrink: 0 !important;
+            `;
 
             const titleEl = document.createElement('h3');
             titleEl.className = 'config-help-title';
             titleEl.textContent = title;
+            titleEl.style.cssText = `
+                font-size: 20px !important;
+                font-weight: 600 !important;
+                margin: 0 !important;
+                color: white !important;
+            `;
 
             const closeBtn = document.createElement('button');
             closeBtn.className = 'config-help-close';
             closeBtn.textContent = '×';
+            closeBtn.style.cssText = `
+                background: rgba(255, 255, 255, 0.2) !important;
+                border: none !important;
+                color: white !important;
+                font-size: 28px !important;
+                line-height: 1 !important;
+                cursor: pointer !important;
+                padding: 0 !important;
+                width: 36px !important;
+                height: 36px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                border-radius: 50% !important;
+                transition: background-color 0.2s !important;
+            `;
             closeBtn.addEventListener('click', () => this.closeHelpDialog(helpDialog, overlay));
+            closeBtn.addEventListener('mouseenter', () => {
+                closeBtn.style.background = 'rgba(255, 255, 255, 0.3) !important';
+            });
+            closeBtn.addEventListener('mouseleave', () => {
+                closeBtn.style.background = 'rgba(255, 255, 255, 0.2) !important';
+            });
 
             header.appendChild(titleEl);
             header.appendChild(closeBtn);
@@ -1000,11 +1060,24 @@
             // 创建内容区域
             const body = document.createElement('div');
             body.className = 'config-help-body';
+            // 确保内容区域有正确的样式（内联样式作为备用）
+            body.style.cssText = `
+                padding: 24px !important;
+                overflow-y: auto !important;
+                flex: 1 !important;
+                font-size: 14px !important;
+                line-height: 1.8 !important;
+                color: #374151 !important;
+                background: white !important;
+            `;
 
             // 将内容按行分割并构建 DOM（避免 innerHTML，兼容 Trusted Types）
             const contentLines = content.split('\n');
+            let hasContent = false;
+
             contentLines.forEach(line => {
                 if (line.trim()) {
+                    hasContent = true;
                     // 检测标题行
                     const titleMatch = line.trim().match(/^(#{1,6})\s(.+)$/);
                     const sectionMatch = /^【|^\[/.test(line.trim());
@@ -1016,24 +1089,59 @@
                         const heading = document.createElement(`h${level}`);
                         heading.className = `config-help-h${level}`;
                         heading.textContent = text;
+                        heading.style.cssText = `
+                            margin: 16px 0 12px 0 !important;
+                            font-weight: 600 !important;
+                            color: #1f2937 !important;
+                            font-size: ${24 - (level - 1) * 2}px !important;
+                        `;
                         body.appendChild(heading);
                     } else if (sectionMatch) {
                         // 中括号标题
                         const heading = document.createElement('h4');
                         heading.className = 'config-help-section';
                         heading.textContent = line.trim();
+                        heading.style.cssText = `
+                            font-size: 16px !important;
+                            font-weight: 600 !important;
+                            color: #667eea !important;
+                            margin: 20px 0 12px 0 !important;
+                            padding-bottom: 8px !important;
+                            border-bottom: 2px solid #e5e7eb !important;
+                        `;
                         body.appendChild(heading);
                     } else {
                         // 普通文本行
                         const p = document.createElement('p');
                         p.className = 'config-help-line';
                         p.textContent = line;
+                        p.style.cssText = `
+                            margin: 8px 0 !important;
+                            white-space: pre-wrap !important;
+                            word-wrap: break-word !important;
+                            color: #374151 !important;
+                        `;
                         body.appendChild(p);
                     }
                 } else {
                     // 空行
                     body.appendChild(document.createElement('br'));
                 }
+            });
+
+            // 如果没有内容，显示提示
+            if (!hasContent) {
+                const emptyMsg = document.createElement('p');
+                emptyMsg.textContent = '暂无帮助内容';
+                emptyMsg.style.cssText = 'color: #9ca3af !important; font-style: italic !important;';
+                body.appendChild(emptyMsg);
+            }
+
+            console.log('[ConfigManager] 内容区域已创建', {
+                contentLines: contentLines.length,
+                hasContent: hasContent,
+                bodyChildren: body.children.length,
+                bodyText: body.textContent.substring(0, 100)
             });
 
             // 组装对话框
