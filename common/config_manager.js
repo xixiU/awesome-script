@@ -298,23 +298,23 @@
 
                 /* 帮助文档对话框样式 */
                 .config-help-dialog {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    z-index: 20000;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                    z-index: 20000 !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
                     opacity: 0;
                     pointer-events: none;
                     transition: opacity 0.3s ease-out;
                 }
 
                 .config-help-dialog.show {
-                    opacity: 1;
-                    pointer-events: auto;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
                 }
 
                 .config-help-overlay {
@@ -956,6 +956,21 @@
             helpDialog = document.createElement('div');
             helpDialog.id = `${this.configName}-help-dialog`;
             helpDialog.className = 'config-help-dialog';
+            // 添加内联样式确保显示（作为备用方案）
+            helpDialog.style.cssText = `
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                z-index: 20000 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.3s ease-out;
+            `;
 
             // 创建遮罩层
             const overlay = document.createElement('div');
@@ -1028,12 +1043,42 @@
             helpDialog.appendChild(dialogContent);
 
             // 添加到页面
+            if (!document.body) {
+                console.error('[ConfigManager] document.body 不存在，无法显示帮助对话框');
+                return;
+            }
+
             document.body.appendChild(helpDialog);
 
-            // 显示动画
-            requestAnimationFrame(() => {
+            // 强制触发重排，确保样式应用
+            helpDialog.offsetHeight;
+
+            // 显示动画 - 使用 setTimeout 确保 DOM 已完全渲染
+            setTimeout(() => {
                 helpDialog.classList.add('show');
-            });
+                // 同时设置内联样式确保显示
+                helpDialog.style.opacity = '1';
+                helpDialog.style.pointerEvents = 'auto';
+
+                const computedStyle = window.getComputedStyle(helpDialog);
+                console.log('[ConfigManager] 对话框 show 类已添加', {
+                    element: helpDialog,
+                    hasShowClass: helpDialog.classList.contains('show'),
+                    inlineOpacity: helpDialog.style.opacity,
+                    computedOpacity: computedStyle.opacity,
+                    computedDisplay: computedStyle.display,
+                    computedZIndex: computedStyle.zIndex,
+                    computedPosition: computedStyle.position
+                });
+
+                // 如果仍然不可见，尝试强制显示
+                if (computedStyle.opacity === '0' || computedStyle.display === 'none') {
+                    console.warn('[ConfigManager] 对话框仍然不可见，尝试强制显示');
+                    helpDialog.style.setProperty('opacity', '1', 'important');
+                    helpDialog.style.setProperty('display', 'flex', 'important');
+                    helpDialog.style.setProperty('pointer-events', 'auto', 'important');
+                }
+            }, 10);
 
             // ESC 键关闭
             const escHandler = (e) => {
@@ -1044,7 +1089,13 @@
             };
             document.addEventListener('keydown', escHandler);
 
-            console.log(`[ConfigManager] 帮助文档对话框已显示: ${title}`);
+            console.log(`[ConfigManager] 帮助文档对话框已显示: ${title}`, {
+                dialog: helpDialog,
+                body: document.body,
+                hasShowClass: helpDialog.classList.contains('show'),
+                computedOpacity: window.getComputedStyle(helpDialog).opacity,
+                computedDisplay: window.getComputedStyle(helpDialog).display
+            });
         }
 
         /**
