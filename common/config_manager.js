@@ -353,7 +353,8 @@
             const successMsg = document.createElement('div');
             successMsg.className = 'config-success';
             successMsg.id = `${this.configName}-save-success`;
-            successMsg.innerHTML = '✓ 配置已成功保存！';
+            // 使用 textContent 而不是 innerHTML 来避免 Trusted Types 错误（如 YouTube）
+            successMsg.textContent = '✓ 配置已成功保存！';
             content.appendChild(successMsg);
 
             // 动态创建表单

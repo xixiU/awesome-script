@@ -32,30 +32,94 @@
 
 // 为 YouTube 等使用 Trusted Types 的网站创建策略
 let trustedTypesPolicy = null;
-if (window.trustedTypes && window.trustedTypes.createPolicy) {
-    try {
-        trustedTypesPolicy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
-            createHTML: (input) => input
-        });
-    } catch (e) {
-        console.warn('无法创建 Trusted Types 策略:', e);
+let trustedTypesEnabled = false;
+
+// 检测是否启用了 Trusted Types
+if (window.trustedTypes) {
+    trustedTypesEnabled = true;
+
+    // 尝试创建策略（某些网站如 YouTube 可能不允许创建自定义策略）
+    if (window.trustedTypes.createPolicy) {
+        try {
+            trustedTypesPolicy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
+                createHTML: (input) => {
+                    // 简单返回输入，不进行任何转义（因为我们信任自己的代码）
+                    return String(input);
+                }
+            });
+            console.log('[HTML5视频工具] Trusted Types 策略创建成功');
+        } catch (e) {
+            console.warn('[HTML5视频工具] 无法创建 Trusted Types 策略（某些网站可能限制）:', e);
+            trustedTypesPolicy = null;
+        }
+    } else {
+        console.warn('[HTML5视频工具] 检测到 Trusted Types，但无法创建策略');
     }
 }
 
 // 安全的设置 HTML 内容的辅助函数
+// 注意：优先使用 createElement 和 textContent，避免使用 innerHTML
 const safeSetHTML = (element, htmlString) => {
+    // 如果只是纯文本，直接使用 textContent（更安全）
+    if (!htmlString || htmlString.indexOf('<') === -1) {
+        element.textContent = htmlString || '';
+        return;
+    }
+
     try {
         if (trustedTypesPolicy) {
             element.innerHTML = trustedTypesPolicy.createHTML(htmlString);
+        } else if (trustedTypesEnabled) {
+            // Trusted Types 已启用但无法创建策略，使用降级方案
+            console.warn('[HTML5视频工具] Trusted Types 已启用但无法创建策略，使用 textContent');
+            element.textContent = htmlString.replace(/<[^>]*>/g, '');
         } else {
+            // 没有 Trusted Types，可以直接使用 innerHTML
             element.innerHTML = htmlString;
         }
     } catch (e) {
         // 如果还是失败，使用 textContent 作为降级方案
-        console.warn('设置 HTML 内容失败，使用 textContent:', e);
+        console.warn('[HTML5视频工具] 设置 HTML 内容失败，使用 textContent:', e);
         element.textContent = htmlString.replace(/<[^>]*>/g, '');
     }
 };
+
+// 在 Trusted Types 环境下，为 Element.prototype.innerHTML 添加保护层
+// 这可以捕获所有 innerHTML 的赋值操作，包括来自 jQuery 等库的操作
+if (trustedTypesEnabled && !trustedTypesPolicy) {
+    try {
+        // 获取原始的 innerHTML setter
+        const originalDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+        if (originalDescriptor && originalDescriptor.set) {
+            const originalSetter = originalDescriptor.set;
+
+            // 创建一个安全的 setter
+            Object.defineProperty(Element.prototype, 'innerHTML', {
+                set: function (value) {
+                    try {
+                        // 尝试使用原始 setter
+                        originalSetter.call(this, value);
+                    } catch (e) {
+                        // 如果失败（Trusted Types 错误），使用 textContent 作为降级
+                        if (e.name === 'TypeError' && e.message.includes('TrustedHTML')) {
+                            console.warn('[HTML5视频工具] innerHTML 被 Trusted Types 阻止，使用 textContent:', e);
+                            this.textContent = String(value).replace(/<[^>]*>/g, '');
+                        } else {
+                            // 其他错误，重新抛出
+                            throw e;
+                        }
+                    }
+                },
+                get: originalDescriptor.get,
+                configurable: true,
+                enumerable: originalDescriptor.enumerable
+            });
+            console.log('[HTML5视频工具] 已添加 innerHTML 保护层');
+        }
+    } catch (e) {
+        console.warn('[HTML5视频工具] 无法添加 innerHTML 保护层:', e);
+    }
+}
 
 // ===== 智能检测：判断页面是否需要启用脚本 =====
 const shouldEnableScript = () => {
