@@ -972,7 +972,7 @@
                 transition: opacity 0.3s ease-out;
             `;
 
-            // 创建遮罩层
+            // 创建遮罩层（增强透明度，让背景更暗）
             const overlay = document.createElement('div');
             overlay.className = 'config-help-overlay';
             overlay.style.cssText = `
@@ -981,12 +981,13 @@
                 left: 0 !important;
                 width: 100% !important;
                 height: 100% !important;
-                background: rgba(0, 0, 0, 0.6) !important;
-                backdrop-filter: blur(4px) !important;
+                background: rgba(0, 0, 0, 0.75) !important;
+                backdrop-filter: blur(8px) !important;
+                -webkit-backdrop-filter: blur(8px) !important;
             `;
             overlay.addEventListener('click', () => this.closeHelpDialog(helpDialog, overlay));
 
-            // 创建对话框主体
+            // 创建对话框主体（增强阴影和边框，提高可见性）
             const dialogContent = document.createElement('div');
             dialogContent.className = 'config-help-content';
             // 确保对话框内容区域有正确的样式（内联样式作为备用）
@@ -995,9 +996,10 @@
                 width: 700px !important;
                 max-width: 90vw !important;
                 max-height: 85vh !important;
-                background: white !important;
+                background: #ffffff !important;
                 border-radius: 16px !important;
-                box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25) !important;
+                border: 2px solid rgba(102, 126, 234, 0.2) !important;
+                box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.1) !important;
                 display: flex !important;
                 flex-direction: column !important;
                 overflow: hidden !important;
@@ -1057,7 +1059,7 @@
             header.appendChild(titleEl);
             header.appendChild(closeBtn);
 
-            // 创建内容区域
+            // 创建内容区域（增强背景和文字对比度）
             const body = document.createElement('div');
             body.className = 'config-help-body';
             // 确保内容区域有正确的样式（内联样式作为备用）
@@ -1067,8 +1069,9 @@
                 flex: 1 !important;
                 font-size: 14px !important;
                 line-height: 1.8 !important;
-                color: #374151 !important;
-                background: white !important;
+                color: #1f2937 !important;
+                background: #ffffff !important;
+                min-height: 200px !important;
             `;
 
             // 将内容按行分割并构建 DOM（避免 innerHTML，兼容 Trusted Types）
@@ -1111,7 +1114,7 @@
                         `;
                         body.appendChild(heading);
                     } else {
-                        // 普通文本行
+                        // 普通文本行（增强文字颜色对比度）
                         const p = document.createElement('p');
                         p.className = 'config-help-line';
                         p.textContent = line;
@@ -1119,7 +1122,9 @@
                             margin: 8px 0 !important;
                             white-space: pre-wrap !important;
                             word-wrap: break-word !important;
-                            color: #374151 !important;
+                            color: #1f2937 !important;
+                            font-weight: 400 !important;
+                            text-shadow: 0 1px 1px rgba(255, 255, 255, 0.8) !important;
                         `;
                         body.appendChild(p);
                     }
