@@ -1,4 +1,4 @@
-/* globals */
+/* globals jQuery, $, Vue */
 // ==UserScript==
 // @name       HTML5视频播放工具
 // @name:en	   HTML5 Video Playing Tools
@@ -6,11 +6,14 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；实时字幕翻译；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; real-time subtitle translation; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; traduzione dei sottotitoli in tempo reale; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.2.1
+// @version    2.2.0
 // @match    *://*/*
+// @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
 // @run-at     document-start
 // @inject-into content
+// @require    https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js
+// @require    https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js
 // @require      https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/common/config_manager.js
 // @grant      GM_addStyle
 // @grant      GM_xmlhttpRequest
@@ -25,125 +28,31 @@
 // @updateURL https://update.greasyfork.org/scripts/30545/HTML5%E8%A7%86%E9%A2%91%E6%92%AD%E6%94%BE%E5%B7%A5%E5%85%B7.meta.js
 // ==/UserScript==
 
-// ===== Trusted Types 保护层（早期拦截，必须在 @require 之前执行）=====
-// 关键：在 Tampermonkey 中，@require 会在脚本主体之前执行，但 IIFE 会在脚本加载时立即执行
-// 这个保护层会拦截所有 innerHTML 操作，包括来自其他库（如 jQuery、Vue）的操作
-(function () {
-    'use strict';
-
-    // 检查是否启用了 Trusted Types
-    if (typeof window === 'undefined' || !window.trustedTypes) {
-        return; // 没有 Trusted Types，不需要保护
-    }
-
-    // 检查是否已经添加过保护层（避免重复添加）
-    if (window.__html5VideoPlayerProtected) {
-        return;
-    }
-
-    try {
-        const originalDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
-        if (!originalDescriptor || !originalDescriptor.set) {
-            return;
-        }
-
-        const originalSetter = originalDescriptor.set;
-
-        // 尝试创建策略（某些网站如 YouTube 可能不允许创建自定义策略）
-        let policy = null;
-        try {
-            if (window.trustedTypes.createPolicy) {
-                policy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
-                    createHTML: (input) => String(input)
-                });
-            }
-        } catch (e) {
-            // 无法创建策略，继续使用保护层降级方案
-        }
-
-        // 覆盖 innerHTML setter（拦截所有 innerHTML 操作）
-        Object.defineProperty(Element.prototype, 'innerHTML', {
-            set: function (value) {
-                try {
-                    // 如果有策略，使用策略创建 TrustedHTML
-                    if (policy) {
-                        const trustedHTML = policy.createHTML(String(value));
-                        originalSetter.call(this, trustedHTML);
-                        return;
-                    }
-                    // 尝试直接设置
-                    originalSetter.call(this, value);
-                } catch (e) {
-                    // 如果失败（Trusted Types 错误），静默降级为 textContent
-                    if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types') || e.message.includes('requires \'TrustedHTML\''))) {
-                        try {
-                            const textOnly = String(value).replace(/<[^>]*>/g, '');
-                            if (textOnly.length > 0) {
-                                this.textContent = textOnly;
-                            }
-                        } catch (err) {
-                            // 完全静默，不输出任何错误
-                        }
-                    } else {
-                        // 其他错误，重新抛出
-                        throw e;
-                    }
-                }
-            },
-            get: originalDescriptor.get,
-            configurable: true,
-            enumerable: originalDescriptor.enumerable
-        });
-
-        // 标记已保护
-        window.__html5VideoPlayerProtected = true;
-    } catch (e) {
-        // 静默失败，避免影响脚本正常执行
-    }
-})();
-
 'use strict';
 
-// ===== Trusted Types 辅助函数 =====
-// 注意：保护层已在早期 IIFE 中添加，这里只提供辅助函数
+// 为 YouTube 等使用 Trusted Types 的网站创建策略
 let trustedTypesPolicy = null;
-let trustedTypesEnabled = false;
-
-// 检测是否启用了 Trusted Types（用于辅助函数判断）
-if (typeof window !== 'undefined' && window.trustedTypes) {
-    trustedTypesEnabled = true;
-    // 尝试获取已创建的策略（如果早期 IIFE 成功创建了策略）
+if (window.trustedTypes && window.trustedTypes.createPolicy) {
     try {
-        if (window.trustedTypes.createPolicy) {
-            trustedTypesPolicy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
-                createHTML: (input) => String(input)
-            });
-        }
+        trustedTypesPolicy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
+            createHTML: (input) => input
+        });
     } catch (e) {
-        // 策略可能已在早期创建，或网站不允许创建，忽略错误
+        console.warn('无法创建 Trusted Types 策略:', e);
     }
 }
 
 // 安全的设置 HTML 内容的辅助函数
-// 注意：优先使用 createElement 和 textContent，避免使用 innerHTML
 const safeSetHTML = (element, htmlString) => {
-    if (!htmlString || htmlString.indexOf('<') === -1) {
-        element.textContent = htmlString || '';
-        return;
-    }
-
     try {
         if (trustedTypesPolicy) {
             element.innerHTML = trustedTypesPolicy.createHTML(htmlString);
-        } else if (trustedTypesEnabled) {
-            // Trusted Types 已启用但无法创建策略，使用降级方案
-            element.textContent = htmlString.replace(/<[^>]*>/g, '');
         } else {
-            // 没有 Trusted Types，可以直接使用 innerHTML
             element.innerHTML = htmlString;
         }
     } catch (e) {
         // 如果还是失败，使用 textContent 作为降级方案
+        console.warn('设置 HTML 内容失败，使用 textContent:', e);
         element.textContent = htmlString.replace(/<[^>]*>/g, '');
     }
 };
@@ -177,6 +86,7 @@ const shouldEnableScript = () => {
     ];
 
     if (knownVideoSites.some(site => host.includes(site))) {
+        console.log('[HTML5视频工具] 识别为已知视频网站:', host);
         return true;
     }
 
@@ -203,6 +113,7 @@ const shouldEnableScript = () => {
                         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
                         const iframeVideos = iframeDoc.getElementsByTagName('video');
                         if (iframeVideos.length > 0) {
+                            console.log(`[HTML5视频工具] 在 iframe 中检测到 ${iframeVideos.length} 个视频元素`);
                             return true;
                         }
                     }
@@ -210,6 +121,7 @@ const shouldEnableScript = () => {
                     // 跨域 iframe，无法访问内容（这是正常的）
                     // 但 iframe 本身的存在可能意味着有视频内容
                     if (iframes[i].offsetWidth > 100 && iframes[i].offsetHeight > 100) {
+                        console.log('[HTML5视频工具] 检测到可能包含视频的 iframe（跨域，无法直接访问）');
                         return true; // 即使无法访问，也假设有视频
                     }
                 }
@@ -221,12 +133,14 @@ const shouldEnableScript = () => {
             // 检查当前页面的视频
             const videos = document.getElementsByTagName('video');
             if (videos.length > 0) {
+                console.log(`[HTML5视频工具] 检测到 ${videos.length} 个视频元素，启用脚本`);
                 resolve(true);
                 return true;
             }
 
             // 检查 iframe 中的视频
             if (checkIframeVideos()) {
+                console.log('[HTML5视频工具] 检测到 iframe 中的视频，启用脚本');
                 resolve(true);
                 return true;
             }
@@ -246,6 +160,7 @@ const shouldEnableScript = () => {
             if (checkVideo() || checkCount >= maxChecks) {
                 observer.disconnect();
                 if (checkCount >= maxChecks) {
+                    console.log('[HTML5视频工具] 未检测到视频元素，不启用脚本');
                     resolve(false);
                 }
             }
@@ -398,7 +313,7 @@ const MSG = i18n[curLang] || i18n.en;
 const w = unsafeWindow || window;
 const { host, pathname: path } = location;
 const d = document, find = [].find;
-let v, _fp, _fs, by; // document.body（已移除 $msg，使用原生 API）
+let $msg, v, _fp, _fs, by; // document.body
 const observeOpt = { childList: true, subtree: true };
 const noopFn = function () { };
 const validEl = e => e && e.offsetWidth > 1;
@@ -551,34 +466,21 @@ const adjustVolume = n => {
     n += v.volume;
     if (inRange(n, 0, 1)) v.volume = +n.toFixed(2);
 };
-// 提示函数（使用原生 API，避免 jQuery 和 Trusted Types 问题）
 const tip = (msg) => {
-    if (!msg?.length) return;
-
-    // 查找或创建提示元素
-    let tipEl = document.getElementById('gm-h5-tip');
-    if (!tipEl) {
-        tipEl = d.createElement('div');
-        tipEl.id = 'gm-h5-tip';
-        tipEl.style.cssText = 'max-width:455px;min-width:333px;background:#EEE;color:#111;height:22px;top:-30px;left:50%;transform:translate(-50%, 0); border-radius:8px;border:1px solid orange;text-align:center;font-size:15px;position:fixed;z-index:2147483647;transition: top 0.3s ease-out;';
+    if (!$msg?.get(0)?.offsetHeight) {
+        // 使用 createElement 而不是 innerHTML 来避免 Trusted Types 问题
+        const tipEl = d.createElement('div');
+        tipEl.style.cssText = 'max-width:455px;min-width:333px;background:#EEE;color:#111;height:22px;top:-30px;left:50%;transform:translate(-50%, 0); border-radius:8px;border:1px solid orange;text-align:center;font-size:15px;position:fixed;z-index:2147483647';
         by.appendChild(tipEl);
+        $msg = $(tipEl);
     }
-
-    // 设置文本和宽度
-    tipEl.textContent = msg;
+    if (!msg?.length) return;
     const len = msg.length * 15;
-    tipEl.style.width = `${len}px`;
-
-    // 动画：显示 -> 短暂停留 -> 隐藏
-    requestAnimationFrame(() => {
-        tipEl.style.top = '190px';
-        setTimeout(() => {
-            tipEl.style.top = '199px';
-            setTimeout(() => {
-                tipEl.style.top = '-30px';
-            }, 1900);
-        }, 100);
-    });
+    $msg.stop(true, true).text(msg)
+        .css({ width: `${len}px` })
+        .animate({ top: '190px' })
+        .animate({ top: '+=9px' }, 1900)
+        .animate({ top: '-30px' });
 };
 
 // ==================== 实时字幕翻译功能 ====================
@@ -1042,26 +944,7 @@ const cfg = {
     multipleV: !1, //多视频页面
     isNumURL: !1 //网址数字分集
 };
-// 使用原生 EventTarget 替代 Vue（避免 Trusted Types 问题）
-const bus = new EventTarget();
-// 添加 $emit, $on, $once 方法以保持 API 兼容
-bus.$emit = function (event, data) {
-    this.dispatchEvent(new CustomEvent(event, { detail: data }));
-};
-bus.$on = function (event, handler) {
-    const wrapper = function (e) {
-        handler(e.detail);
-    };
-    wrapper._originalHandler = handler;
-    this.addEventListener(event, wrapper);
-};
-bus.$once = function (event, handler) {
-    const wrapper = function (e) {
-        handler(e.detail);
-        this.removeEventListener(event, wrapper);
-    };
-    this.addEventListener(event, wrapper, { once: true });
-};
+const bus = new Vue();
 if (window.onurlchange === void 0) {
     history.pushState = (f => function pushState() {
         const ret = f.apply(this, arguments);
@@ -1675,11 +1558,10 @@ const app = {
                 }
             }, false);
         }
-        const canplayHandler = (ev) => {
+        $(v).one('canplay', ev => {
             cfg.isLive = cfg.isLive || v.duration == Infinity;
-            if (cfg.isLive) {
-                for (const k of [37, 1061, 39, 1063, 67, 77, 78, 88, 90]) actList.delete(k);
-            } else {
+            if (cfg.isLive) for (const k of [37, 1061, 39, 1063, 67, 77, 78, 88, 90]) actList.delete(k);
+            else {
                 if (bRateEnabled) v.playbackRate = +localStorage.mvPlayRate || 1;
                 v.addEventListener('ratechange', ev => {
                     if (bRateEnabled && v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
@@ -1688,10 +1570,8 @@ const app = {
 
             this.checkMV();
             bus.$emit('canplay');
-            v.removeEventListener('canplay', canplayHandler);
-        };
-        v.addEventListener('canplay', canplayHandler, { once: true });
-        by.addEventListener('keydown', this.hotKey.bind(this));
+        });
+        $(by).keydown(this.hotKey.bind(this));
 
         cfg.mvShell ? this.shellEvent() : this.setShell();
         this.checkUI();
@@ -1836,11 +1716,7 @@ const router = {
             });
             cfg.fullCSS = '.live_icon_full';
         } else {
-            // 移除 keyup 事件监听（如果存在）
-            bus.$on('foundMV', () => {
-                // 由于使用原生 API，需要移除可能存在的 keyup 监听器
-                // 注意：如果之前没有添加 keyup 监听，这里不会出错
-            });
+            bus.$on('foundMV', () => { $(document).unbind('keyup') });
             cfg.shellCSS = '#ykPlayer';
             cfg.webfullCSS = '.kui-webfullscreen-icon-0';
             cfg.fullCSS = '.kui-fullscreen-icon-0';
@@ -1950,12 +1826,10 @@ const router = {
             const pos = v.currentTime;
             const buf = v.buffered;
             v.currentTime = buf.end(buf.length - 1) + 1;
-            const progressHandler = (ev) => {
+            $(v).one('progress', ev => {
                 v.currentTime = pos;
                 v.play();
-                v.removeEventListener('progress', progressHandler);
-            };
-            v.addEventListener('progress', progressHandler, { once: true });
+            });
         });
         cfg.nextCSS = '.playlist .on + li a';
     },
@@ -1970,10 +1844,9 @@ const router = {
             cfg.webfullCSS = '.wfs-2a8e83';
             cfg.fullCSS = '.fs-781153';
             cfg.playCSS = 'div[class|=play]';
-            if (path != '/') {
-                const input = q('.u-specialStateInput');
-                if (input) input.checked = true;
-            }
+            path != '/' && $(ev => {
+                q('.u-specialStateInput').checked = true;
+            });
         } else bus.$on('addShadowRoot', async function (r) {
             if (r.host.matches('#demandcontroller-bar')) {
                 await sleep(600);
@@ -2038,22 +1911,6 @@ const videoConfigManager = new ConfigManager('HTML5视频工具', {
     i18n: {
         'zh': {
             'helpMenuOption': '脚本功能快捷键表',
-            'helpBody': `双击(控制栏)：切换（网页）全屏         鼠标中键：快进5秒
-P：视频截图    i：切换画中画   M：(停止)缓存视频
-S：开启/关闭实时字幕翻译 🆕
-chrome类浏览器加启动参数设置媒体缓存为840MB： --media-cache-size=880008000
-
-← →方向键：快退、快进5秒;   方向键 + shift: 20秒
-↑ ↓方向键：音量调节   ESC：退出（网页）全屏
-空格键：暂停/播放      N：播放下一集
-回车键：切换全屏;      回车键 + shift: 切换网页全屏
-C(抖音、youtube用V键)：加速0.1倍  X(抖音S)：减速0.1倍  Z(抖音A)：切换加速状态
-D：上一帧     F：下一帧(youtube.com用E键)
-
-【字幕功能使用说明】
-1. 启动后端服务: cd subtitle_backend && ./start.sh
-2. 按 S 键或点击控制栏字幕按钮开启字幕
-3. 在油猴菜单中可配置服务地址和目标语言`,
             'subtitleConfig': '字幕翻译配置',
             'restartSubtitle': '重启字幕服务',
             'rememberRate': '记忆播放速度',
@@ -2072,36 +1929,6 @@ D：上一帧     F：下一帧(youtube.com用E键)
         },
         'en': {
             'helpMenuOption': 'Hotkeys list',
-            'helpBody': `Double-click: activate full screen.
-Middle mouse button: fast forward 5 seconds
-
-P key： Take a screenshot
-I key： Enter/Exit picture-in-picture mode
-M key： Enable/disable caching of video
-S key： Toggle real-time subtitle translation 🆕
-Chrome browsers add startup parameters to set the media cache to 840MB： --media-cache-size=880008000
-
-Arrow keys ← and →： Fast forward or rewind by 5 seconds
-Shift + Arrow keys ← and →： Fast forward or rewind 20 seconds
-Arrow keys ↑ and ↓： Raise or lower the volume
-
-ESC： Exit full screen (or exit video enlarged to window size)
-Spacebar： Stop/Play
-Enter： Enable/disable full screen video
-Shift + Enter: Set/unset video enlarged to window size
-
-N key： Play the next video (if any)
-C key(YouTube:V key)： Speed up video playback by 0.1
-X key: Slow down video playback by 0.1
-Z key, Set video playback speed: 1.0 ←→ X
-D key: Previous frame
-F key: Next frame (except on YouTube)
-E key: Next frame (YouTube only)
-
-【Subtitle Feature】
-1. Start backend: cd subtitle_backend && ./start.sh
-2. Press S key or click subtitle button to enable
-3. Configure in Tampermonkey menu`,
             'subtitleConfig': 'Subtitle Translation Config',
             'restartSubtitle': 'Restart Subtitle Service',
             'rememberRate': 'Remember playback speed',
@@ -2120,36 +1947,6 @@ E key: Next frame (YouTube only)
         },
         'it': {
             'helpMenuOption': 'Elenco dei tasti di scelta rapida',
-            'helpBody': `Doppio clic: attiva lo schermo intero
-Pulsante centrale del mouse: avanzamento rapido di 5 secondi
-
-Tasto P: Esegui uno screenshot
-Tasto I： Attiva modalità picture-in-picture
-Tasto M： Attiva/disattiva memorizzazione del video nella cache
-Tasto S： Attiva/disattiva traduzione sottotitoli in tempo reale 🆕
-Browser Chrome aggiungi parametri di avvio per impostare la cache multimediale a 840MB: --media-cache-size=880008000
-
-Frecce ← e →： Avanzamento rapido o riavvolgimento di 5 secondi
-Shift + Frecce ← e →： Avanzamento rapido o riavvolgimento di 20 secondi
-Frecce ↑ e ↓： Aumenta o diminuisci il volume
-
-ESC： Esci dalla modalità schermo intero
-Barra spaziatrice： Stop/Riproduci
-Invio： Attiva/disattiva video a schermo intero
-Shift + Invio: Imposta/rimuovi video ingrandito alla dimensione della finestra
-
-Tasto N： Riproduci il video successivo (se presente)
-Tasto C (YouTube: V)： Accelera la riproduzione video di 0.1
-Tasto X: Rallenta la riproduzione video di 0.1
-Tasto Z: Imposta velocità di riproduzione video: 1.0 ←→ X
-Tasto D: Frame precedente
-Tasto F: Frame successivo (eccetto su YouTube)
-Tasto E: Frame successivo (solo su YouTube)
-
-【Funzionalità Sottotitoli】
-1. Avvia backend: cd subtitle_backend && ./start.sh
-2. Premi il tasto S o clicca il pulsante sottotitoli per abilitare
-3. Configura nel menu Tampermonkey`,
             'subtitleConfig': 'Configurazione traduzione sottotitoli',
             'restartSubtitle': 'Riavvia servizio sottotitoli',
             'rememberRate': 'Memorizza velocità di riproduzione',
@@ -2178,17 +1975,16 @@ Tasto E: Frame successivo (solo su YouTube)
     const enabled = shouldEnable instanceof Promise ? await shouldEnable : shouldEnable;
 
     if (!enabled) {
+        console.log('[HTML5视频工具] 当前页面不需要启用脚本');
         return;
     }
 
     // 使用 ConfigManager 注册菜单命令
     try {
-        // 1. 快捷键帮助菜单（使用新的帮助文档功能）
-        videoConfigManager.registerHelpDocument({
-            titleKey: 'helpMenuOption',
-            contentKey: 'helpBody',
-            displayMode: 'dialog',  // 使用对话框模式，更美观
-            icon: '📖'
+        // 1. 快捷键帮助菜单
+        videoConfigManager.registerMenuCommand('helpMenuOption', () => {
+            console.log(MSG.helpBody);
+            tip('快捷键帮助已输出到控制台，请按 F12 查看');
         });
 
         // 2. 记忆播放速度菜单（切换型）
@@ -2254,6 +2050,7 @@ Tasto E: Frame successivo (solo su YouTube)
     }
 
     // 初始化脚本
+    console.log('[HTML5视频工具] 脚本已启用，站点:', location.host);
     if (!router[u] || !router[u]()) app.init();
     if (!router[u] && !cfg.isNumURL) cfg.isNumURL = /[_\W]\d+(\/|\.[a-z]{3,8})?$/.test(path);
 })();
