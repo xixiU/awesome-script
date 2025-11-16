@@ -296,6 +296,150 @@
                     to { opacity: 1; }
                 }
 
+                /* 帮助文档对话框样式 */
+                .config-help-dialog {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    z-index: 20000;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    opacity: 0;
+                    pointer-events: none;
+                    transition: opacity 0.3s ease-out;
+                }
+
+                .config-help-dialog.show {
+                    opacity: 1;
+                    pointer-events: auto;
+                }
+
+                .config-help-overlay {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.6);
+                    backdrop-filter: blur(4px);
+                }
+
+                .config-help-content {
+                    position: relative;
+                    width: 700px;
+                    max-width: 90vw;
+                    max-height: 85vh;
+                    background: white;
+                    border-radius: 16px;
+                    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+                    display: flex;
+                    flex-direction: column;
+                    transform: scale(0.9);
+                    transition: transform 0.3s ease-out;
+                    overflow: hidden;
+                    z-index: 1;
+                }
+
+                .config-help-dialog.show .config-help-content {
+                    transform: scale(1);
+                }
+
+                .config-help-header {
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 20px 24px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    flex-shrink: 0;
+                }
+
+                .config-help-title {
+                    font-size: 20px;
+                    font-weight: 600;
+                    margin: 0;
+                }
+
+                .config-help-close {
+                    background: rgba(255, 255, 255, 0.2);
+                    border: none;
+                    color: white;
+                    font-size: 28px;
+                    line-height: 1;
+                    cursor: pointer;
+                    padding: 0;
+                    width: 36px;
+                    height: 36px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 50%;
+                    transition: background-color 0.2s;
+                }
+
+                .config-help-close:hover {
+                    background: rgba(255, 255, 255, 0.3);
+                }
+
+                .config-help-body {
+                    padding: 24px;
+                    overflow-y: auto;
+                    flex: 1;
+                    font-size: 14px;
+                    line-height: 1.8;
+                    color: #374151;
+                }
+
+                .config-help-body::-webkit-scrollbar {
+                    width: 8px;
+                }
+
+                .config-help-body::-webkit-scrollbar-track {
+                    background: #f1f1f1;
+                    border-radius: 4px;
+                }
+
+                .config-help-body::-webkit-scrollbar-thumb {
+                    background: #c1c1c1;
+                    border-radius: 4px;
+                }
+
+                .config-help-body::-webkit-scrollbar-thumb:hover {
+                    background: #a1a1a1;
+                }
+
+                .config-help-line {
+                    margin: 8px 0;
+                    white-space: pre-wrap;
+                    word-wrap: break-word;
+                }
+
+                .config-help-section {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #667eea;
+                    margin: 20px 0 12px 0;
+                    padding-bottom: 8px;
+                    border-bottom: 2px solid #e5e7eb;
+                }
+
+                .config-help-h1, .config-help-h2, .config-help-h3, 
+                .config-help-h4, .config-help-h5, .config-help-h6 {
+                    margin: 16px 0 12px 0;
+                    font-weight: 600;
+                    color: #1f2937;
+                }
+
+                .config-help-h1 { font-size: 24px; }
+                .config-help-h2 { font-size: 20px; }
+                .config-help-h3 { font-size: 18px; }
+                .config-help-h4 { font-size: 16px; }
+                .config-help-h5 { font-size: 14px; }
+                .config-help-h6 { font-size: 13px; }
+
                 /* 响应式设计 */
                 @media (max-width: 600px) {
                     .config-panel {
@@ -318,6 +462,20 @@
                     
                     .config-btn {
                         width: 100%;
+                    }
+
+                    .config-help-content {
+                        width: 95vw;
+                        max-height: 90vh;
+                    }
+
+                    .config-help-header {
+                        padding: 16px;
+                    }
+
+                    .config-help-body {
+                        padding: 16px;
+                        font-size: 13px;
                     }
                 }
             `;
@@ -719,6 +877,201 @@
             }, currentValue ? '✓' : '');
 
             return currentValue;
+        }
+
+        // ==================== 静态说明文档功能 ====================
+
+        /**
+         * 注册帮助文档菜单项
+         * @param {Object} options - 配置选项
+         * @param {string} options.titleKey - 菜单标题的 i18n 键
+         * @param {string} options.contentKey - 文档内容的 i18n 键
+         * @param {string} options.displayMode - 显示模式: 'dialog' (对话框) 或 'console' (控制台), 默认 'dialog'
+         * @param {string} options.icon - 菜单图标，默认 '📖'
+         * @param {Function} options.onShow - 显示前的回调函数（可选）
+         * @param {Function} options.formatContent - 内容格式化函数（可选）
+         */
+        registerHelpDocument(options = {}) {
+            const {
+                titleKey = 'helpDocument',
+                contentKey = 'helpContent',
+                displayMode = 'dialog',
+                icon = '📖',
+                onShow = null,
+                formatContent = null
+            } = options;
+
+            const menuTitle = this.t(titleKey, titleKey);
+            const menuText = icon ? `${icon} ${menuTitle}` : menuTitle;
+
+            if (typeof GM_registerMenuCommand !== 'undefined') {
+                try {
+                    GM_registerMenuCommand(menuText, () => {
+                        if (onShow && typeof onShow === 'function') {
+                            onShow();
+                        }
+
+                        const content = this.t(contentKey, contentKey);
+                        const formattedContent = formatContent && typeof formatContent === 'function'
+                            ? formatContent(content)
+                            : content;
+
+                        if (displayMode === 'console') {
+                            // 控制台模式：输出到控制台并提示
+                            console.log(`\n${'='.repeat(50)}\n${this.t(titleKey, titleKey)}\n${'='.repeat(50)}\n`);
+                            console.log(formattedContent);
+                            console.log(`${'='.repeat(50)}\n`);
+
+                            // 显示提示（如果 tip 函数存在）
+                            if (typeof window.tip === 'function') {
+                                window.tip('帮助文档已输出到控制台，请按 F12 查看');
+                            } else {
+                                alert('帮助文档已输出到控制台，请按 F12 查看开发者工具');
+                            }
+                        } else {
+                            // 对话框模式：显示美观的对话框
+                            this.showHelpDialog(this.t(titleKey, titleKey), formattedContent);
+                        }
+                    });
+                    console.log(`[ConfigManager] 已注册帮助文档菜单: ${menuText}`);
+                } catch (e) {
+                    console.warn(`[ConfigManager] 注册帮助文档菜单失败: ${menuText}`, e);
+                }
+            }
+        }
+
+        /**
+         * 显示帮助文档对话框
+         * @param {string} title - 对话框标题
+         * @param {string} content - 文档内容（支持换行）
+         */
+        showHelpDialog(title, content) {
+            // 检查是否已有帮助对话框
+            let helpDialog = document.getElementById(`${this.configName}-help-dialog`);
+            if (helpDialog) {
+                helpDialog.remove();
+            }
+
+            // 创建对话框容器
+            helpDialog = document.createElement('div');
+            helpDialog.id = `${this.configName}-help-dialog`;
+            helpDialog.className = 'config-help-dialog';
+
+            // 创建遮罩层
+            const overlay = document.createElement('div');
+            overlay.className = 'config-help-overlay';
+            overlay.addEventListener('click', () => this.closeHelpDialog(helpDialog, overlay));
+
+            // 创建对话框主体
+            const dialogContent = document.createElement('div');
+            dialogContent.className = 'config-help-content';
+
+            // 创建标题栏
+            const header = document.createElement('div');
+            header.className = 'config-help-header';
+
+            const titleEl = document.createElement('h3');
+            titleEl.className = 'config-help-title';
+            titleEl.textContent = title;
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'config-help-close';
+            closeBtn.textContent = '×';
+            closeBtn.addEventListener('click', () => this.closeHelpDialog(helpDialog, overlay));
+
+            header.appendChild(titleEl);
+            header.appendChild(closeBtn);
+
+            // 创建内容区域
+            const body = document.createElement('div');
+            body.className = 'config-help-body';
+
+            // 将内容按行分割并构建 DOM（避免 innerHTML，兼容 Trusted Types）
+            const contentLines = content.split('\n');
+            contentLines.forEach(line => {
+                if (line.trim()) {
+                    // 检测标题行
+                    const titleMatch = line.trim().match(/^(#{1,6})\s(.+)$/);
+                    const sectionMatch = /^【|^\[/.test(line.trim());
+
+                    if (titleMatch) {
+                        // Markdown 风格的标题
+                        const level = titleMatch[1].length;
+                        const text = titleMatch[2];
+                        const heading = document.createElement(`h${level}`);
+                        heading.className = `config-help-h${level}`;
+                        heading.textContent = text;
+                        body.appendChild(heading);
+                    } else if (sectionMatch) {
+                        // 中括号标题
+                        const heading = document.createElement('h4');
+                        heading.className = 'config-help-section';
+                        heading.textContent = line.trim();
+                        body.appendChild(heading);
+                    } else {
+                        // 普通文本行
+                        const p = document.createElement('p');
+                        p.className = 'config-help-line';
+                        p.textContent = line;
+                        body.appendChild(p);
+                    }
+                } else {
+                    // 空行
+                    body.appendChild(document.createElement('br'));
+                }
+            });
+
+            // 组装对话框
+            dialogContent.appendChild(header);
+            dialogContent.appendChild(body);
+            helpDialog.appendChild(overlay);
+            helpDialog.appendChild(dialogContent);
+
+            // 添加到页面
+            document.body.appendChild(helpDialog);
+
+            // 显示动画
+            requestAnimationFrame(() => {
+                helpDialog.classList.add('show');
+            });
+
+            // ESC 键关闭
+            const escHandler = (e) => {
+                if (e.key === 'Escape') {
+                    this.closeHelpDialog(helpDialog, overlay);
+                    document.removeEventListener('keydown', escHandler);
+                }
+            };
+            document.addEventListener('keydown', escHandler);
+
+            console.log(`[ConfigManager] 帮助文档对话框已显示: ${title}`);
+        }
+
+        /**
+         * 关闭帮助文档对话框
+         * @param {HTMLElement} dialog - 对话框元素
+         * @param {HTMLElement} overlay - 遮罩层元素
+         */
+        closeHelpDialog(dialog, overlay) {
+            if (dialog) {
+                dialog.classList.remove('show');
+                setTimeout(() => {
+                    if (dialog && dialog.parentNode) {
+                        dialog.parentNode.removeChild(dialog);
+                    }
+                }, 300);
+            }
+        }
+
+        /**
+         * HTML 转义（防止 XSS）
+         * @param {string} text - 要转义的文本
+         * @returns {string} 转义后的文本
+         */
+        escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
     }
 

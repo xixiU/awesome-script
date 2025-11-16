@@ -2045,10 +2045,12 @@ const videoConfigManager = new ConfigManager('HTML5视频工具', {
 
     // 使用 ConfigManager 注册菜单命令
     try {
-        // 1. 快捷键帮助菜单
-        videoConfigManager.registerMenuCommand('helpMenuOption', () => {
-            console.log(MSG.helpBody);
-            tip('快捷键帮助已输出到控制台，请按 F12 查看');
+        // 1. 快捷键帮助菜单（使用新的帮助文档功能）
+        videoConfigManager.registerHelpDocument({
+            titleKey: 'helpMenuOption',
+            contentKey: 'helpBody',
+            displayMode: 'dialog',  // 使用对话框模式，更美观
+            icon: '📖'
         });
 
         // 2. 记忆播放速度菜单（切换型）
