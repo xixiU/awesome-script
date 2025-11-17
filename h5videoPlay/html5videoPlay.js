@@ -8,7 +8,6 @@
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; traduzione dei sottotitoli in tempo reale; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
 // @version    2.2.0
 // @match    *://*/*
-// @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
 // @run-at     document-start
 // @inject-into content
@@ -30,13 +29,16 @@
 
 'use strict';
 
-// ===== Trusted Types 保护层（必须在脚本最开始执行）=====
+// ===== Trusted Types 保护层（必须在脚本最开始执行，在 Vue/jQuery 使用之前）=====
+// 注意：虽然 @require 的库会在脚本主体之前加载，但保护层仍然可以拦截它们后续的操作
+// 如果库在加载时就使用了 innerHTML，我们无法拦截，但大多数库是在使用时才调用 innerHTML
+
 // 为 YouTube 等使用 Trusted Types 的网站创建策略和保护层
 let trustedTypesPolicy = null;
 let trustedTypesEnabled = false;
 
 // 立即检测是否启用了 Trusted Types（在脚本执行任何其他代码之前）
-if (window.trustedTypes) {
+if (typeof window !== 'undefined' && window.trustedTypes) {
     trustedTypesEnabled = true;
 
     // 尝试创建策略（某些网站如 YouTube 可能不允许创建自定义策略）
@@ -57,63 +59,150 @@ if (window.trustedTypes) {
         console.warn('[HTML5视频工具] 检测到 Trusted Types，但无法创建策略');
     }
 
-    // 立即添加保护层（在脚本执行任何其他代码之前，防止早期 innerHTML 使用）
+    // 立即添加保护层（拦截所有 innerHTML 操作，包括来自 jQuery/Vue 的）
     try {
-        // 获取原始的 innerHTML setter
-        const originalDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
-        if (originalDescriptor && originalDescriptor.set) {
-            const originalSetter = originalDescriptor.set;
+        // 检查是否已经添加过保护层（避免重复添加）
+        if (Element.prototype.innerHTML && Element.prototype.innerHTML._protected) {
+            console.log('[HTML5视频工具] 保护层已存在，跳过');
+        } else {
+            // 获取原始的 innerHTML setter
+            const originalDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+            if (originalDescriptor && originalDescriptor.set) {
+                const originalSetter = originalDescriptor.set;
 
-            // 创建一个安全的 setter（覆盖整个 innerHTML 属性）
-            // 注意：避免递归调用，直接使用 originalSetter
-            Object.defineProperty(Element.prototype, 'innerHTML', {
-                set: function (value) {
-                    try {
-                        // 如果有策略，使用策略创建 TrustedHTML，然后使用原始 setter
-                        if (trustedTypesPolicy) {
-                            const trustedHTML = trustedTypesPolicy.createHTML(String(value));
-                            // 使用原始 setter 避免递归
-                            originalSetter.call(this, trustedHTML);
-                            return;
-                        }
-                        // 如果没有策略，尝试直接设置（可能会失败）
-                        originalSetter.call(this, value);
-                    } catch (e) {
-                        // 如果失败（Trusted Types 错误），使用 textContent 作为降级
-                        if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types'))) {
-                            // 只在开发环境输出详细信息，避免日志过多
-                            if (console.warn) {
-                                console.warn('[HTML5视频工具] innerHTML 被 Trusted Types 阻止，使用 textContent:', {
-                                    tagName: this.tagName,
-                                    id: this.id,
-                                    className: this.className,
-                                    valuePreview: String(value).substring(0, 50)
-                                });
+                // 创建一个安全的 setter（覆盖整个 innerHTML 属性）
+                // 注意：避免递归调用，直接使用 originalSetter
+                Object.defineProperty(Element.prototype, 'innerHTML', {
+                    set: function (value) {
+                        try {
+                            // 如果有策略，使用策略创建 TrustedHTML，然后使用原始 setter
+                            if (trustedTypesPolicy) {
+                                const trustedHTML = trustedTypesPolicy.createHTML(String(value));
+                                // 使用原始 setter 避免递归
+                                originalSetter.call(this, trustedHTML);
+                                return;
                             }
-                            try {
-                                // 尝试清除 HTML 标签后设置
-                                this.textContent = String(value).replace(/<[^>]*>/g, '');
-                            } catch (textError) {
-                                // 如果 textContent 也失败，静默失败（避免影响正常功能）
-                                if (console.error) {
-                                    console.error('[HTML5视频工具] textContent 也失败:', textError);
+                            // 如果没有策略，尝试直接设置（可能会失败）
+                            originalSetter.call(this, value);
+                        } catch (e) {
+                            // 如果失败（Trusted Types 错误），使用 textContent 作为降级
+                            if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types') || e.message.includes('requires \'TrustedHTML\''))) {
+                                // 静默处理，避免日志过多（只在开发时输出）
+                                if (console && console.warn && window.location.hostname.includes('localhost')) {
+                                    console.warn('[HTML5视频工具] innerHTML 被 Trusted Types 阻止，使用 textContent:', {
+                                        tagName: this.tagName,
+                                        id: this.id,
+                                        className: this.className,
+                                        valuePreview: String(value).substring(0, 50)
+                                    });
                                 }
+                                try {
+                                    // 尝试清除 HTML 标签后设置
+                                    this.textContent = String(value).replace(/<[^>]*>/g, '');
+                                } catch (textError) {
+                                    // 如果 textContent 也失败，静默失败（避免影响正常功能）
+                                    // 不输出错误，避免控制台被刷屏
+                                }
+                            } else {
+                                // 其他错误，重新抛出
+                                throw e;
                             }
-                        } else {
-                            // 其他错误，重新抛出
-                            throw e;
                         }
+                    },
+                    get: originalDescriptor.get,
+                    configurable: true,
+                    enumerable: originalDescriptor.enumerable
+                });
+
+                // 标记已保护
+                Element.prototype.innerHTML._protected = true;
+                console.log('[HTML5视频工具] ✅ 已添加 innerHTML 保护层（拦截所有操作）');
+            }
+        }
+
+        // 如果 jQuery 已加载，也保护 jQuery 的 .html() 方法
+        if (typeof window !== 'undefined' && window.jQuery) {
+            try {
+                const $ = window.jQuery;
+                const originalHtml = $.fn.html;
+                $.fn.html = function (value) {
+                    if (arguments.length === 0) {
+                        // getter，直接返回原值
+                        return originalHtml.call(this);
                     }
-                },
-                get: originalDescriptor.get,
-                configurable: true,
-                enumerable: originalDescriptor.enumerable
-            });
-            console.log('[HTML5视频工具] ✅ 已添加 innerHTML 保护层（早期保护）');
+                    // setter，使用保护层
+                    return this.each(function () {
+                        try {
+                            if (trustedTypesPolicy) {
+                                const trustedHTML = trustedTypesPolicy.createHTML(String(value));
+                                this.innerHTML = trustedHTML;
+                            } else {
+                                this.innerHTML = value;
+                            }
+                        } catch (e) {
+                            if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types') || e.message.includes('requires \'TrustedHTML\''))) {
+                                // 降级为 textContent
+                                this.textContent = String(value).replace(/<[^>]*>/g, '');
+                            } else {
+                                throw e;
+                            }
+                        }
+                    });
+                };
+                console.log('[HTML5视频工具] ✅ 已保护 jQuery.html() 方法');
+            } catch (e) {
+                console.warn('[HTML5视频工具] 无法保护 jQuery.html() 方法:', e);
+            }
         }
     } catch (e) {
         console.error('[HTML5视频工具] ❌ 无法添加 innerHTML 保护层:', e);
     }
+}
+
+// 如果 jQuery 在保护层之后加载，也需要保护（延迟保护）
+if (typeof window !== 'undefined') {
+    const protectJQuery = () => {
+        if (window.jQuery && !window.jQuery.fn.html._protected) {
+            try {
+                const $ = window.jQuery;
+                const originalHtml = $.fn.html;
+                $.fn.html = function (value) {
+                    if (arguments.length === 0) {
+                        return originalHtml.call(this);
+                    }
+                    return this.each(function () {
+                        try {
+                            if (trustedTypesPolicy) {
+                                const trustedHTML = trustedTypesPolicy.createHTML(String(value));
+                                this.innerHTML = trustedHTML;
+                            } else {
+                                this.innerHTML = value;
+                            }
+                        } catch (e) {
+                            if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types') || e.message.includes('requires \'TrustedHTML\''))) {
+                                this.textContent = String(value).replace(/<[^>]*>/g, '');
+                            } else {
+                                throw e;
+                            }
+                        }
+                    });
+                };
+                $.fn.html._protected = true;
+                console.log('[HTML5视频工具] ✅ 已保护 jQuery.html() 方法（延迟保护）');
+            } catch (e) {
+                // 忽略错误
+            }
+        }
+    };
+
+    // 立即检查
+    protectJQuery();
+
+    // 延迟检查（jQuery 可能在稍后加载）
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', protectJQuery);
+    }
+    window.addEventListener('load', protectJQuery);
 }
 
 // 安全的设置 HTML 内容的辅助函数
