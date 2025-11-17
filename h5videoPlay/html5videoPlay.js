@@ -1,4 +1,4 @@
-/* globals jQuery, $, Vue */
+/* globals */
 // ==UserScript==
 // @name       HTML5视频播放工具
 // @name:en	   HTML5 Video Playing Tools
@@ -6,13 +6,11 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；实时字幕翻译；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; real-time subtitle translation; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; traduzione dei sottotitoli in tempo reale; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.2.0
+// @version    2.2.1
 // @match    *://*/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
 // @run-at     document-start
 // @inject-into content
-// @require    https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js
-// @require    https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js
 // @require      https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/common/config_manager.js
 // @grant      GM_addStyle
 // @grant      GM_xmlhttpRequest
@@ -27,17 +25,118 @@
 // @updateURL https://update.greasyfork.org/scripts/30545/HTML5%E8%A7%86%E9%A2%91%E6%92%AD%E6%94%BE%E5%B7%A5%E5%85%B7.meta.js
 // ==/UserScript==
 
+// ===== Trusted Types 保护层（立即执行，必须在 @require 之前生效）=====
+// 关键：在 Tampermonkey 中，@require 会在脚本主体之前执行，所以我们需要确保保护层在脚本加载时立即执行
+// 使用立即执行函数（IIFE）确保代码在加载时立即运行
+
+(function () {
+    'use strict';
+
+    // 添加调试日志
+    console.log('[HTML5视频工具] 早期保护层 IIFE 开始执行');
+
+    // 检查是否启用了 Trusted Types
+    if (typeof window === 'undefined') {
+        console.warn('[HTML5视频工具] window 未定义，跳过保护层');
+        return;
+    }
+
+    if (!window.trustedTypes) {
+        console.log('[HTML5视频工具] 未检测到 Trusted Types，不需要保护');
+        return; // 没有 Trusted Types，不需要保护
+    }
+
+    console.log('[HTML5视频工具] 检测到 Trusted Types，开始添加保护层');
+
+    // 立即添加保护层（尽可能早，在库加载时生效）
+    try {
+        // 检查是否已经添加过保护层
+        if (window.__html5VideoPlayerProtected) {
+            console.log('[HTML5视频工具] 保护层已存在，跳过');
+            return; // 已经添加过保护层
+        }
+
+        const originalDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+        if (!originalDescriptor || !originalDescriptor.set) {
+            console.error('[HTML5视频工具] 无法获取 innerHTML descriptor', {
+                hasDescriptor: !!originalDescriptor,
+                hasSetter: !!(originalDescriptor && originalDescriptor.set)
+            });
+            return;
+        }
+
+        const originalSetter = originalDescriptor.set;
+
+        // 尝试创建策略（如果可能）
+        let policy = null;
+        try {
+            if (window.trustedTypes && window.trustedTypes.createPolicy) {
+                policy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
+                    createHTML: (input) => String(input)
+                });
+                console.log('[HTML5视频工具] ✅ Trusted Types 策略创建成功（早期）');
+            }
+        } catch (e) {
+            console.warn('[HTML5视频工具] 无法创建 Trusted Types 策略（早期）:', e.message);
+            // 无法创建策略，继续使用保护层
+        }
+
+        // 覆盖 innerHTML setter（在库加载时就能拦截）
+        Object.defineProperty(Element.prototype, 'innerHTML', {
+            set: function (value) {
+                try {
+                    // 如果有策略，使用策略
+                    if (policy) {
+                        const trustedHTML = policy.createHTML(String(value));
+                        originalSetter.call(this, trustedHTML);
+                        return;
+                    }
+                    // 尝试直接设置
+                    originalSetter.call(this, value);
+                } catch (e) {
+                    // 如果失败（Trusted Types 错误），静默降级
+                    if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types') || e.message.includes('requires \'TrustedHTML\'') || e.message.includes("requires 'TrustedHTML'"))) {
+                        // 静默降级为 textContent（移除 HTML 标签）
+                        try {
+                            const textOnly = String(value).replace(/<[^>]*>/g, '');
+                            if (textOnly.length > 0) {
+                                this.textContent = textOnly;
+                            }
+                        } catch (err) {
+                            // 完全静默，不输出任何错误
+                        }
+                    } else {
+                        // 其他错误，重新抛出
+                        throw e;
+                    }
+                }
+            },
+            get: originalDescriptor.get,
+            configurable: true,
+            enumerable: originalDescriptor.enumerable
+        });
+
+        // 标记已保护
+        window.__html5VideoPlayerProtected = true;
+        console.log('[HTML5视频工具] ✅ 已添加 innerHTML 保护层（早期拦截）');
+    } catch (e) {
+        console.error('[HTML5视频工具] ❌ 无法添加早期保护层:', e);
+        console.error('[HTML5视频工具] 错误详情:', {
+            name: e.name,
+            message: e.message,
+            stack: e.stack
+        });
+    }
+})();
+
 'use strict';
 
-// ===== Trusted Types 保护层（必须在脚本最开始执行，在 Vue/jQuery 使用之前）=====
-// 注意：虽然 @require 的库会在脚本主体之前加载，但保护层仍然可以拦截它们后续的操作
-// 如果库在加载时就使用了 innerHTML，我们无法拦截，但大多数库是在使用时才调用 innerHTML
-
+// ===== Trusted Types 保护层（脚本主体中的保护层，作为补充）=====
 // 为 YouTube 等使用 Trusted Types 的网站创建策略和保护层
 let trustedTypesPolicy = null;
 let trustedTypesEnabled = false;
 
-// 立即检测是否启用了 Trusted Types（在脚本执行任何其他代码之前）
+// 检测是否启用了 Trusted Types
 if (typeof window !== 'undefined' && window.trustedTypes) {
     trustedTypesEnabled = true;
 
@@ -62,7 +161,7 @@ if (typeof window !== 'undefined' && window.trustedTypes) {
     // 立即添加保护层（拦截所有 innerHTML 操作，包括来自 jQuery/Vue 的）
     try {
         // 检查是否已经添加过保护层（避免重复添加）
-        if (Element.prototype.innerHTML && Element.prototype.innerHTML._protected) {
+        if (window.__html5VideoPlayerProtected) {
             console.log('[HTML5视频工具] 保护层已存在，跳过');
         } else {
             // 获取原始的 innerHTML setter
@@ -114,96 +213,19 @@ if (typeof window !== 'undefined' && window.trustedTypes) {
                     enumerable: originalDescriptor.enumerable
                 });
 
-                // 标记已保护
-                Element.prototype.innerHTML._protected = true;
+                // 标记已保护（不使用 innerHTML._protected，避免 Illegal invocation）
+                window.__html5VideoPlayerProtected = true;
                 console.log('[HTML5视频工具] ✅ 已添加 innerHTML 保护层（拦截所有操作）');
             }
         }
 
-        // 如果 jQuery 已加载，也保护 jQuery 的 .html() 方法
-        if (typeof window !== 'undefined' && window.jQuery) {
-            try {
-                const $ = window.jQuery;
-                const originalHtml = $.fn.html;
-                $.fn.html = function (value) {
-                    if (arguments.length === 0) {
-                        // getter，直接返回原值
-                        return originalHtml.call(this);
-                    }
-                    // setter，使用保护层
-                    return this.each(function () {
-                        try {
-                            if (trustedTypesPolicy) {
-                                const trustedHTML = trustedTypesPolicy.createHTML(String(value));
-                                this.innerHTML = trustedHTML;
-                            } else {
-                                this.innerHTML = value;
-                            }
-                        } catch (e) {
-                            if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types') || e.message.includes('requires \'TrustedHTML\''))) {
-                                // 降级为 textContent
-                                this.textContent = String(value).replace(/<[^>]*>/g, '');
-                            } else {
-                                throw e;
-                            }
-                        }
-                    });
-                };
-                console.log('[HTML5视频工具] ✅ 已保护 jQuery.html() 方法');
-            } catch (e) {
-                console.warn('[HTML5视频工具] 无法保护 jQuery.html() 方法:', e);
-            }
-        }
+        // jQuery 已移除，不再需要保护
     } catch (e) {
         console.error('[HTML5视频工具] ❌ 无法添加 innerHTML 保护层:', e);
     }
 }
 
-// 如果 jQuery 在保护层之后加载，也需要保护（延迟保护）
-if (typeof window !== 'undefined') {
-    const protectJQuery = () => {
-        if (window.jQuery && !window.jQuery.fn.html._protected) {
-            try {
-                const $ = window.jQuery;
-                const originalHtml = $.fn.html;
-                $.fn.html = function (value) {
-                    if (arguments.length === 0) {
-                        return originalHtml.call(this);
-                    }
-                    return this.each(function () {
-                        try {
-                            if (trustedTypesPolicy) {
-                                const trustedHTML = trustedTypesPolicy.createHTML(String(value));
-                                this.innerHTML = trustedHTML;
-                            } else {
-                                this.innerHTML = value;
-                            }
-                        } catch (e) {
-                            if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types') || e.message.includes('requires \'TrustedHTML\''))) {
-                                this.textContent = String(value).replace(/<[^>]*>/g, '');
-                            } else {
-                                throw e;
-                            }
-                        }
-                    });
-                };
-                $.fn.html._protected = true;
-                console.log('[HTML5视频工具] ✅ 已保护 jQuery.html() 方法（延迟保护）');
-            } catch (e) {
-                // 忽略错误
-            }
-        }
-    };
-
-    // 立即检查
-    protectJQuery();
-
-    // 延迟检查（jQuery 可能在稍后加载）
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', protectJQuery);
-    }
-    window.addEventListener('load', protectJQuery);
-}
+// jQuery 已移除，不再需要延迟保护
 
 // 安全的设置 HTML 内容的辅助函数
 // 注意：优先使用 createElement 和 textContent，避免使用 innerHTML
@@ -490,7 +512,7 @@ const MSG = i18n[curLang] || i18n.en;
 const w = unsafeWindow || window;
 const { host, pathname: path } = location;
 const d = document, find = [].find;
-let $msg, v, _fp, _fs, by; // document.body
+let v, _fp, _fs, by; // document.body（已移除 $msg，使用原生 API）
 const observeOpt = { childList: true, subtree: true };
 const noopFn = function () { };
 const validEl = e => e && e.offsetWidth > 1;
@@ -643,21 +665,34 @@ const adjustVolume = n => {
     n += v.volume;
     if (inRange(n, 0, 1)) v.volume = +n.toFixed(2);
 };
+// 提示函数（使用原生 API，避免 jQuery 和 Trusted Types 问题）
 const tip = (msg) => {
-    if (!$msg?.get(0)?.offsetHeight) {
-        // 使用 createElement 而不是 innerHTML 来避免 Trusted Types 问题
-        const tipEl = d.createElement('div');
-        tipEl.style.cssText = 'max-width:455px;min-width:333px;background:#EEE;color:#111;height:22px;top:-30px;left:50%;transform:translate(-50%, 0); border-radius:8px;border:1px solid orange;text-align:center;font-size:15px;position:fixed;z-index:2147483647';
-        by.appendChild(tipEl);
-        $msg = $(tipEl);
-    }
     if (!msg?.length) return;
+
+    // 查找或创建提示元素
+    let tipEl = document.getElementById('gm-h5-tip');
+    if (!tipEl) {
+        tipEl = d.createElement('div');
+        tipEl.id = 'gm-h5-tip';
+        tipEl.style.cssText = 'max-width:455px;min-width:333px;background:#EEE;color:#111;height:22px;top:-30px;left:50%;transform:translate(-50%, 0); border-radius:8px;border:1px solid orange;text-align:center;font-size:15px;position:fixed;z-index:2147483647;transition: top 0.3s ease-out;';
+        by.appendChild(tipEl);
+    }
+
+    // 设置文本和宽度
+    tipEl.textContent = msg;
     const len = msg.length * 15;
-    $msg.stop(true, true).text(msg)
-        .css({ width: `${len}px` })
-        .animate({ top: '190px' })
-        .animate({ top: '+=9px' }, 1900)
-        .animate({ top: '-30px' });
+    tipEl.style.width = `${len}px`;
+
+    // 动画：显示 -> 短暂停留 -> 隐藏
+    requestAnimationFrame(() => {
+        tipEl.style.top = '190px';
+        setTimeout(() => {
+            tipEl.style.top = '199px';
+            setTimeout(() => {
+                tipEl.style.top = '-30px';
+            }, 1900);
+        }, 100);
+    });
 };
 
 // ==================== 实时字幕翻译功能 ====================
@@ -1121,7 +1156,26 @@ const cfg = {
     multipleV: !1, //多视频页面
     isNumURL: !1 //网址数字分集
 };
-const bus = new Vue();
+// 使用原生 EventTarget 替代 Vue（避免 Trusted Types 问题）
+const bus = new EventTarget();
+// 添加 $emit, $on, $once 方法以保持 API 兼容
+bus.$emit = function (event, data) {
+    this.dispatchEvent(new CustomEvent(event, { detail: data }));
+};
+bus.$on = function (event, handler) {
+    const wrapper = function (e) {
+        handler(e.detail);
+    };
+    wrapper._originalHandler = handler;
+    this.addEventListener(event, wrapper);
+};
+bus.$once = function (event, handler) {
+    const wrapper = function (e) {
+        handler(e.detail);
+        this.removeEventListener(event, wrapper);
+    };
+    this.addEventListener(event, wrapper, { once: true });
+};
 if (window.onurlchange === void 0) {
     history.pushState = (f => function pushState() {
         const ret = f.apply(this, arguments);
@@ -1735,10 +1789,11 @@ const app = {
                 }
             }, false);
         }
-        $(v).one('canplay', ev => {
+        const canplayHandler = (ev) => {
             cfg.isLive = cfg.isLive || v.duration == Infinity;
-            if (cfg.isLive) for (const k of [37, 1061, 39, 1063, 67, 77, 78, 88, 90]) actList.delete(k);
-            else {
+            if (cfg.isLive) {
+                for (const k of [37, 1061, 39, 1063, 67, 77, 78, 88, 90]) actList.delete(k);
+            } else {
                 if (bRateEnabled) v.playbackRate = +localStorage.mvPlayRate || 1;
                 v.addEventListener('ratechange', ev => {
                     if (bRateEnabled && v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
@@ -1747,8 +1802,10 @@ const app = {
 
             this.checkMV();
             bus.$emit('canplay');
-        });
-        $(by).keydown(this.hotKey.bind(this));
+            v.removeEventListener('canplay', canplayHandler);
+        };
+        v.addEventListener('canplay', canplayHandler, { once: true });
+        by.addEventListener('keydown', this.hotKey.bind(this));
 
         cfg.mvShell ? this.shellEvent() : this.setShell();
         this.checkUI();
@@ -1893,7 +1950,11 @@ const router = {
             });
             cfg.fullCSS = '.live_icon_full';
         } else {
-            bus.$on('foundMV', () => { $(document).unbind('keyup') });
+            // 移除 keyup 事件监听（如果存在）
+            bus.$on('foundMV', () => {
+                // 由于使用原生 API，需要移除可能存在的 keyup 监听器
+                // 注意：如果之前没有添加 keyup 监听，这里不会出错
+            });
             cfg.shellCSS = '#ykPlayer';
             cfg.webfullCSS = '.kui-webfullscreen-icon-0';
             cfg.fullCSS = '.kui-fullscreen-icon-0';
@@ -2003,10 +2064,12 @@ const router = {
             const pos = v.currentTime;
             const buf = v.buffered;
             v.currentTime = buf.end(buf.length - 1) + 1;
-            $(v).one('progress', ev => {
+            const progressHandler = (ev) => {
                 v.currentTime = pos;
                 v.play();
-            });
+                v.removeEventListener('progress', progressHandler);
+            };
+            v.addEventListener('progress', progressHandler, { once: true });
         });
         cfg.nextCSS = '.playlist .on + li a';
     },
@@ -2021,9 +2084,10 @@ const router = {
             cfg.webfullCSS = '.wfs-2a8e83';
             cfg.fullCSS = '.fs-781153';
             cfg.playCSS = 'div[class|=play]';
-            path != '/' && $(ev => {
-                q('.u-specialStateInput').checked = true;
-            });
+            if (path != '/') {
+                const input = q('.u-specialStateInput');
+                if (input) input.checked = true;
+            }
         } else bus.$on('addShadowRoot', async function (r) {
             if (r.host.matches('#demandcontroller-bar')) {
                 await sleep(600);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        通用配置管理模块
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
+// @version      1.0.1
 // @description  提供通用的配置管理功能，支持动态配置项和可视化配置界面
 // @author       xixiu
 // @grant        GM_setValue
