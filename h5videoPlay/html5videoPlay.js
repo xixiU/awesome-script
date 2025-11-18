@@ -86,6 +86,7 @@ const shouldEnableScript = () => {
     ];
 
     if (knownVideoSites.some(site => host.includes(site))) {
+        console.log('[HTML5视频工具] 识别为已知视频网站:', host);
         return true;
     }
 
@@ -99,15 +100,51 @@ const shouldEnableScript = () => {
         return true;
     }
 
-    // 检查页面中是否有 video 标签（延迟检测）
+    // 检查页面中是否有 video 标签（延迟检测，包括 iframe）
     return new Promise((resolve) => {
+        // 检查 iframe 中的视频（尝试访问同源 iframe）
+        const checkIframeVideos = () => {
+            const iframes = document.getElementsByTagName('iframe');
+            for (let i = 0; i < iframes.length; i++) {
+                try {
+                    const iframe = iframes[i];
+                    // 尝试访问 iframe 内容（如果同源则可以访问）
+                    if (iframe.contentDocument || iframe.contentWindow) {
+                        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                        const iframeVideos = iframeDoc.getElementsByTagName('video');
+                        if (iframeVideos.length > 0) {
+                            console.log(`[HTML5视频工具] 在 iframe 中检测到 ${iframeVideos.length} 个视频元素`);
+                            return true;
+                        }
+                    }
+                } catch (e) {
+                    // 跨域 iframe，无法访问内容（这是正常的）
+                    // 但 iframe 本身的存在可能意味着有视频内容
+                    if (iframes[i].offsetWidth > 100 && iframes[i].offsetHeight > 100) {
+                        console.log('[HTML5视频工具] 检测到可能包含视频的 iframe（跨域，无法直接访问）');
+                        return true; // 即使无法访问，也假设有视频
+                    }
+                }
+            }
+            return false;
+        };
+
         const checkVideo = () => {
+            // 检查当前页面的视频
             const videos = document.getElementsByTagName('video');
             if (videos.length > 0) {
                 console.log(`[HTML5视频工具] 检测到 ${videos.length} 个视频元素，启用脚本`);
                 resolve(true);
                 return true;
             }
+
+            // 检查 iframe 中的视频
+            if (checkIframeVideos()) {
+                console.log('[HTML5视频工具] 检测到 iframe 中的视频，启用脚本');
+                resolve(true);
+                return true;
+            }
+
             return false;
         };
 
@@ -1555,7 +1592,41 @@ const app = {
         };
         for (const i of this.rawProps.keys()) this.rawProps.set(i,
             Reflect.getOwnPropertyDescriptor(HTMLMediaElement.prototype, i));
-        this.vList = d.getElementsByTagName('video');
+        // 查找页面中的视频元素
+        const videos = d.getElementsByTagName('video');
+
+        // 查找 iframe 中的视频元素（同源 iframe）
+        const iframeVideos = [];
+        const iframes = d.getElementsByTagName('iframe');
+        for (let i = 0; i < iframes.length; i++) {
+            try {
+                const iframe = iframes[i];
+                // 尝试访问 iframe 内容（如果同源则可以访问）
+                if (iframe.contentDocument || iframe.contentWindow) {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    const videosInIframe = iframeDoc.getElementsByTagName('video');
+                    // 将 iframe 中的视频添加到列表
+                    for (let j = 0; j < videosInIframe.length; j++) {
+                        iframeVideos.push(videosInIframe[j]);
+                    }
+                }
+            } catch (e) {
+                // 跨域 iframe，无法访问内容（这是正常的）
+                // 跨域 iframe 中的视频无法直接控制
+            }
+        }
+
+        // 合并当前页面和 iframe 中的视频
+        this.vList = Array.from(videos);
+        for (const iframeVideo of iframeVideos) {
+            this.vList.push(iframeVideo);
+        }
+
+        // 将 HTMLCollection 转换为数组（如果需要）
+        if (!Array.isArray(this.vList)) {
+            this.vList = Array.from(this.vList);
+        }
+
         const fn = e => cfg.cssMV ? e.matches(cfg.cssMV) : e.offsetWidth > 9;
         this.findMV = find.bind(this.vList, fn);
         this.timer = polling(e => {
