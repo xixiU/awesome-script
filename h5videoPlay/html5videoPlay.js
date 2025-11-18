@@ -3,10 +3,10 @@
 // @name       HTML5视频播放工具
 // @name:en	   HTML5 Video Playing Tools
 // @name:it    Strumenti di riproduzione video HTML5
-// @description 视频截图；切换画中画；缓存视频；万能网页全屏；实时字幕翻译；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
-// @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; real-time subtitle translation; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
-// @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; traduzione dei sottotitoli in tempo reale; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.2.0
+// @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
+// @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
+// @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
+// @version    2.1.0
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -14,7 +14,6 @@
 // @inject-into content
 // @require    https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js
 // @require    https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js
-// @require      https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/common/config_manager.js
 // @grant      GM_addStyle
 // @grant      GM_xmlhttpRequest
 // @grant      window.onurlchange
@@ -86,7 +85,6 @@ const shouldEnableScript = () => {
     ];
 
     if (knownVideoSites.some(site => host.includes(site))) {
-        console.log('[HTML5视频工具] 识别为已知视频网站:', host);
         return true;
     }
 
@@ -100,51 +98,15 @@ const shouldEnableScript = () => {
         return true;
     }
 
-    // 检查页面中是否有 video 标签（延迟检测，包括 iframe）
+    // 检查页面中是否有 video 标签（延迟检测）
     return new Promise((resolve) => {
-        // 检查 iframe 中的视频（尝试访问同源 iframe）
-        const checkIframeVideos = () => {
-            const iframes = document.getElementsByTagName('iframe');
-            for (let i = 0; i < iframes.length; i++) {
-                try {
-                    const iframe = iframes[i];
-                    // 尝试访问 iframe 内容（如果同源则可以访问）
-                    if (iframe.contentDocument || iframe.contentWindow) {
-                        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                        const iframeVideos = iframeDoc.getElementsByTagName('video');
-                        if (iframeVideos.length > 0) {
-                            console.log(`[HTML5视频工具] 在 iframe 中检测到 ${iframeVideos.length} 个视频元素`);
-                            return true;
-                        }
-                    }
-                } catch (e) {
-                    // 跨域 iframe，无法访问内容（这是正常的）
-                    // 但 iframe 本身的存在可能意味着有视频内容
-                    if (iframes[i].offsetWidth > 100 && iframes[i].offsetHeight > 100) {
-                        console.log('[HTML5视频工具] 检测到可能包含视频的 iframe（跨域，无法直接访问）');
-                        return true; // 即使无法访问，也假设有视频
-                    }
-                }
-            }
-            return false;
-        };
-
         const checkVideo = () => {
-            // 检查当前页面的视频
             const videos = document.getElementsByTagName('video');
             if (videos.length > 0) {
                 console.log(`[HTML5视频工具] 检测到 ${videos.length} 个视频元素，启用脚本`);
                 resolve(true);
                 return true;
             }
-
-            // 检查 iframe 中的视频
-            if (checkIframeVideos()) {
-                console.log('[HTML5视频工具] 检测到 iframe 中的视频，启用脚本');
-                resolve(true);
-                return true;
-            }
-
             return false;
         };
 
@@ -203,7 +165,6 @@ const i18n = {
         'helpMenuOption': '脚本功能快捷键表',
         'helpBody': `双击(控制栏)：切换（网页）全屏         鼠标中键：快进5秒
 P：视频截图    i：切换画中画   M：(停止)缓存视频
-S：开启/关闭实时字幕翻译 🆕
 chrome类浏览器加启动参数设置媒体缓存为840MB： --media-cache-size=880008000
 
 ← →方向键：快退、快进5秒;   方向键 + shift: 20秒
@@ -211,12 +172,7 @@ chrome类浏览器加启动参数设置媒体缓存为840MB： --media-cache-siz
 空格键：暂停/播放      N：播放下一集
 回车键：切换全屏;      回车键 + shift: 切换网页全屏
 C(抖音、youtube用V键)：加速0.1倍  X(抖音S)：减速0.1倍  Z(抖音A)：切换加速状态
-D：上一帧     F：下一帧(youtube.com用E键)
-
-【字幕功能使用说明】
-1. 启动后端服务: cd subtitle_backend && ./start.sh
-2. 按 S 键或点击控制栏字幕按钮开启字幕
-3. 在油猴菜单中可配置服务地址和目标语言`
+D：上一帧     F：下一帧(youtube.com用E键)`
     },
     'en': {
         'console': '%cScript[%s] Feedback：%s\n%s',
@@ -238,7 +194,6 @@ Middle mouse button: fast forward 5 seconds
 P key： Take a screenshot
 I key： Enter/Exit picture-in-picture mode
 M key： Enable/disable caching of video
-S key： Toggle real-time subtitle translation 🆕
 Chrome browsers add startup parameters to set the media cache to 840MB： --media-cache-size=880008000
 
 Arrow keys ← and →： Fast forward or rewind by 5 seconds
@@ -256,12 +211,7 @@ X key: Slow down video playback by 0.1
 Z key, Set video playback speed: 1.0 ←→ X
 D key: Previous frame
 F key: Next frame (except on YouTube)
-E key: Next frame (YouTube only)
-
-【Subtitle Feature】
-1. Start backend: cd subtitle_backend && ./start.sh
-2. Press S key or click subtitle button to enable
-3. Configure in Tampermonkey menu`
+E key: Next frame (YouTube only)`
     },
     'it': {
         'console': '%cScript[%s] Feedback：%s\n%s',
@@ -283,7 +233,6 @@ Pulsante centrale del mouse: avanzamento rapido di 5 secondi
 Tasto P: Esegui uno screenshot
 Tasto I： Attiva modalità picture-in-picture
 Tasto M： Attiva/disattiva memorizzazione del video nella cache
-Tasto S： Attiva/disattiva traduzione sottotitoli in tempo reale 🆕
 I browser Chrome aggiungono parametri di avvio per impostare la cache multimediale a 840MB： --media-cache-size=880008000
 
 Tasti freccia ← e →： Avanza o riavvolgi di 5 secondi
@@ -300,12 +249,7 @@ Tasto X: Rallenta riproduzione video di 0,1
 Tasto Z, Impostare la velocità di riproduzione video: 1,0 ←→ X
 Tasto D: Vai al frame precedente
 Tasto F: Vai al frame successivo (escluso YouTube)
-Tasto E: Vai al frame successivo (solo su YouTube)
-
-【Funzione Sottotitoli】
-1. Avvia backend: cd subtitle_backend && ./start.sh
-2. Premi S o clicca il pulsante sottotitoli
-3. Configura nel menu Tampermonkey`
+Tasto E: Vai al frame successivo (solo su YouTube)`
     }
 };
 const MSG = i18n[curLang] || i18n.en;
@@ -482,460 +426,6 @@ const tip = (msg) => {
         .animate({ top: '+=9px' }, 1900)
         .animate({ top: '-30px' });
 };
-
-// ==================== 实时字幕翻译功能 ====================
-class SubtitleService {
-    constructor(video, configManager) {
-        this.video = video;
-        this.configManager = configManager;
-        this.isRunning = false;
-        // 从 ConfigManager 获取配置
-        this.config = {
-            serverUrl: this.configManager.get('subtitle_serverUrl'),
-            targetLanguage: this.configManager.get('subtitle_targetLang'),
-            autoTranslate: this.configManager.get('subtitle_autoTranslate'),
-            captureInterval: this.configManager.get('subtitle_captureInterval')
-        };
-        this.audioContext = null;
-        this.mediaRecorder = null;
-        this.recordedChunks = [];
-        this.subtitles = [];
-        this.currentSubtitle = '';
-        this.subtitleElement = null;
-        this.subtitleButton = null;
-    }
-
-    createSubtitleUI() {
-        // 创建字幕显示元素
-        const container = d.createElement('div');
-        container.style.cssText = `
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 80px;
-            text-align: center;
-            pointer-events: none;
-            z-index: 9998;
-            font-family: Arial, sans-serif;
-        `;
-
-        this.subtitleElement = d.createElement('div');
-        this.subtitleElement.style.cssText = `
-            display: none;
-            margin: 0 auto;
-            padding: 8px 16px;
-            font-size: 20px;
-            color: #FFFFFF;
-            background: rgba(0, 0, 0, 0.75);
-            border-radius: 4px;
-            max-width: 80%;
-            word-wrap: break-word;
-            line-height: 1.4;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-        `;
-
-        container.appendChild(this.subtitleElement);
-
-        const videoParent = this.video.parentElement;
-        if (videoParent) {
-            if (!videoParent.style.position || videoParent.style.position === 'static') {
-                videoParent.style.position = 'relative';
-            }
-            videoParent.appendChild(container);
-        }
-
-        // 开始更新字幕显示
-        this.updateInterval = setInterval(() => {
-            const currentTime = this.video.currentTime;
-            let foundSubtitle = '';
-
-            for (const sub of this.subtitles) {
-                if (currentTime >= sub.start && currentTime <= sub.end) {
-                    foundSubtitle = sub.text;
-                    break;
-                }
-            }
-
-            if (foundSubtitle) {
-                this.subtitleElement.textContent = foundSubtitle;
-                this.subtitleElement.style.display = 'inline-block';
-            } else {
-                this.subtitleElement.style.display = 'none';
-            }
-        }, 100);
-    }
-
-    async initAudioCapture() {
-        try {
-            console.log('[字幕] 初始化音频捕获...');
-
-            // 检查视频跨域属性
-            const videoSrc = this.video.currentSrc || this.video.src;
-            const videoOrigin = videoSrc ? new URL(videoSrc).origin : '';
-            const isCrossOrigin = videoOrigin && videoOrigin !== location.origin;
-
-            console.log('[字幕] 视频信息:', {
-                src: videoSrc,
-                origin: videoOrigin,
-                crossOrigin: isCrossOrigin,
-                crossOriginAttr: this.video.crossOrigin,
-                videoElement: this.video.tagName
-            });
-
-            // 如果是跨域视频，尝试设置 crossOrigin
-            if (isCrossOrigin && !this.video.crossOrigin) {
-                console.warn('[字幕] ⚠️ 检测到跨域视频，尝试设置 crossOrigin 属性');
-                // 注意：修改 crossOrigin 可能导致视频重新加载
-                // this.video.crossOrigin = 'anonymous';
-                tip('检测到跨域视频，可能无法捕获音频。建议使用同域视频。');
-            }
-
-            // 检查 AudioContext 支持
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (!AudioContext) {
-                throw new Error('浏览器不支持 AudioContext');
-            }
-            this.audioContext = new AudioContext();
-            console.log('[字幕] AudioContext 已创建, 状态:', this.audioContext.state);
-
-            // 检查 captureStream 支持
-            if (!this.video.captureStream && !this.video.mozCaptureStream) {
-                throw new Error('浏览器不支持 captureStream API');
-            }
-
-            // 尝试捕获流
-            let stream;
-            try {
-                stream = this.video.captureStream ? this.video.captureStream() : this.video.mozCaptureStream();
-            } catch (captureError) {
-                console.error('[字幕] captureStream 失败:', captureError);
-                throw new Error('无法捕获视频流（可能是跨域限制）: ' + captureError.message);
-            }
-
-            if (!stream) {
-                throw new Error('无法从视频捕获流');
-            }
-
-            const audioTracks = stream.getAudioTracks();
-            console.log('[字幕] 音频流已捕获, 音轨:', audioTracks.map(t => ({
-                id: t.id,
-                label: t.label,
-                enabled: t.enabled,
-                muted: t.muted,
-                readyState: t.readyState
-            })));
-
-            if (audioTracks.length === 0) {
-                throw new Error('视频没有音轨，无法识别字幕（可能是静音视频或跨域限制）');
-            }
-
-            // 尝试不同的 MIME 类型
-            const mimeTypes = [
-                'audio/webm;codecs=opus',
-                'audio/webm',
-                'audio/ogg;codecs=opus',
-                'audio/mp4',
-                '' // 让浏览器自动选择
-            ];
-
-            let selectedMimeType = '';
-            for (const mimeType of mimeTypes) {
-                if (mimeType === '' || MediaRecorder.isTypeSupported(mimeType)) {
-                    selectedMimeType = mimeType;
-                    console.log('[字幕] 使用 MIME 类型:', mimeType || '(浏览器默认)');
-                    break;
-                }
-            }
-
-            // 创建 MediaRecorder
-            if (selectedMimeType) {
-                this.mediaRecorder = new MediaRecorder(stream, {
-                    mimeType: selectedMimeType,
-                    audioBitsPerSecond: 128000  // 设置比特率
-                });
-            } else {
-                this.mediaRecorder = new MediaRecorder(stream);
-            }
-
-            console.log('[字幕] MediaRecorder 状态:', this.mediaRecorder.state);
-
-            this.mediaRecorder.ondataavailable = (event) => {
-                console.log(`[字幕] 📊 ondataavailable 事件, 数据大小: ${event.data.size} bytes`);
-                if (event.data.size > 0) {
-                    this.recordedChunks.push(event.data);
-                }
-            };
-
-            this.mediaRecorder.onstop = async () => {
-                console.log('[字幕] 录制停止事件触发');
-                await this.processRecordedAudio();
-            };
-
-            this.mediaRecorder.onerror = (event) => {
-                console.error('[字幕] ❌ MediaRecorder 错误:', event.error);
-            };
-
-            this.mediaRecorder.onstart = () => {
-                console.log('[字幕] ✅ MediaRecorder 已启动');
-            };
-
-            console.log('[字幕] ✅ 音频捕获初始化成功');
-            return true;
-        } catch (error) {
-            console.error('[字幕] ❌ 音频捕获失败:', error);
-            tip('音频捕获失败: ' + error.message);
-            return false;
-        }
-    }
-
-    startRecording() {
-        if (!this.mediaRecorder) {
-            console.error('[字幕] MediaRecorder 未初始化');
-            return;
-        }
-
-        // 检查视频是否在播放
-        if (this.video.paused || this.video.ended) {
-            console.warn('[字幕] 视频未播放，等待播放后再录制');
-            // 等待视频开始播放
-            const waitForPlay = () => {
-                if (this.isRunning && !this.video.paused && !this.video.ended) {
-                    this.startRecording();
-                }
-            };
-            this.video.addEventListener('play', waitForPlay, { once: true });
-            return;
-        }
-
-        try {
-            this.recordedChunks = [];
-
-            // 启动录制，指定 timeslice 以定期触发 dataavailable 事件
-            // timeslice: 每隔多少毫秒触发一次 dataavailable
-            const timeslice = 1000; // 每 1 秒触发一次
-            this.mediaRecorder.start(timeslice);
-            console.log(`[字幕] ✅ 开始录制音频 (${this.config.captureInterval} 秒, timeslice: ${timeslice}ms)`);
-
-            setTimeout(() => {
-                if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-                    this.mediaRecorder.stop();
-                    console.log('[字幕] 停止录制，准备处理');
-                }
-            }, this.config.captureInterval * 1000);
-        } catch (error) {
-            console.error('[字幕] ❌ 录制启动失败:', error);
-
-            // 详细的错误诊断
-            const videoSrc = this.video.currentSrc || this.video.src;
-            const isCrossOrigin = videoSrc && new URL(videoSrc).origin !== location.origin;
-
-            console.error('[字幕] 错误诊断:', {
-                errorName: error.name,
-                errorMessage: error.message,
-                videoSrc: videoSrc,
-                videoDomain: videoSrc ? new URL(videoSrc).origin : 'unknown',
-                pageDomain: location.origin,
-                isCrossOrigin: isCrossOrigin,
-                videoState: {
-                    paused: this.video.paused,
-                    ended: this.video.ended,
-                    readyState: this.video.readyState,
-                    networkState: this.video.networkState,
-                    duration: this.video.duration,
-                    currentTime: this.video.currentTime
-                },
-                mediaRecorderState: this.mediaRecorder ? this.mediaRecorder.state : 'null'
-            });
-
-            if (isCrossOrigin) {
-                tip('⚠️ 跨域视频无法捕获音频。建议在 B站等网站使用字幕功能。');
-                console.warn('[字幕] 这是跨域视频，浏览器安全策略阻止音频捕获');
-                console.warn('[字幕] 建议：在 Bilibili 等同域视频网站使用字幕功能');
-            } else {
-                tip('录制失败: ' + error.message);
-            }
-
-            this.stop();
-        }
-    }
-
-    async processRecordedAudio() {
-        console.log(`[字幕] 处理音频数据，chunks: ${this.recordedChunks.length}`);
-
-        if (this.recordedChunks.length === 0) {
-            console.warn('[字幕] 没有音频数据，跳过处理');
-            if (this.isRunning) this.startRecording();
-            return;
-        }
-
-        const audioBlob = new Blob(this.recordedChunks, { type: 'audio/webm;codecs=opus' });
-        console.log(`[字幕] 音频大小: ${(audioBlob.size / 1024).toFixed(2)} KB`);
-
-        await this.sendAudioToBackend(audioBlob);
-
-        if (this.isRunning) this.startRecording();
-    }
-
-    async sendAudioToBackend(audioBlob) {
-        const formData = new FormData();
-        formData.append('file', audioBlob, 'audio.webm');
-        if (this.config.autoTranslate) {
-            formData.append('translate_to', this.config.targetLanguage);
-        }
-
-        console.log('[字幕] 发送音频到后端:', {
-            url: `${this.config.serverUrl}/transcribe`,
-            size: `${(audioBlob.size / 1024).toFixed(2)} KB`,
-            translate: this.config.autoTranslate,
-            targetLang: this.config.targetLanguage
-        });
-
-        try {
-            const startTime = Date.now();
-            const response = await fetch(`${this.config.serverUrl}/transcribe`, {
-                method: 'POST',
-                mode: 'cors',
-                body: formData
-            });
-
-            const elapsed = Date.now() - startTime;
-            console.log(`[字幕] 请求耗时: ${elapsed}ms, 状态: ${response.status}`);
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('[字幕] 后端返回错误:', response.status, errorText);
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log('[字幕] 后端响应:', data);
-
-            if (data.success && data.subtitles && data.subtitles.length > 0) {
-                this.addSubtitles(data.subtitles);
-                console.log(`[字幕] ✅ 获取 ${data.subtitles.length} 条字幕`);
-                tip(`获取 ${data.subtitles.length} 条字幕`);
-            } else {
-                console.warn('[字幕] 未获取到字幕数据');
-            }
-        } catch (error) {
-            console.error('[字幕] ❌ 服务连接失败:', error);
-            if (this.isRunning) {
-                tip('字幕服务连接失败: ' + error.message);
-                // 不自动停止，让用户决定
-            }
-        }
-    }
-
-    addSubtitles(newSubtitles) {
-        const currentTime = this.video.currentTime;
-        const adjustedSubtitles = newSubtitles.map(sub => ({
-            ...sub,
-            start: currentTime + sub.start - this.config.captureInterval,
-            end: currentTime + sub.end - this.config.captureInterval
-        }));
-
-        this.subtitles.push(...adjustedSubtitles);
-        this.subtitles.sort((a, b) => a.start - b.start);
-
-        // 清理过期字幕（保留最近2分钟）
-        const minTime = currentTime - 120;
-        this.subtitles = this.subtitles.filter(sub => sub.end > minTime);
-    }
-
-    async start() {
-        if (this.isRunning) {
-            console.log('[字幕] 服务已在运行');
-            return;
-        }
-
-        console.log('[字幕] 启动服务...', {
-            serverUrl: this.config.serverUrl,
-            targetLanguage: this.config.targetLanguage,
-            autoTranslate: this.config.autoTranslate
-        });
-
-        // 先测试后端连接
-        try {
-            const response = await fetch(`${this.config.serverUrl}/health`, {
-                method: 'GET',
-                mode: 'cors'
-            });
-            if (!response.ok) {
-                throw new Error(`后端服务不可用: ${response.status}`);
-            }
-            const data = await response.json();
-            console.log('[字幕] 后端服务状态:', data);
-        } catch (error) {
-            console.error('[字幕] 后端连接失败:', error);
-            tip('字幕服务连接失败，请检查后端是否运行在 ' + this.config.serverUrl);
-            return;
-        }
-
-        const success = await this.initAudioCapture();
-        if (!success) {
-            tip('音频捕获失败，请检查浏览器权限');
-            return;
-        }
-
-        this.isRunning = true;
-        this.createSubtitleUI();
-        this.startRecording();
-
-        if (this.subtitleButton) {
-            this.subtitleButton.classList.add('subtitle-active');
-            this.subtitleButton.title = '关闭字幕 (快捷键 S)';
-        }
-
-        tip('字幕识别已开启');
-        console.log('[字幕] 服务已启动成功');
-    }
-
-    stop() {
-        if (!this.isRunning) return;
-
-        console.log('[字幕] 停止服务...');
-        this.isRunning = false;
-
-        if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-            this.mediaRecorder.stop();
-        }
-
-        if (this.audioContext) {
-            this.audioContext.close();
-            this.audioContext = null;
-        }
-
-        if (this.updateInterval) {
-            clearInterval(this.updateInterval);
-            this.updateInterval = null;
-        }
-
-        if (this.subtitleElement) {
-            this.subtitleElement.style.display = 'none';
-        }
-
-        if (this.subtitleButton) {
-            this.subtitleButton.classList.remove('subtitle-active');
-            this.subtitleButton.title = '开启字幕 (快捷键 S)';
-        }
-
-        this.subtitles = [];
-        tip('字幕识别已关闭');
-        console.log('[字幕] 服务已停止');
-    }
-
-    toggle() {
-        if (this.isRunning) {
-            this.stop();
-        } else {
-            this.start();
-        }
-    }
-}
-
-let subtitleService = null;
-let bRateEnabled = true; // 记忆播放速度功能开关
-
 const u = getMainDomain(host);
 const cfg = {
     isLive: !1,
@@ -988,26 +478,26 @@ class FullPage {
         this.container = container || FullPage.getPlayerContainer(v);
         GM_addStyle(
             `.gm-fp-body .gm-fp-zTop {
-				position: relative !important;
-				z-index: 2147483646 !important;
-			}
-			.gm-fp-wrapper, .gm-fp-body{ overflow:hidden !important; }
-			.gm-fp-wrapper .gm-fp-innerBox {
-				width: 100% !important;
-				height: 100% !important;
-			}
-			.gm-fp-wrapper {
-				display: block !important;
-				position: fixed !important;
-				width: 100% !important;
-				height: 100% !important;
-				padding: 0 !important;
-				margin: 0 !important;
-				top: 0 !important;
-				left: 0 !important;
-				background: #000 !important;
-				z-index: 2147483646 !important;
-			}`
+                position: relative !important;
+                z-index: 2147483646 !important;
+            }
+            .gm-fp-wrapper, .gm-fp-body{ overflow:hidden !important; }
+            .gm-fp-wrapper .gm-fp-innerBox {
+                width: 100% !important;
+                height: 100% !important;
+            }
+            .gm-fp-wrapper {
+                display: block !important;
+                position: fixed !important;
+                width: 100% !important;
+                height: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                top: 0 !important;
+                left: 0 !important;
+                background: #000 !important;
+                z-index: 2147483646 !important;
+            }`
         );
     }
     static getPlayerContainer(video) {
@@ -1101,19 +591,19 @@ actList.set(90, _ => { //按键Z: 切换加速状态
     .set(39 + 1024, _ => { v.currentTime += 20 }) //按键shift+→
     .set(68, _ => { v.currentTime -= 0.03; v.pause() }) //按键D：上一帧
     .set(70, _ => { v.currentTime += 0.03; v.pause() }) //按键F：下一帧
-    .set(32, _ => {	//按键space
+    .set(32, _ => { //按键space
         if (cfg.btnPlay) clickDualButton(cfg.btnPlay);
         else v.paused ? v.play() : v.pause();
     })
-    .set(13, _ => {	//回车键。 全屏
+    .set(13, _ => { //回车键。 全屏
         _fs ? _fs.toggle() : clickDualButton(cfg.btnFS);
     })
     .set(13 + 1024, _ => {//web全屏
         self != top ? top.postMessage({ id: 'gm-h5-toggle-iframeWebFull' }, '*')
             : _fp ? _fp.toggle() : clickDualButton(cfg.btnFP);
     })
-    .set(27 + 1024, noopFn)	//忽略按键shift + esc
-    .set(27, ev => {	//按键esc
+    .set(27 + 1024, noopFn) //忽略按键shift + esc
+    .set(27, ev => {    //按键esc
         if (FullScreen.isFull()) {
             _fs ? _fs.exit() : clickDualButton(cfg.btnFS);
         } else if (self != top) {
@@ -1160,12 +650,6 @@ actList.set(90, _ => { //按键Z: 切换加速状态
         if (self != top) top.postMessage({ id: 'gm-h5-play-next' }, '*');
         else if (cfg.btnNext) doClick(cfg.btnNext);
         else if (cfg.isNumURL) goNextMV();
-    })
-    .set(83, _ => {// S 切换字幕
-        if (!subtitleService) {
-            subtitleService = new SubtitleService(v, videoConfigManager);
-        }
-        subtitleService.toggle();
     });
 
 const app = {
@@ -1276,229 +760,6 @@ const app = {
 
         if (cfg.nextCSS && (!validEl(cfg.btnNext) || !cfg.btnNext.matches(cfg.nextCSS))) cfg.btnNext = q(cfg.nextCSS);
         if (cfg.playCSS && !validEl(cfg.btnPlay)) cfg.btnPlay = q(cfg.playCSS);
-
-        // 添加字幕按钮
-        this.addSubtitleButton();
-    },
-    addSubtitleButton() {
-        // 如果已经添加过按钮，不重复添加
-        if (d.querySelector('.gm-subtitle-btn')) {
-            console.log('[字幕] 按钮已存在，跳过添加');
-            return;
-        }
-
-        // 延迟添加，等待控制栏生成
-        setTimeout(() => {
-            this.doAddSubtitleButton();
-        }, 1500);
-    },
-
-    doAddSubtitleButton() {
-        if (d.querySelector('.gm-subtitle-btn')) {
-            console.log('[字幕] 按钮已存在');
-            return;
-        }
-
-        // 尝试找到控制栏
-        let controlBar = null;
-        let matchedSelector = '';
-        const selectors = [
-            '.bpx-player-control-bottom-right',  // B站
-            '.ytp-right-controls',               // YouTube
-            '.xgplayer-controls',                // 西瓜视频/抖音
-            '.prism-controlbar',                 // 阿里播放器
-            '.dplayer-icons-right',              // DPlayer
-            '.vjs-control-bar',                  // Video.js
-            '.control-bar-right',                // 通用
-            '[class*="control"][class*="right"]', // 通用模式
-            '[class*="control-bar"]'             // 通用模式2
-        ];
-
-        for (const selector of selectors) {
-            controlBar = q(selector);
-            if (controlBar && controlBar.offsetHeight > 0) {
-                matchedSelector = selector;
-                break;
-            }
-        }
-
-        if (!controlBar && cfg.mvShell) {
-            // 尝试在播放器容器中查找控制栏
-            const controls = cfg.mvShell.querySelectorAll('[class*="control"]');
-            for (const ctrl of controls) {
-                if (ctrl.offsetHeight > 0 && ctrl.children.length > 0) {
-                    controlBar = ctrl;
-                    matchedSelector = '动态查找';
-                    break;
-                }
-            }
-        }
-
-        console.log('[字幕] 控制栏查找结果:', {
-            found: !!controlBar,
-            selector: matchedSelector,
-            visible: controlBar ? controlBar.offsetHeight > 0 : false
-        });
-
-        if (!controlBar) {
-            console.log('[字幕] 未找到控制栏，使用浮动按钮');
-            this.addFloatingSubtitleButton();
-            return;
-        }
-
-        // 创建字幕按钮
-        const btn = d.createElement('div');
-        btn.className = 'gm-subtitle-btn';
-        btn.title = '开启字幕 (快捷键 S)';
-        btn.style.cssText = `
-            display: inline-flex !important;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            cursor: pointer;
-            opacity: 0.9;
-            transition: opacity 0.2s;
-            pointer-events: auto;
-            position: relative;
-            z-index: 1;
-            margin: 0 4px;
-        `;
-
-        // 创建 SVG 字幕图标（使用安全的方式）
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('width', '24');
-        svg.setAttribute('height', '24');
-        svg.setAttribute('viewBox', '0 0 24 24');
-        svg.setAttribute('fill', 'white');
-
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z');
-
-        svg.appendChild(path);
-        btn.appendChild(svg);
-
-        btn.addEventListener('mouseenter', () => btn.style.opacity = '1');
-        btn.addEventListener('mouseleave', () => btn.style.opacity = '0.8');
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (!subtitleService) {
-                subtitleService = new SubtitleService(v, videoConfigManager);
-            }
-            if (subtitleService) {
-                subtitleService.subtitleButton = btn;
-            }
-            subtitleService.toggle();
-        });
-
-        // 添加激活状态样式
-        GM_addStyle(`
-            .gm-subtitle-btn.subtitle-active {
-                background: rgba(255, 255, 255, 0.2);
-                border-radius: 4px;
-            }
-            .gm-subtitle-btn.subtitle-active svg {
-                fill: #00a1d6 !important;
-            }
-        `);
-
-        // 添加到控制栏（appendChild 而不是 insertBefore，更兼容）
-        controlBar.appendChild(btn);
-        console.log('[字幕] 按钮已添加到控制栏:', controlBar.className, '按钮可见:', btn.offsetWidth > 0);
-
-        // 调试：检查按钮是否真的在 DOM 中
-        setTimeout(() => {
-            const checkBtn = d.querySelector('.gm-subtitle-btn');
-            console.log('[字幕] 按钮检查:', checkBtn ? '存在' : '不存在',
-                checkBtn ? `可见性: ${checkBtn.offsetWidth}x${checkBtn.offsetHeight}` : '');
-        }, 1000);
-
-        // 如果有字幕服务实例，关联按钮
-        if (subtitleService) {
-            subtitleService.subtitleButton = btn;
-        }
-    },
-    addFloatingSubtitleButton() {
-        console.log('[字幕] 创建浮动按钮...');
-
-        // 创建浮动字幕按钮
-        const btn = d.createElement('div');
-        btn.className = 'gm-subtitle-btn gm-floating-btn';
-        btn.title = '开启字幕 (快捷键 S)';
-        btn.style.cssText = `
-            position: fixed !important;
-            bottom: 100px !important;
-            right: 20px !important;
-            width: 48px !important;
-            height: 48px !important;
-            background: rgba(0, 0, 0, 0.7) !important;
-            border-radius: 50% !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            cursor: pointer !important;
-            z-index: 999999 !important;
-            transition: all 0.3s !important;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
-        `;
-
-        // 创建 SVG（使用安全方式）
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('width', '28');
-        svg.setAttribute('height', '28');
-        svg.setAttribute('viewBox', '0 0 24 24');
-        svg.setAttribute('fill', 'white');
-
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z');
-
-        svg.appendChild(path);
-        btn.appendChild(svg);
-
-        btn.addEventListener('mouseenter', () => {
-            btn.style.transform = 'scale(1.1)';
-            btn.style.background = 'rgba(0, 0, 0, 0.9)';
-        });
-        btn.addEventListener('mouseleave', () => {
-            btn.style.transform = 'scale(1)';
-            btn.style.background = 'rgba(0, 0, 0, 0.7)';
-        });
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (!subtitleService) {
-                subtitleService = new SubtitleService(v, videoConfigManager);
-            }
-            if (subtitleService) {
-                subtitleService.subtitleButton = btn;
-            }
-            subtitleService.toggle();
-        });
-
-        GM_addStyle(`
-            .gm-floating-btn.subtitle-active {
-                background: rgba(0, 161, 214, 0.9) !important;
-            }
-            .gm-floating-btn.subtitle-active svg {
-                fill: #FFD700 !important;
-            }
-        `);
-
-        by.appendChild(btn);
-        console.log('[字幕] ✅ 浮动按钮已创建，位置: 右下角');
-
-        // 确认按钮可见
-        setTimeout(() => {
-            const checkBtn = d.querySelector('.gm-floating-btn');
-            console.log('[字幕] 浮动按钮检查:', {
-                exists: !!checkBtn,
-                visible: checkBtn ? `${checkBtn.offsetWidth}x${checkBtn.offsetHeight}` : '不存在',
-                position: checkBtn ? `bottom: ${checkBtn.style.bottom}, right: ${checkBtn.style.right}` : ''
-            });
-        }, 500);
-
-        if (subtitleService) {
-            subtitleService.subtitleButton = btn;
-        }
     },
     onGrowVList() {
         if (this.vList.length == this.vCount) return;
@@ -1541,10 +802,11 @@ const app = {
         v = v || this.findMV();
         log('bind event\n', v);
         bus.$emit('foundMV');
+        const bRate = gmFuncOfCheckMenu(MSG.rememberRateMenuOption, 'remberRate');
         window.addEventListener('urlchange', async (info) => { //TM event: info.url
             await sleep(990);
             this.checkMV();
-            if (bRateEnabled) v.playbackRate = +localStorage.mvPlayRate || 1;
+            if (bRate) v.playbackRate = +localStorage.mvPlayRate || 1;
             bus.$emit('urlchange');
         });
         if (top != self) {
@@ -1562,9 +824,9 @@ const app = {
             cfg.isLive = cfg.isLive || v.duration == Infinity;
             if (cfg.isLive) for (const k of [37, 1061, 39, 1063, 67, 77, 78, 88, 90]) actList.delete(k);
             else {
-                if (bRateEnabled) v.playbackRate = +localStorage.mvPlayRate || 1;
+                if (bRate) v.playbackRate = +localStorage.mvPlayRate || 1;
                 v.addEventListener('ratechange', ev => {
-                    if (bRateEnabled && v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
+                    if (bRate && v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
                 });
             }
 
@@ -1592,41 +854,7 @@ const app = {
         };
         for (const i of this.rawProps.keys()) this.rawProps.set(i,
             Reflect.getOwnPropertyDescriptor(HTMLMediaElement.prototype, i));
-        // 查找页面中的视频元素
-        const videos = d.getElementsByTagName('video');
-
-        // 查找 iframe 中的视频元素（同源 iframe）
-        const iframeVideos = [];
-        const iframes = d.getElementsByTagName('iframe');
-        for (let i = 0; i < iframes.length; i++) {
-            try {
-                const iframe = iframes[i];
-                // 尝试访问 iframe 内容（如果同源则可以访问）
-                if (iframe.contentDocument || iframe.contentWindow) {
-                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                    const videosInIframe = iframeDoc.getElementsByTagName('video');
-                    // 将 iframe 中的视频添加到列表
-                    for (let j = 0; j < videosInIframe.length; j++) {
-                        iframeVideos.push(videosInIframe[j]);
-                    }
-                }
-            } catch (e) {
-                // 跨域 iframe，无法访问内容（这是正常的）
-                // 跨域 iframe 中的视频无法直接控制
-            }
-        }
-
-        // 合并当前页面和 iframe 中的视频
-        this.vList = Array.from(videos);
-        for (const iframeVideo of iframeVideos) {
-            this.vList.push(iframeVideo);
-        }
-
-        // 将 HTMLCollection 转换为数组（如果需要）
-        if (!Array.isArray(this.vList)) {
-            this.vList = Array.from(this.vList);
-        }
-
+        this.vList = d.getElementsByTagName('video');
         const fn = e => cfg.cssMV ? e.matches(cfg.cssMV) : e.offsetWidth > 9;
         this.findMV = find.bind(this.vList, fn);
         this.timer = polling(e => {
@@ -1657,10 +885,10 @@ const router = {
     youtube() {
         GM_addStyle(
             `.gm-fp-body #player-container-inner{padding-top:0!important}
-			.gm-fp-body #player-container-outer{
-				max-width:100%!important;
-				margin:0!important;
-			}`
+            .gm-fp-body #player-container-outer{
+                max-width:100%!important;
+                margin:0!important;
+            }`
         );
         cfg.shellCSS = '#player';
         cfg.playCSS = 'button.ytp-play-button';
@@ -1899,73 +1127,6 @@ Reflect.defineProperty(navigator, 'plugins', {
     get() { return { length: 0 } }
 });
 
-// ==================== 配置管理器初始化 ====================
-const videoConfigManager = new ConfigManager('HTML5视频工具', {
-    subtitle_serverUrl: 'http://localhost:8765',
-    subtitle_targetLang: 'zh-CN',
-    subtitle_autoTranslate: true,
-    subtitle_captureInterval: 5,
-    remberRate: true
-}, {
-    lang: curLang,
-    i18n: {
-        'zh': {
-            'helpMenuOption': '脚本功能快捷键表',
-            'subtitleConfig': '字幕翻译配置',
-            'restartSubtitle': '重启字幕服务',
-            'rememberRate': '记忆播放速度',
-            'serverUrl': '后端服务地址',
-            'targetLang': '目标翻译语言',
-            'autoTranslate': '自动翻译',
-            'serverUrlHelp': '(请确保服务已启动)',
-            'targetLangHelp': '支持: zh-CN, en, ja, ko, fr, de, es, ru 等',
-            'autoTranslateConfirm': '是否自动翻译字幕?',
-            'serverUpdated': '服务地址已更新',
-            'langUpdated': '目标语言已更新为',
-            'autoTranslateEnabled': '已开启自动翻译',
-            'autoTranslateDisabled': '已关闭自动翻译',
-            'subtitleNotStarted': '字幕服务未启动',
-            'clickOkToEnable': '点击"确定"开启，"取消"关闭'
-        },
-        'en': {
-            'helpMenuOption': 'Hotkeys list',
-            'subtitleConfig': 'Subtitle Translation Config',
-            'restartSubtitle': 'Restart Subtitle Service',
-            'rememberRate': 'Remember playback speed',
-            'serverUrl': 'Backend Server URL',
-            'targetLang': 'Target Translation Language',
-            'autoTranslate': 'Auto Translate',
-            'serverUrlHelp': '(Make sure the service is running)',
-            'targetLangHelp': 'Supported: zh-CN, en, ja, ko, fr, de, es, ru, etc',
-            'autoTranslateConfirm': 'Auto translate subtitles?',
-            'serverUpdated': 'Server URL updated',
-            'langUpdated': 'Target language updated to',
-            'autoTranslateEnabled': 'Auto translate enabled',
-            'autoTranslateDisabled': 'Auto translate disabled',
-            'subtitleNotStarted': 'Subtitle service not started',
-            'clickOkToEnable': 'Click OK to enable, Cancel to disable'
-        },
-        'it': {
-            'helpMenuOption': 'Elenco dei tasti di scelta rapida',
-            'subtitleConfig': 'Configurazione traduzione sottotitoli',
-            'restartSubtitle': 'Riavvia servizio sottotitoli',
-            'rememberRate': 'Memorizza velocità di riproduzione',
-            'serverUrl': 'URL server backend',
-            'targetLang': 'Lingua di traduzione target',
-            'autoTranslate': 'Traduzione automatica',
-            'serverUrlHelp': '(Assicurati che il servizio sia in esecuzione)',
-            'targetLangHelp': 'Supportati: zh-CN, en, ja, ko, fr, de, es, ru, ecc',
-            'autoTranslateConfirm': 'Tradurre automaticamente i sottotitoli?',
-            'serverUpdated': 'URL server aggiornato',
-            'langUpdated': 'Lingua di destinazione aggiornata a',
-            'autoTranslateEnabled': 'Traduzione automatica abilitata',
-            'autoTranslateDisabled': 'Traduzione automatica disabilitata',
-            'subtitleNotStarted': 'Servizio sottotitoli non avviato',
-            'clickOkToEnable': 'Clicca OK per abilitare, Annulla per disabilitare'
-        }
-    }
-});
-
 // ===== 主入口：智能启动脚本 =====
 (async function main() {
     // 先进行快速检测
@@ -1979,74 +1140,14 @@ const videoConfigManager = new ConfigManager('HTML5视频工具', {
         return;
     }
 
-    // 使用 ConfigManager 注册菜单命令
+    // 注册菜单命令
     try {
-        // 1. 快捷键帮助菜单
-        videoConfigManager.registerMenuCommand('helpMenuOption', () => {
+        GM_registerMenuCommand(MSG.helpMenuOption, () => {
             console.log(MSG.helpBody);
             tip('快捷键帮助已输出到控制台，请按 F12 查看');
         });
-
-        // 2. 记忆播放速度菜单（切换型）
-        bRateEnabled = videoConfigManager.createToggleMenu('rememberRate', 'remberRate', true);
-
-        // 3. 字幕翻译配置菜单
-        const subtitleConfigDialog = videoConfigManager.createSimpleDialog([
-            {
-                key: 'subtitle_serverUrl',
-                labelKey: 'serverUrl',
-                type: 'text',
-                help: videoConfigManager.t('serverUrlHelp')
-            },
-            {
-                key: 'subtitle_targetLang',
-                labelKey: 'targetLang',
-                type: 'text',
-                help: videoConfigManager.t('targetLangHelp')
-            },
-            {
-                key: 'subtitle_autoTranslate',
-                labelKey: 'autoTranslate',
-                type: 'checkbox'
-            }
-        ], (updates) => {
-            // 配置保存后的回调
-            if (updates.subtitle_serverUrl) {
-                tip(videoConfigManager.t('serverUpdated'));
-            }
-            if (updates.subtitle_targetLang) {
-                tip(videoConfigManager.t('langUpdated') + ': ' + updates.subtitle_targetLang);
-            }
-            if (typeof updates.subtitle_autoTranslate !== 'undefined') {
-                tip(updates.subtitle_autoTranslate ?
-                    videoConfigManager.t('autoTranslateEnabled') :
-                    videoConfigManager.t('autoTranslateDisabled'));
-            }
-
-            // 如果字幕服务正在运行，更新配置
-            if (subtitleService) {
-                subtitleService.config.serverUrl = videoConfigManager.get('subtitle_serverUrl');
-                subtitleService.config.targetLanguage = videoConfigManager.get('subtitle_targetLang');
-                subtitleService.config.autoTranslate = videoConfigManager.get('subtitle_autoTranslate');
-            }
-        });
-
-        videoConfigManager.registerMenuCommand('subtitleConfig', subtitleConfigDialog, '⚙️');
-
-        // 4. 重启字幕服务菜单
-        videoConfigManager.registerMenuCommand('restartSubtitle', () => {
-            if (subtitleService) {
-                subtitleService.stop();
-                setTimeout(() => {
-                    subtitleService.start();
-                }, 500);
-            } else {
-                tip(videoConfigManager.t('subtitleNotStarted'));
-            }
-        }, '🔄');
-
     } catch (e) {
-        console.warn('[菜单注册] 无法注册菜单命令:', e);
+        console.warn('无法注册菜单命令:', e);
     }
 
     // 初始化脚本
