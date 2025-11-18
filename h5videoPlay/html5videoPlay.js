@@ -25,67 +25,47 @@
 // @updateURL https://update.greasyfork.org/scripts/30545/HTML5%E8%A7%86%E9%A2%91%E6%92%AD%E6%94%BE%E5%B7%A5%E5%85%B7.meta.js
 // ==/UserScript==
 
-// ===== Trusted Types 保护层（立即执行，必须在 @require 之前生效）=====
-// 关键：在 Tampermonkey 中，@require 会在脚本主体之前执行，所以我们需要确保保护层在脚本加载时立即执行
-// 使用立即执行函数（IIFE）确保代码在加载时立即运行
-
+// ===== Trusted Types 保护层（早期拦截，必须在 @require 之前执行）=====
+// 关键：在 Tampermonkey 中，@require 会在脚本主体之前执行，但 IIFE 会在脚本加载时立即执行
+// 这个保护层会拦截所有 innerHTML 操作，包括来自其他库（如 jQuery、Vue）的操作
 (function () {
     'use strict';
 
-    // 添加调试日志
-    console.log('[HTML5视频工具] 早期保护层 IIFE 开始执行');
-
     // 检查是否启用了 Trusted Types
-    if (typeof window === 'undefined') {
-        console.warn('[HTML5视频工具] window 未定义，跳过保护层');
-        return;
-    }
-
-    if (!window.trustedTypes) {
-        console.log('[HTML5视频工具] 未检测到 Trusted Types，不需要保护');
+    if (typeof window === 'undefined' || !window.trustedTypes) {
         return; // 没有 Trusted Types，不需要保护
     }
 
-    console.log('[HTML5视频工具] 检测到 Trusted Types，开始添加保护层');
+    // 检查是否已经添加过保护层（避免重复添加）
+    if (window.__html5VideoPlayerProtected) {
+        return;
+    }
 
-    // 立即添加保护层（尽可能早，在库加载时生效）
     try {
-        // 检查是否已经添加过保护层
-        if (window.__html5VideoPlayerProtected) {
-            console.log('[HTML5视频工具] 保护层已存在，跳过');
-            return; // 已经添加过保护层
-        }
-
         const originalDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
         if (!originalDescriptor || !originalDescriptor.set) {
-            console.error('[HTML5视频工具] 无法获取 innerHTML descriptor', {
-                hasDescriptor: !!originalDescriptor,
-                hasSetter: !!(originalDescriptor && originalDescriptor.set)
-            });
             return;
         }
 
         const originalSetter = originalDescriptor.set;
 
-        // 尝试创建策略（如果可能）
+        // 尝试创建策略（某些网站如 YouTube 可能不允许创建自定义策略）
         let policy = null;
         try {
-            if (window.trustedTypes && window.trustedTypes.createPolicy) {
+            if (window.trustedTypes.createPolicy) {
                 policy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
                     createHTML: (input) => String(input)
                 });
-                console.log('[HTML5视频工具] ✅ Trusted Types 策略创建成功（早期）');
             }
         } catch (e) {
-            console.warn('[HTML5视频工具] 无法创建 Trusted Types 策略（早期）:', e.message);
-            // 无法创建策略，继续使用保护层
+            // 无法创建策略，继续使用保护层降级方案
         }
 
-        // 覆盖 innerHTML setter（在库加载时就能拦截）
+        // 覆盖 innerHTML setter（拦截所有 innerHTML 操作）
         Object.defineProperty(Element.prototype, 'innerHTML', {
             set: function (value) {
                 try {
-                    // 如果有策略，使用策略
+                    // 如果有策略，使用策略创建 TrustedHTML
                     if (policy) {
                         const trustedHTML = policy.createHTML(String(value));
                         originalSetter.call(this, trustedHTML);
@@ -94,9 +74,8 @@
                     // 尝试直接设置
                     originalSetter.call(this, value);
                 } catch (e) {
-                    // 如果失败（Trusted Types 错误），静默降级
-                    if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types') || e.message.includes('requires \'TrustedHTML\'') || e.message.includes("requires 'TrustedHTML'"))) {
-                        // 静默降级为 textContent（移除 HTML 标签）
+                    // 如果失败（Trusted Types 错误），静默降级为 textContent
+                    if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types') || e.message.includes('requires \'TrustedHTML\''))) {
                         try {
                             const textOnly = String(value).replace(/<[^>]*>/g, '');
                             if (textOnly.length > 0) {
@@ -118,119 +97,36 @@
 
         // 标记已保护
         window.__html5VideoPlayerProtected = true;
-        console.log('[HTML5视频工具] ✅ 已添加 innerHTML 保护层（早期拦截）');
     } catch (e) {
-        console.error('[HTML5视频工具] ❌ 无法添加早期保护层:', e);
-        console.error('[HTML5视频工具] 错误详情:', {
-            name: e.name,
-            message: e.message,
-            stack: e.stack
-        });
+        // 静默失败，避免影响脚本正常执行
     }
 })();
 
 'use strict';
 
-// ===== Trusted Types 保护层（脚本主体中的保护层，作为补充）=====
-// 为 YouTube 等使用 Trusted Types 的网站创建策略和保护层
+// ===== Trusted Types 辅助函数 =====
+// 注意：保护层已在早期 IIFE 中添加，这里只提供辅助函数
 let trustedTypesPolicy = null;
 let trustedTypesEnabled = false;
 
-// 检测是否启用了 Trusted Types
+// 检测是否启用了 Trusted Types（用于辅助函数判断）
 if (typeof window !== 'undefined' && window.trustedTypes) {
     trustedTypesEnabled = true;
-
-    // 尝试创建策略（某些网站如 YouTube 可能不允许创建自定义策略）
-    if (window.trustedTypes.createPolicy) {
-        try {
-            trustedTypesPolicy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
-                createHTML: (input) => {
-                    // 简单返回输入，不进行任何转义（因为我们信任自己的代码）
-                    return String(input);
-                }
-            });
-            console.log('[HTML5视频工具] Trusted Types 策略创建成功');
-        } catch (e) {
-            console.warn('[HTML5视频工具] 无法创建 Trusted Types 策略（某些网站可能限制）:', e);
-            trustedTypesPolicy = null;
-        }
-    } else {
-        console.warn('[HTML5视频工具] 检测到 Trusted Types，但无法创建策略');
-    }
-
-    // 立即添加保护层（拦截所有 innerHTML 操作，包括来自 jQuery/Vue 的）
+    // 尝试获取已创建的策略（如果早期 IIFE 成功创建了策略）
     try {
-        // 检查是否已经添加过保护层（避免重复添加）
-        if (window.__html5VideoPlayerProtected) {
-            console.log('[HTML5视频工具] 保护层已存在，跳过');
-        } else {
-            // 获取原始的 innerHTML setter
-            const originalDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
-            if (originalDescriptor && originalDescriptor.set) {
-                const originalSetter = originalDescriptor.set;
-
-                // 创建一个安全的 setter（覆盖整个 innerHTML 属性）
-                // 注意：避免递归调用，直接使用 originalSetter
-                Object.defineProperty(Element.prototype, 'innerHTML', {
-                    set: function (value) {
-                        try {
-                            // 如果有策略，使用策略创建 TrustedHTML，然后使用原始 setter
-                            if (trustedTypesPolicy) {
-                                const trustedHTML = trustedTypesPolicy.createHTML(String(value));
-                                // 使用原始 setter 避免递归
-                                originalSetter.call(this, trustedHTML);
-                                return;
-                            }
-                            // 如果没有策略，尝试直接设置（可能会失败）
-                            originalSetter.call(this, value);
-                        } catch (e) {
-                            // 如果失败（Trusted Types 错误），使用 textContent 作为降级
-                            if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types') || e.message.includes('requires \'TrustedHTML\''))) {
-                                // 静默处理，避免日志过多（只在开发时输出）
-                                if (console && console.warn && window.location.hostname.includes('localhost')) {
-                                    console.warn('[HTML5视频工具] innerHTML 被 Trusted Types 阻止，使用 textContent:', {
-                                        tagName: this.tagName,
-                                        id: this.id,
-                                        className: this.className,
-                                        valuePreview: String(value).substring(0, 50)
-                                    });
-                                }
-                                try {
-                                    // 尝试清除 HTML 标签后设置
-                                    this.textContent = String(value).replace(/<[^>]*>/g, '');
-                                } catch (textError) {
-                                    // 如果 textContent 也失败，静默失败（避免影响正常功能）
-                                    // 不输出错误，避免控制台被刷屏
-                                }
-                            } else {
-                                // 其他错误，重新抛出
-                                throw e;
-                            }
-                        }
-                    },
-                    get: originalDescriptor.get,
-                    configurable: true,
-                    enumerable: originalDescriptor.enumerable
-                });
-
-                // 标记已保护（不使用 innerHTML._protected，避免 Illegal invocation）
-                window.__html5VideoPlayerProtected = true;
-                console.log('[HTML5视频工具] ✅ 已添加 innerHTML 保护层（拦截所有操作）');
-            }
+        if (window.trustedTypes.createPolicy) {
+            trustedTypesPolicy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
+                createHTML: (input) => String(input)
+            });
         }
-
-        // jQuery 已移除，不再需要保护
     } catch (e) {
-        console.error('[HTML5视频工具] ❌ 无法添加 innerHTML 保护层:', e);
+        // 策略可能已在早期创建，或网站不允许创建，忽略错误
     }
 }
-
-// jQuery 已移除，不再需要延迟保护
 
 // 安全的设置 HTML 内容的辅助函数
 // 注意：优先使用 createElement 和 textContent，避免使用 innerHTML
 const safeSetHTML = (element, htmlString) => {
-    // 如果只是纯文本，直接使用 textContent（更安全）
     if (!htmlString || htmlString.indexOf('<') === -1) {
         element.textContent = htmlString || '';
         return;
@@ -241,7 +137,6 @@ const safeSetHTML = (element, htmlString) => {
             element.innerHTML = trustedTypesPolicy.createHTML(htmlString);
         } else if (trustedTypesEnabled) {
             // Trusted Types 已启用但无法创建策略，使用降级方案
-            console.warn('[HTML5视频工具] Trusted Types 已启用但无法创建策略，使用 textContent');
             element.textContent = htmlString.replace(/<[^>]*>/g, '');
         } else {
             // 没有 Trusted Types，可以直接使用 innerHTML
@@ -249,12 +144,9 @@ const safeSetHTML = (element, htmlString) => {
         }
     } catch (e) {
         // 如果还是失败，使用 textContent 作为降级方案
-        console.warn('[HTML5视频工具] 设置 HTML 内容失败，使用 textContent:', e);
         element.textContent = htmlString.replace(/<[^>]*>/g, '');
     }
 };
-
-// 注意：innerHTML 保护层已在脚本最开始添加，这里不再重复添加
 
 // ===== 智能检测：判断页面是否需要启用脚本 =====
 const shouldEnableScript = () => {
@@ -285,7 +177,6 @@ const shouldEnableScript = () => {
     ];
 
     if (knownVideoSites.some(site => host.includes(site))) {
-        console.log('[HTML5视频工具] 识别为已知视频网站:', host);
         return true;
     }
 
@@ -312,7 +203,6 @@ const shouldEnableScript = () => {
                         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
                         const iframeVideos = iframeDoc.getElementsByTagName('video');
                         if (iframeVideos.length > 0) {
-                            console.log(`[HTML5视频工具] 在 iframe 中检测到 ${iframeVideos.length} 个视频元素`);
                             return true;
                         }
                     }
@@ -320,7 +210,6 @@ const shouldEnableScript = () => {
                     // 跨域 iframe，无法访问内容（这是正常的）
                     // 但 iframe 本身的存在可能意味着有视频内容
                     if (iframes[i].offsetWidth > 100 && iframes[i].offsetHeight > 100) {
-                        console.log('[HTML5视频工具] 检测到可能包含视频的 iframe（跨域，无法直接访问）');
                         return true; // 即使无法访问，也假设有视频
                     }
                 }
@@ -332,14 +221,12 @@ const shouldEnableScript = () => {
             // 检查当前页面的视频
             const videos = document.getElementsByTagName('video');
             if (videos.length > 0) {
-                console.log(`[HTML5视频工具] 检测到 ${videos.length} 个视频元素，启用脚本`);
                 resolve(true);
                 return true;
             }
 
             // 检查 iframe 中的视频
             if (checkIframeVideos()) {
-                console.log('[HTML5视频工具] 检测到 iframe 中的视频，启用脚本');
                 resolve(true);
                 return true;
             }
@@ -359,7 +246,6 @@ const shouldEnableScript = () => {
             if (checkVideo() || checkCount >= maxChecks) {
                 observer.disconnect();
                 if (checkCount >= maxChecks) {
-                    console.log('[HTML5视频工具] 未检测到视频元素，不启用脚本');
                     resolve(false);
                 }
             }
@@ -2292,7 +2178,6 @@ Tasto E: Frame successivo (solo su YouTube)
     const enabled = shouldEnable instanceof Promise ? await shouldEnable : shouldEnable;
 
     if (!enabled) {
-        console.log('[HTML5视频工具] 当前页面不需要启用脚本');
         return;
     }
 
@@ -2369,7 +2254,6 @@ Tasto E: Frame successivo (solo su YouTube)
     }
 
     // 初始化脚本
-    console.log('[HTML5视频工具] 脚本已启用，站点:', location.host);
     if (!router[u] || !router[u]()) app.init();
     if (!router[u] && !cfg.isNumURL) cfg.isNumURL = /[_\W]\d+(\/|\.[a-z]{3,8})?$/.test(path);
 })();
