@@ -14,6 +14,7 @@
 // @inject-into content
 // @require    https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js
 // @require    https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js
+// @require    https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/common/config_manager.js
 // @grant      GM_addStyle
 // @grant      GM_xmlhttpRequest
 // @grant      window.onurlchange
@@ -29,29 +30,124 @@
 
 'use strict';
 
-// 为 YouTube 等使用 Trusted Types 的网站创建策略
-let trustedTypesPolicy = null;
-if (window.trustedTypes && window.trustedTypes.createPolicy) {
+// ===== Trusted Types 保护层（早期拦截，必须在库加载前执行）=====
+// 关键：在 Tampermonkey 中，@require 会在脚本主体之前执行，但 IIFE 会在脚本加载时立即执行
+// 这个保护层会拦截所有 innerHTML 操作，包括来自其他库（如 jQuery、Vue）的操作
+(function () {
+    'use strict';
+
+    // 检查是否启用了 Trusted Types
+    if (typeof window === 'undefined' || !window.trustedTypes) {
+        return; // 没有 Trusted Types，不需要保护
+    }
+
+    // 检查是否已经添加过保护层（避免重复添加）
+    if (window.__html5VideoPlayerProtected) {
+        return;
+    }
+
     try {
-        trustedTypesPolicy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
-            createHTML: (input) => input
+        const originalDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+        if (!originalDescriptor || !originalDescriptor.set) {
+            return;
+        }
+
+        const originalSetter = originalDescriptor.set;
+
+        // 尝试创建策略（某些网站如 YouTube 可能不允许创建自定义策略）
+        let policy = null;
+        try {
+            if (window.trustedTypes.createPolicy) {
+                policy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
+                    createHTML: (input) => String(input)
+                });
+            }
+        } catch (e) {
+            // 无法创建策略，继续使用保护层降级方案
+        }
+
+        // 覆盖 innerHTML setter（拦截所有 innerHTML 操作）
+        Object.defineProperty(Element.prototype, 'innerHTML', {
+            set: function (value) {
+                try {
+                    // 如果有策略，使用策略创建 TrustedHTML
+                    if (policy) {
+                        const trustedHTML = policy.createHTML(String(value));
+                        originalSetter.call(this, trustedHTML);
+                        return;
+                    }
+                    // 尝试直接设置
+                    originalSetter.call(this, value);
+                } catch (e) {
+                    // 如果失败（Trusted Types 错误），静默降级为 textContent
+                    if (e.name === 'TypeError' && (e.message.includes('TrustedHTML') || e.message.includes('Trusted Types') || e.message.includes('requires \'TrustedHTML\''))) {
+                        try {
+                            const textOnly = String(value).replace(/<[^>]*>/g, '');
+                            if (textOnly.length > 0) {
+                                this.textContent = textOnly;
+                            }
+                        } catch (err) {
+                            // 完全静默，不输出任何错误
+                        }
+                    } else {
+                        // 其他错误，重新抛出
+                        throw e;
+                    }
+                }
+            },
+            get: originalDescriptor.get,
+            configurable: true,
+            enumerable: originalDescriptor.enumerable
         });
+
+        // 标记已保护
+        window.__html5VideoPlayerProtected = true;
     } catch (e) {
-        console.warn('无法创建 Trusted Types 策略:', e);
+        // 静默失败，避免影响脚本正常执行
+    }
+})();
+
+// ===== Trusted Types 辅助函数 =====
+// 注意：保护层已在早期 IIFE 中添加，这里只提供辅助函数
+let trustedTypesPolicy = null;
+let trustedTypesEnabled = false;
+
+// 检测是否启用了 Trusted Types（用于辅助函数判断）
+if (typeof window !== 'undefined' && window.trustedTypes) {
+    trustedTypesEnabled = true;
+    // 尝试获取已创建的策略（如果早期 IIFE 成功创建了策略）
+    try {
+        if (window.trustedTypes.createPolicy) {
+            trustedTypesPolicy = window.trustedTypes.createPolicy('html5VideoPlayerPolicy', {
+                createHTML: (input) => String(input)
+            });
+        }
+    } catch (e) {
+        // 策略可能已在早期创建，或网站不允许创建，忽略错误
     }
 }
 
 // 安全的设置 HTML 内容的辅助函数
+// 注意：优先使用 createElement 和 textContent，避免使用 innerHTML
 const safeSetHTML = (element, htmlString) => {
+    // 如果只是纯文本，直接使用 textContent（更安全）
+    if (!htmlString || htmlString.indexOf('<') === -1) {
+        element.textContent = htmlString || '';
+        return;
+    }
+
     try {
         if (trustedTypesPolicy) {
             element.innerHTML = trustedTypesPolicy.createHTML(htmlString);
+        } else if (trustedTypesEnabled) {
+            // Trusted Types 已启用但无法创建策略，使用降级方案
+            element.textContent = htmlString.replace(/<[^>]*>/g, '');
         } else {
+            // 没有 Trusted Types，可以直接使用 innerHTML
             element.innerHTML = htmlString;
         }
     } catch (e) {
         // 如果还是失败，使用 textContent 作为降级方案
-        console.warn('设置 HTML 内容失败，使用 textContent:', e);
         element.textContent = htmlString.replace(/<[^>]*>/g, '');
     }
 };
@@ -690,7 +786,7 @@ const app = {
             if (e && e != v) {
                 v = e;
                 cfg.btnPlay = cfg.btnNext = cfg.btnFP = cfg.btnFS = _fs = _fp = null;
-                if (!cfg.isLive && GM_getValue('remberRate', true)) {
+                if (!cfg.isLive && videoConfigManager.get('remberRate')) {
                     v.playbackRate = +localStorage.mvPlayRate || 1;
                     v.addEventListener('ratechange', ev => {
                         if (v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
@@ -802,11 +898,11 @@ const app = {
         v = v || this.findMV();
         log('bind event\n', v);
         bus.$emit('foundMV');
-        const bRate = gmFuncOfCheckMenu(MSG.rememberRateMenuOption, 'remberRate');
+        const bRate = videoConfigManager.get('remberRate');
         window.addEventListener('urlchange', async (info) => { //TM event: info.url
             await sleep(990);
             this.checkMV();
-            if (bRate) v.playbackRate = +localStorage.mvPlayRate || 1;
+            if (videoConfigManager.get('remberRate')) v.playbackRate = +localStorage.mvPlayRate || 1;
             bus.$emit('urlchange');
         });
         if (top != self) {
@@ -824,9 +920,9 @@ const app = {
             cfg.isLive = cfg.isLive || v.duration == Infinity;
             if (cfg.isLive) for (const k of [37, 1061, 39, 1063, 67, 77, 78, 88, 90]) actList.delete(k);
             else {
-                if (bRate) v.playbackRate = +localStorage.mvPlayRate || 1;
+                if (videoConfigManager.get('remberRate')) v.playbackRate = +localStorage.mvPlayRate || 1;
                 v.addEventListener('ratechange', ev => {
-                    if (bRate && v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
+                    if (videoConfigManager.get('remberRate') && v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
                 });
             }
 
@@ -1127,6 +1223,27 @@ Reflect.defineProperty(navigator, 'plugins', {
     get() { return { length: 0 } }
 });
 
+// ==================== 配置管理器初始化 ====================
+const videoConfigManager = new ConfigManager('HTML5视频工具', {
+    remberRate: true
+}, {
+    lang: curLang,
+    i18n: {
+        'zh': {
+            'helpMenuOption': '脚本功能快捷键表',
+            'rememberRate': '记忆播放速度'
+        },
+        'en': {
+            'helpMenuOption': 'Hotkeys list',
+            'rememberRate': 'Remember playback speed'
+        },
+        'it': {
+            'helpMenuOption': 'Elenco dei tasti di scelta rapida',
+            'rememberRate': 'Memorizza la velocità di riproduzione dei video'
+        }
+    }
+});
+
 // ===== 主入口：智能启动脚本 =====
 (async function main() {
     // 先进行快速检测
@@ -1140,14 +1257,20 @@ Reflect.defineProperty(navigator, 'plugins', {
         return;
     }
 
-    // 注册菜单命令
+    // 使用 ConfigManager 注册菜单命令
     try {
-        GM_registerMenuCommand(MSG.helpMenuOption, () => {
-            console.log(MSG.helpBody);
-            tip('快捷键帮助已输出到控制台，请按 F12 查看');
+        // 1. 快捷键帮助菜单（使用帮助文档功能）
+        videoConfigManager.registerHelpDocument({
+            titleKey: 'helpMenuOption',
+            contentKey: 'helpBody',
+            displayMode: 'dialog',
+            icon: '📖'
         });
+
+        // 2. 记忆播放速度菜单（切换型）
+        videoConfigManager.createToggleMenu('rememberRate', 'remberRate', true);
     } catch (e) {
-        console.warn('无法注册菜单命令:', e);
+        console.warn('[菜单注册] 无法注册菜单命令:', e);
     }
 
     // 初始化脚本
