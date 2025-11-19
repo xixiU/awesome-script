@@ -1231,14 +1231,72 @@ const videoConfigManager = new ConfigManager('HTML5视频工具', {
     i18n: {
         'zh': {
             'helpMenuOption': '脚本功能快捷键表',
+            'helpBody': `双击(控制栏)：切换（网页）全屏         鼠标中键：快进5秒
+P：视频截图    i：切换画中画   M：(停止)缓存视频
+chrome类浏览器加启动参数设置媒体缓存为840MB： --media-cache-size=880008000
+
+← →方向键：快退、快进5秒;   方向键 + shift: 20秒
+↑ ↓方向键：音量调节   ESC：退出（网页）全屏
+空格键：暂停/播放      N：播放下一集
+回车键：切换全屏;      回车键 + shift: 切换网页全屏
+C(抖音、youtube用V键)：加速0.1倍  X(抖音S)：减速0.1倍  Z(抖音A)：切换加速状态
+D：上一帧     F：下一帧(youtube.com用E键)`,
             'rememberRate': '记忆播放速度'
         },
         'en': {
             'helpMenuOption': 'Hotkeys list',
+            'helpBody': `Double-click: activate full screen.
+Middle mouse button: fast forward 5 seconds
+
+P key： Take a screenshot
+I key： Enter/Exit picture-in-picture mode
+M key： Enable/disable caching of video
+Chrome browsers add startup parameters to set the media cache to 840MB： --media-cache-size=880008000
+
+Arrow keys ← and →： Fast forward or rewind by 5 seconds
+Shift + Arrow keys ← and →： Fast forward or rewind 20 seconds
+Arrow keys ↑ and ↓： Raise or lower the volume
+
+ESC： Exit full screen (or exit video enlarged to window size)
+Spacebar： Stop/Play
+Enter： Enable/disable full screen video
+Shift + Enter: Set/unset video enlarged to window size
+
+N key： Play the next video (if any)
+C key(YouTube:V key)： Speed up video playback by 0.1
+X key: Slow down video playback by 0.1
+Z key, Set video playback speed: 1.0 ←→ X
+D key: Previous frame
+F key: Next frame (except on YouTube)
+E key: Next frame (YouTube only)`,
             'rememberRate': 'Remember playback speed'
         },
         'it': {
             'helpMenuOption': 'Elenco dei tasti di scelta rapida',
+            'helpBody': `Doppio clic: attiva lo schermo intero
+Pulsante centrale del mouse: avanzamento rapido di 5 secondi
+
+Tasto P: Esegui uno screenshot
+Tasto I： Attiva modalità picture-in-picture
+Tasto M： Attiva/disattiva memorizzazione del video nella cache
+I browser Chrome aggiungono parametri di avvio per impostare la cache multimediale a 840MB： --media-cache-size=880008000
+
+Frecce ← e →： Avanzamento rapido o riavvolgimento di 5 secondi
+Shift + Frecce ← e →： Avanzamento rapido o riavvolgimento di 20 secondi
+Frecce ↑ e ↓： Aumenta o diminuisci il volume
+
+ESC： Esci dalla modalità schermo intero
+Barra spaziatrice： Stop/Riproduci
+Invio： Attiva/disattiva video a schermo intero
+Shift + Invio: Imposta/rimuovi video ingrandito alla dimensione della finestra
+
+Tasto N： Riproduci il video successivo (se presente)
+Tasto C (YouTube: V)： Accelera la riproduzione video di 0,1
+Tasto X: Rallenta la riproduzione video di 0,1
+Tasto Z: Imposta velocità di riproduzione video: 1,0 ←→ X
+Tasto D: Frame precedente
+Tasto F: Frame successivo (eccetto su YouTube)
+Tasto E: Frame successivo (solo su YouTube)`,
             'rememberRate': 'Memorizza la velocità di riproduzione dei video'
         }
     }
