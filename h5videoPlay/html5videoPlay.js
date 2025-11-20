@@ -668,6 +668,46 @@ const cacheMV = {
 };
 cacheMV.onChache = cacheMV.onChache.bind(cacheMV);
 
+// ==================== 系统音频字幕服务控制 ====================
+// 新的实现方式：后端服务独立运行，前端只负责启动/停止
+const SUBTITLE_CONTROLLER_URL = 'http://localhost:8766';
+
+async function toggleSystemAudioSubtitle() {
+    try {
+        // 先检查服务状态
+        const statusResponse = await fetch(`${SUBTITLE_CONTROLLER_URL}/status`);
+        const status = await statusResponse.json();
+
+        if (status.running) {
+            // 停止服务
+            const stopResponse = await fetch(`${SUBTITLE_CONTROLLER_URL}/stop`, {
+                method: 'POST'
+            });
+            const result = await stopResponse.json();
+            if (result.success) {
+                tip('字幕服务已停止');
+            } else {
+                tip('停止服务失败: ' + result.message);
+            }
+        } else {
+            // 启动服务
+            const targetLang = videoConfigManager.get('subtitle_targetLang') || 'zh-CN';
+            const startResponse = await fetch(`${SUBTITLE_CONTROLLER_URL}/start?target_lang=${targetLang}`, {
+                method: 'POST'
+            });
+            const result = await startResponse.json();
+            if (result.success) {
+                tip('字幕服务已启动（请查看悬浮窗口）');
+            } else {
+                tip('启动服务失败: ' + result.message);
+            }
+        }
+    } catch (error) {
+        console.error('[字幕] 控制服务连接失败:', error);
+        tip('无法连接到字幕控制服务，请确保已启动控制器服务（端口 8766）');
+    }
+}
+
 const actList = new Map();
 actList.set(90, _ => { //按键Z: 切换加速状态
     if (v.playbackRate == 1 || v.playbackRate == 0) {
@@ -746,6 +786,9 @@ actList.set(90, _ => { //按键Z: 切换加速状态
         if (self != top) top.postMessage({ id: 'gm-h5-play-next' }, '*');
         else if (cfg.btnNext) doClick(cfg.btnNext);
         else if (cfg.isNumURL) goNextMV();
+    })
+    .set(83, _ => {// S 切换字幕服务
+        toggleSystemAudioSubtitle();
     });
 
 const app = {
@@ -1225,7 +1268,8 @@ Reflect.defineProperty(navigator, 'plugins', {
 
 // ==================== 配置管理器初始化 ====================
 const videoConfigManager = new ConfigManager('HTML5视频工具', {
-    remberRate: true
+    remberRate: true,
+    subtitle_targetLang: 'zh-CN'
 }, {
     lang: curLang,
     i18n: {
@@ -1233,6 +1277,7 @@ const videoConfigManager = new ConfigManager('HTML5视频工具', {
             'helpMenuOption': '脚本功能快捷键表',
             'helpBody': `双击(控制栏)：切换（网页）全屏         鼠标中键：快进5秒
 P：视频截图    i：切换画中画   M：(停止)缓存视频
+S：开启/关闭系统音频实时字幕翻译 🆕
 chrome类浏览器加启动参数设置媒体缓存为840MB： --media-cache-size=880008000
 
 ← →方向键：快退、快进5秒;   方向键 + shift: 20秒
@@ -1240,8 +1285,28 @@ chrome类浏览器加启动参数设置媒体缓存为840MB： --media-cache-siz
 空格键：暂停/播放      N：播放下一集
 回车键：切换全屏;      回车键 + shift: 切换网页全屏
 C(抖音、youtube用V键)：加速0.1倍  X(抖音S)：减速0.1倍  Z(抖音A)：切换加速状态
-D：上一帧     F：下一帧(youtube.com用E键)`,
-            'rememberRate': '记忆播放速度'
+D：上一帧     F：下一帧(youtube.com用E键)
+
+【系统音频字幕功能使用说明】
+1. 启动控制器服务: cd subtitle_backend && python subtitle_controller.py
+2. 按 S 键启动/停止字幕服务（会显示悬浮窗口）
+3. 在悬浮窗口中可选择目标翻译语言
+4. 支持所有视频网站，直接监听系统音频`,
+            'rememberRate': '记忆播放速度',
+            'subtitleConfig': '字幕翻译配置',
+            'restartSubtitle': '重启字幕服务',
+            'serverUrl': '后端服务地址',
+            'targetLang': '目标翻译语言',
+            'autoTranslate': '自动翻译',
+            'serverUrlHelp': '(请确保服务已启动)',
+            'targetLangHelp': '支持: zh-CN, en, ja, ko, fr, de, es, ru 等',
+            'autoTranslateConfirm': '是否自动翻译字幕?',
+            'serverUpdated': '服务地址已更新',
+            'langUpdated': '目标语言已更新为',
+            'autoTranslateEnabled': '已开启自动翻译',
+            'autoTranslateDisabled': '已关闭自动翻译',
+            'subtitleNotStarted': '字幕服务未启动',
+            'clickOkToEnable': '点击"确定"开启，"取消"关闭'
         },
         'en': {
             'helpMenuOption': 'Hotkeys list',
@@ -1251,6 +1316,7 @@ Middle mouse button: fast forward 5 seconds
 P key： Take a screenshot
 I key： Enter/Exit picture-in-picture mode
 M key： Enable/disable caching of video
+S key： Toggle system audio real-time subtitle translation 🆕
 Chrome browsers add startup parameters to set the media cache to 840MB： --media-cache-size=880008000
 
 Arrow keys ← and →： Fast forward or rewind by 5 seconds
@@ -1268,8 +1334,28 @@ X key: Slow down video playback by 0.1
 Z key, Set video playback speed: 1.0 ←→ X
 D key: Previous frame
 F key: Next frame (except on YouTube)
-E key: Next frame (YouTube only)`,
-            'rememberRate': 'Remember playback speed'
+E key: Next frame (YouTube only)
+
+【System Audio Subtitle Feature】
+1. Start controller: cd subtitle_backend && python subtitle_controller.py
+2. Press S key to start/stop subtitle service (floating window will appear)
+3. Select target language in the floating window
+4. Works with all video sites by listening to system audio`,
+            'rememberRate': 'Remember playback speed',
+            'subtitleConfig': 'Subtitle Translation Config',
+            'restartSubtitle': 'Restart Subtitle Service',
+            'serverUrl': 'Backend Server URL',
+            'targetLang': 'Target Translation Language',
+            'autoTranslate': 'Auto Translate',
+            'serverUrlHelp': '(Make sure the service is running)',
+            'targetLangHelp': 'Supported: zh-CN, en, ja, ko, fr, de, es, ru, etc',
+            'autoTranslateConfirm': 'Auto translate subtitles?',
+            'serverUpdated': 'Server URL updated',
+            'langUpdated': 'Target language updated to',
+            'autoTranslateEnabled': 'Auto translate enabled',
+            'autoTranslateDisabled': 'Auto translate disabled',
+            'subtitleNotStarted': 'Subtitle service not started',
+            'clickOkToEnable': 'Click OK to enable, Cancel to disable'
         },
         'it': {
             'helpMenuOption': 'Elenco dei tasti di scelta rapida',
@@ -1279,7 +1365,8 @@ Pulsante centrale del mouse: avanzamento rapido di 5 secondi
 Tasto P: Esegui uno screenshot
 Tasto I： Attiva modalità picture-in-picture
 Tasto M： Attiva/disattiva memorizzazione del video nella cache
-I browser Chrome aggiungono parametri di avvio per impostare la cache multimediale a 840MB： --media-cache-size=880008000
+Tasto S： Attiva/disattiva traduzione sottotitoli audio di sistema in tempo reale 🆕
+I browser Chrome aggiungono parametri di avvio per impostare la cache multimediale a 840MB: --media-cache-size=880008000
 
 Frecce ← e →： Avanzamento rapido o riavvolgimento di 5 secondi
 Shift + Frecce ← e →： Avanzamento rapido o riavvolgimento di 20 secondi
@@ -1296,8 +1383,28 @@ Tasto X: Rallenta la riproduzione video di 0,1
 Tasto Z: Imposta velocità di riproduzione video: 1,0 ←→ X
 Tasto D: Frame precedente
 Tasto F: Frame successivo (eccetto su YouTube)
-Tasto E: Frame successivo (solo su YouTube)`,
-            'rememberRate': 'Memorizza la velocità di riproduzione dei video'
+Tasto E: Frame successivo (solo su YouTube)
+
+【Funzionalità Sottotitoli Audio di Sistema】
+1. Avvia controller: cd subtitle_backend && python subtitle_controller.py
+2. Premi S per avviare/fermare il servizio (apparirà finestra fluttuante)
+3. Seleziona lingua target nella finestra fluttuante
+4. Funziona con tutti i siti video ascoltando l'audio di sistema`,
+            'rememberRate': 'Memorizza la velocità di riproduzione dei video',
+            'subtitleConfig': 'Configurazione traduzione sottotitoli',
+            'restartSubtitle': 'Riavvia servizio sottotitoli',
+            'serverUrl': 'URL server backend',
+            'targetLang': 'Lingua di traduzione target',
+            'autoTranslate': 'Traduzione automatica',
+            'serverUrlHelp': '(Assicurati che il servizio sia in esecuzione)',
+            'targetLangHelp': 'Supportati: zh-CN, en, ja, ko, fr, de, es, ru, ecc',
+            'autoTranslateConfirm': 'Tradurre automaticamente i sottotitoli?',
+            'serverUpdated': 'URL server aggiornato',
+            'langUpdated': 'Lingua di destinazione aggiornata a',
+            'autoTranslateEnabled': 'Traduzione automatica abilitata',
+            'autoTranslateDisabled': 'Traduzione automatica disabilitata',
+            'subtitleNotStarted': 'Servizio sottotitoli non avviato',
+            'clickOkToEnable': 'Clicca OK per abilitare, Annulla per disabilitare'
         }
     }
 });
@@ -1327,6 +1434,23 @@ Tasto E: Frame successivo (solo su YouTube)`,
 
         // 2. 记忆播放速度菜单（切换型）
         videoConfigManager.createToggleMenu('rememberRate', 'remberRate', true);
+
+        // 3. 字幕翻译配置菜单（仅配置目标语言）
+        const subtitleConfigDialog = videoConfigManager.createSimpleDialog([
+            {
+                key: 'subtitle_targetLang',
+                labelKey: 'targetLang',
+                type: 'text',
+                help: videoConfigManager.t('targetLangHelp')
+            }
+        ], (updates) => {
+            if (updates.subtitle_targetLang) {
+                tip(videoConfigManager.t('langUpdated') + ': ' + updates.subtitle_targetLang);
+            }
+        });
+
+        videoConfigManager.registerMenuCommand('subtitleConfig', subtitleConfigDialog, '⚙️');
+
     } catch (e) {
         console.warn('[菜单注册] 无法注册菜单命令:', e);
     }
