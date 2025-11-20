@@ -8,4 +8,5 @@ torch==2.1.0
 deep-translator==1.11.4
 python-dotenv==1.0.0
 aiofiles==23.2.1
+sounddevice==0.4.6
 
