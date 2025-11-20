@@ -700,8 +700,8 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="deepdml/faster-whisper-large-v3-turbo-ct2",
-        #default="distil-large-v3",
+        default="small",
+        #default="distil-large-v3",deepdml/faster-whisper-large-v3-turbo-ct2
         help="Whisper模型大小 (tiny, base, small, medium, large)"
     )
     parser.add_argument(
