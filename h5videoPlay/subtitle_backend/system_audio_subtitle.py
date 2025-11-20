@@ -37,10 +37,19 @@ class FloatingWindow:
     def __init__(self, target_lang: str = "zh-CN"):
         self.target_lang = target_lang
         self.root = None
-        self.text_label = None
+        self.original_text_label = None
+        self.translated_text_label = None
         self.is_running = False
-        self.current_text = ""
+        self.current_original = ""
+        self.current_translated = ""
         self.lock = threading.Lock()
+        
+        # 拖拽相关变量
+        self.drag_start_x = 0
+        self.drag_start_y = 0
+        self.dragging = False
+        self.resizing = False
+        self.resize_corner = None
         
     def create_window(self):
         """创建悬浮窗口"""
@@ -51,7 +60,7 @@ class FloatingWindow:
         
         # 设置窗口大小和位置
         window_width = 600
-        window_height = 150
+        window_height = 180
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         x = (screen_width - window_width) // 2
@@ -63,28 +72,90 @@ class FloatingWindow:
         # 设置背景色
         self.root.configure(bg='#1a1a1a')
         
-        # 创建文本标签
-        self.text_label = tk.Label(
-            self.root,
+        # 创建标题栏（用于拖拽）
+        title_bar = tk.Frame(self.root, bg="#2a2a2a", height=30, cursor="fleur")
+        title_bar.pack(fill=tk.X, side=tk.TOP)
+        title_bar.pack_propagate(False)
+        
+        # 标题栏标签
+        title_label = tk.Label(
+            title_bar,
+            text="实时字幕翻译 (可拖拽移动，右下角可调整大小)",
+            font=("Arial", 9),
+            fg="#CCCCCC",
+            bg="#2a2a2a"
+        )
+        title_label.pack(side=tk.LEFT, padx=10, pady=5)
+        
+        # 绑定拖拽事件到标题栏
+        title_bar.bind("<Button-1>", self.start_drag)
+        title_bar.bind("<B1-Motion>", self.on_drag)
+        title_label.bind("<Button-1>", self.start_drag)
+        title_label.bind("<B1-Motion>", self.on_drag)
+        
+        # 关闭按钮（在标题栏）
+        close_btn = tk.Button(
+            title_bar,
+            text="×",
+            font=("Arial", 14, "bold"),
+            fg="#FFFFFF",
+            bg="#ff4444",
+            width=3,
+            command=self.close_window,
+            relief=tk.FLAT
+        )
+        close_btn.pack(side=tk.RIGHT, padx=5, pady=2)
+        
+        # 内容区域
+        content_frame = tk.Frame(self.root, bg="#1a1a1a")
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 原文标签（第一行）
+        self.original_text_label = tk.Label(
+            content_frame,
             text="等待音频输入...",
-            font=("Arial", 18, "bold"),
+            font=("Arial", 16, "bold"),
             fg="#FFFFFF",
             bg="#1a1a1a",
-            wraplength=550,
+            wraplength=580,
             justify="center",
-            padx=20,
-            pady=20
+            padx=10,
+            pady=5,
+            anchor="n"
         )
-        self.text_label.pack(expand=True, fill=tk.BOTH)
+        self.original_text_label.pack(fill=tk.X, pady=(5, 0))
+        
+        # 分隔线
+        separator = tk.Frame(content_frame, bg="#444444", height=1)
+        separator.pack(fill=tk.X, padx=10, pady=5)
+        
+        # 译文标签（第二行）
+        self.translated_text_label = tk.Label(
+            content_frame,
+            text="",
+            font=("Arial", 16),
+            fg="#88CC88",
+            bg="#1a1a1a",
+            wraplength=580,
+            justify="center",
+            padx=10,
+            pady=5,
+            anchor="n"
+        )
+        self.translated_text_label.pack(fill=tk.X, pady=(0, 5))
+        
+        # 底部控制栏
+        control_frame = tk.Frame(self.root, bg="#1a1a1a")
+        control_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
         
         # 语言选择下拉框
-        lang_frame = tk.Frame(self.root, bg="#1a1a1a")
-        lang_frame.pack(side=tk.BOTTOM, pady=5)
+        lang_frame = tk.Frame(control_frame, bg="#1a1a1a")
+        lang_frame.pack(side=tk.LEFT, padx=10)
         
         tk.Label(
             lang_frame,
             text="目标语言:",
-            font=("Arial", 10),
+            font=("Arial", 9),
             fg="#CCCCCC",
             bg="#1a1a1a"
         ).pack(side=tk.LEFT, padx=5)
@@ -100,44 +171,99 @@ class FloatingWindow:
         lang_combo.pack(side=tk.LEFT, padx=5)
         lang_combo.bind("<<ComboboxSelected>>", self.on_lang_change)
         
-        # 关闭按钮
-        close_btn = tk.Button(
-            lang_frame,
-            text="×",
-            font=("Arial", 14, "bold"),
-            fg="#FFFFFF",
-            bg="#ff4444",
-            width=3,
-            command=self.close_window
-        )
-        close_btn.pack(side=tk.RIGHT, padx=5)
+        # 调整大小区域（右下角）
+        resize_area = tk.Frame(self.root, bg="#444444", width=20, height=20, cursor="sizing")
+        resize_area.place(relx=1.0, rely=1.0, anchor=tk.SE)
+        resize_area.bind("<Button-1>", self.start_resize)
+        resize_area.bind("<B1-Motion>", self.on_resize)
+        resize_area.bind("<ButtonRelease-1>", self.stop_resize)
+        
+        # 绑定窗口边缘调整大小（只在右下角区域）
+        # 注意：不要在整个窗口上绑定，避免与拖拽冲突
         
         self.is_running = True
+    
+    def start_drag(self, event):
+        """开始拖拽"""
+        self.dragging = True
+        self.drag_start_x = event.x_root
+        self.drag_start_y = event.y_root
+    
+    def on_drag(self, event):
+        """拖拽中"""
+        if self.dragging:
+            dx = event.x_root - self.drag_start_x
+            dy = event.y_root - self.drag_start_y
+            x = self.root.winfo_x() + dx
+            y = self.root.winfo_y() + dy
+            self.root.geometry(f"+{x}+{y}")
+            self.drag_start_x = event.x_root
+            self.drag_start_y = event.y_root
+    
+    def start_resize(self, event):
+        """开始调整大小"""
+        self.resizing = True
+        self.resize_start_x = event.x_root
+        self.resize_start_y = event.y_root
+        self.resize_start_width = self.root.winfo_width()
+        self.resize_start_height = self.root.winfo_height()
+    
+    def on_resize(self, event):
+        """调整大小中"""
+        if self.resizing:
+            dx = event.x_root - self.resize_start_x
+            dy = event.y_root - self.resize_start_y
+            new_width = max(400, self.resize_start_width + dx)
+            new_height = max(150, self.resize_start_height + dy)
+            self.root.geometry(f"{new_width}x{new_height}")
+            # 更新文本标签的wraplength以适应新宽度
+            if self.original_text_label:
+                self.original_text_label.config(wraplength=new_width - 40)
+            if self.translated_text_label:
+                self.translated_text_label.config(wraplength=new_width - 40)
+    
+    def stop_resize(self, event):
+        """停止调整大小"""
+        self.resizing = False
+        if hasattr(self, 'dragging'):
+            self.dragging = False
         
     def on_lang_change(self, event=None):
         """语言改变回调"""
         self.target_lang = self.lang_var.get()
         logger.info(f"目标语言已更改为: {self.target_lang}")
         
-    def update_text(self, text: str):
-        """更新显示文本"""
+    def update_text(self, original_text: str, translated_text: str = ""):
+        """更新显示文本
+        
+        Args:
+            original_text: 识别到的原文
+            translated_text: 翻译后的文本
+        """
         if not self.is_running or not self.root:
             return
             
         with self.lock:
-            self.current_text = text
+            self.current_original = original_text
+            self.current_translated = translated_text
             
         # 在主线程中更新UI
         if self.root:
-            self.root.after(0, self._update_text_ui, text)
+            self.root.after(0, self._update_text_ui, original_text, translated_text)
     
-    def _update_text_ui(self, text: str):
+    def _update_text_ui(self, original_text: str, translated_text: str):
         """在UI线程中更新文本（在主线程中调用）"""
-        if self.text_label:
-            if text:
-                self.text_label.config(text=text)
+        if self.original_text_label:
+            if original_text:
+                self.original_text_label.config(text=original_text)
             else:
-                self.text_label.config(text="等待音频输入...")
+                self.original_text_label.config(text="等待音频输入...")
+        
+        if self.translated_text_label:
+            if translated_text:
+                self.translated_text_label.config(text=translated_text)
+            else:
+                self.translated_text_label.config(text="")
     
     def close_window(self):
         """关闭窗口"""
@@ -381,15 +507,19 @@ class SystemAudioSubtitleService:
                         combined_audio = combined_audio.flatten()
                         
                         # 处理音频
-                        text = self.process_audio_chunk(combined_audio)
+                        original_text = self.process_audio_chunk(combined_audio)
                         
-                        if text:
-                            # 翻译文本
-                            translated = self.translate_text(text)
-                            
-                            # 更新悬浮窗口
+                        if original_text:
+                            # 先显示原文
                             if self.floating_window:
-                                self.floating_window.update_text(translated)
+                                self.floating_window.update_text(original_text, "")
+                            
+                            # 翻译文本
+                            translated_text = self.translate_text(original_text)
+                            
+                            # 更新悬浮窗口（显示原文和译文）
+                            if self.floating_window:
+                                self.floating_window.update_text(original_text, translated_text)
                         
                         # 清空缓冲区
                         audio_buffer = []
@@ -481,7 +611,8 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="distil-large-v3",
+        default="deepdml/faster-whisper-large-v3-turbo-ct2",
+        #default="distil-large-v3",
         help="Whisper模型大小 (tiny, base, small, medium, large)"
     )
     parser.add_argument(
