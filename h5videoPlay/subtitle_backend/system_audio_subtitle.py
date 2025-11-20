@@ -132,7 +132,7 @@ class FloatingWindow:
             self.root.after(0, self._update_text_ui, text)
     
     def _update_text_ui(self, text: str):
-        """在UI线程中更新文本"""
+        """在UI线程中更新文本（在主线程中调用）"""
         if self.text_label:
             if text:
                 self.text_label.config(text=text)
@@ -143,13 +143,14 @@ class FloatingWindow:
         """关闭窗口"""
         self.is_running = False
         if self.root:
-            self.root.quit()
-            self.root.destroy()
-    
-    def run(self):
-        """运行窗口主循环"""
-        if self.root:
-            self.root.mainloop()
+            try:
+                self.root.quit()
+            except:
+                pass
+            try:
+                self.root.destroy()
+            except:
+                pass
 
 
 class SystemAudioSubtitleService:
@@ -414,18 +415,14 @@ class SystemAudioSubtitleService:
         logger.info("停止录制系统音频")
     
     def start_floating_window(self):
-        """启动悬浮窗口（在独立线程中）"""
-        def run_window():
-            self.floating_window = FloatingWindow(self.target_lang)
-            self.floating_window.create_window()
-            self.floating_window.run()
+        """启动悬浮窗口（必须在主线程中）"""
+        # macOS 要求 tkinter 必须在主线程中创建和运行
+        self.floating_window = FloatingWindow(self.target_lang)
+        self.floating_window.create_window()
         
-        window_thread = threading.Thread(target=run_window, daemon=True)
-        window_thread.start()
-        
-        # 等待窗口创建
+        # 等待窗口创建完成
         import time
-        time.sleep(0.5)
+        time.sleep(0.3)
     
     def run(self):
         """运行服务"""
@@ -433,7 +430,7 @@ class SystemAudioSubtitleService:
             # 初始化
             self.initialize()
             
-            # 启动悬浮窗口
+            # 启动悬浮窗口（必须在主线程中创建）
             logger.info("启动悬浮窗口...")
             self.start_floating_window()
             
@@ -448,10 +445,23 @@ class SystemAudioSubtitleService:
             
             logger.info("服务已启动，按 Ctrl+C 停止")
             
-            # 保持运行
+            # 保持运行 - 在主线程中运行 tkinter 主循环
             try:
-                while self.is_recording:
-                    time.sleep(1)
+                if self.floating_window and self.floating_window.root:
+                    # 使用 tkinter 的主循环来保持运行
+                    # 但需要定期检查录制状态
+                    def check_recording():
+                        if self.is_recording:
+                            self.floating_window.root.after(1000, check_recording)
+                        else:
+                            self.floating_window.root.quit()
+                    
+                    check_recording()
+                    self.floating_window.root.mainloop()
+                else:
+                    # 如果没有窗口，使用简单的循环
+                    while self.is_recording:
+                        time.sleep(1)
             except KeyboardInterrupt:
                 logger.info("收到停止信号")
             finally:
