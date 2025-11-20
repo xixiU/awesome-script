@@ -16,6 +16,7 @@ import platform
 from typing import Optional, Dict
 from pathlib import Path
 import time
+import re
 import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
@@ -295,293 +296,276 @@ class FloatingWindow:
 class SystemAudioSubtitleService:
     def __init__(
         self,
-        model_size: str = "base", # 默认改为 base，CPU 跑 large 必卡
+        model_size: str = "small", 
         target_lang: str = "zh-CN",
+        source_lang: str = None,   
         sample_rate: int = 16000,
         chunk_duration: float = 2.0 
     ):
         self.model_size = model_size
         self.target_lang = target_lang
+        self.source_lang = source_lang 
         self.sample_rate = sample_rate
-        self.chunk_duration = chunk_duration
-        # 每次处理的样本数
         self.chunk_samples = int(sample_rate * chunk_duration)
         
-        self.model: Optional[WhisperModel] = None
-        self.translator: Optional[GoogleTranslator] = None
+        self.model = None
+        self.translator = None
         self.audio_queue = queue.Queue()
         self.is_recording = False
         self.floating_window = None
-
-        self.process_thread = None 
-        # 性能监控
-        self.last_inference_time = 0
+        self.process_thread = None
         
+        # === 优化变量 ===
+        self.prev_audio = np.array([], dtype=np.float32) # 音频重叠缓冲
+        self.sentence_buffer = ""     # 文本拼接缓冲（累积未完成的句子）
+        self.last_speech_time = time.time() # 最后一次说话的时间
+
     def initialize(self):
-        """初始化模型和翻译器"""
         try:
-            device = "cuda" if  "Windows" in platform.system() and self._check_cuda() else "cpu"
-            compute_type = "float16" if device == "cuda" else "int8"
+            system = platform.system()
             
-            logger.info(f"正在加载 Whisper 模型: {self.model_size} | 设备: {device} | 类型: {compute_type}")
-            
-            # 关键优化：设置 CPU 线程数，防止单次推理占满所有资源导致录音卡顿
-            cpu_threads = 4 if device == "cpu" else 0
+            # 硬件自动选择逻辑
+            if system == "Darwin": 
+                logger.info("🍎 macOS (Apple Silicon) 模式")
+                device = "auto"
+                compute_type = "int8" 
+                threads = 4
+                if self.model_size == "auto": self.model_size = "small"
+
+            elif system == "Windows":
+                if self._check_cuda():
+                    logger.info("🟢 Windows (CUDA) 模式")
+                    device = "cuda"
+                    compute_type = "float16"
+                    threads = 0
+                    if self.model_size == "auto": self.model_size = "deepdml/faster-whisper-large-v3-turbo-ct2"
+                else:
+                    logger.info("⚠️ Windows (CPU) 模式")
+                    device = "cpu"
+                    compute_type = "int8"
+                    threads = 4
+                    if self.model_size == "auto": self.model_size = "small"
+            else:
+                device = "cpu"; compute_type = "int8"; threads = 4
+                if self.model_size == "auto": self.model_size = "small"
+
+            logger.info(f"🚀 配置: [{self.model_size}] | Dev: {device} | Prec: {compute_type}")
             
             self.model = WhisperModel(
                 self.model_size,
-                #device=device,
-                #compute_type=compute_type,
-                compute_type="int8",
-                cpu_threads=cpu_threads, 
-                num_workers=1
+                device=device,
+                compute_type=compute_type,
+                cpu_threads=threads,
+                num_workers=1,
+                download_root="./models"
             )
-            logger.info("Whisper 模型加载成功")
             
             self.translator = GoogleTranslator(source="auto", target=self.target_lang)
-            logger.info(f"翻译器初始化成功 ({self.target_lang})")
             
         except Exception as e:
-            logger.error(f"初始化失败: {e}")
-            # 降级处理：如果加载失败（可能是显存不足），尝试使用 CPU int8
-            if device == "cuda":
-                logger.info("尝试降级到 CPU 模式...")
-                self.model = WhisperModel(self.model_size, device="cpu", compute_type="int8")
-            else:
-                raise
+            logger.error(f"❌ 初始化失败: {e}")
+            raise
 
     def _check_cuda(self):
-        """简单检查是否有 NVIDIA 显卡"""
         try:
             import ctypes
             ctypes.cdll.LoadLibrary('nvcuda.dll')
             return True
-        except:
-            return False
+        except: return False
 
     def get_system_audio_device(self):
-        """获取音频设备 (保持原有逻辑，增加 Loopback 提示)"""
         try:
             devices = sd.query_devices()
-            system = platform.system()
-            
-            # 优先查找的关键词
-            target_keywords = []
-            if system == "Darwin":
-                target_keywords = ['blackhole', 'soundflower', 'loopback', 'virtual']
-            elif system == "Windows":
-                target_keywords = ['stereo mix', 'what u hear', '立体声混音', 'vb-audio', 'virtual']
-                
-            # 1. 优先匹配虚拟设备
-            for i, device in enumerate(devices):
-                if device['max_input_channels'] > 0:
-                    name = device['name'].lower()
-                    if any(k in name for k in target_keywords):
-                        logger.info(f"✨ 自动选择音频设备: {device['name']} (ID: {i})")
-                        return i
-            
-            # 2. 回退到默认设备
-            default_input = sd.default.device[0]
-            logger.warning(f"⚠️ 未找到虚拟内录设备，使用默认麦克风: {devices[default_input]['name']}")
-            logger.warning("提示: Windows 请启用'立体声混音'，Mac 请安装 BlackHole 并配置多输出设备。")
-            return default_input
-                
-        except Exception as e:
-            logger.error(f"获取音频设备失败: {e}")
-            return None
+            keywords = ['blackhole', 'soundflower', 'loopback', 'stereo mix', 'what u hear', '立体声混音']
+            for i, d in enumerate(devices):
+                if d['max_input_channels'] > 0 and any(k in d['name'].lower() for k in keywords):
+                    return i
+            return sd.default.device[0]
+        except: return None
 
     def audio_callback(self, indata, frames, time, status):
-        """音频回调：只负责塞数据，不做耗时操作"""
-        if status:
-            print(f"Audio Status: {status}", file=sys.stderr)
         if self.is_recording:
             self.audio_queue.put(indata.copy())
 
-    def process_audio_chunk(self, audio_data: np.ndarray):
-        """推理核心逻辑"""
+    def process_audio_chunk(self, audio_data: np.ndarray, prompt_text: str = ""):
+        """
+        处理音频块
+        :param prompt_text: 上下文提示词（上一句识别的内容）
+        """
         try:
-            start_time = time.time()
-            
+            # Whisper 参数优化：加入 initial_prompt 提高连贯性
             segments, info = self.model.transcribe(
                 audio_data,
-                beam_size=1,          # 速度最快
+                beam_size=1,
                 best_of=1,
                 temperature=0,
-                vad_filter=True,      # 开启 VAD
-                vad_parameters=dict(
-                    min_silence_duration_ms=500, 
-                    threshold=0.5     # 提高阈值，减少噪音误判
-                ),
-                condition_on_previous_text=False # 实时流不需要上下文，防止幻觉
+                language=self.source_lang, 
+                initial_prompt=prompt_text,  # 💡 关键：告诉模型上一句说了啥
+                vad_filter=True,
+                vad_parameters=dict(min_silence_duration_ms=400), 
+                condition_on_previous_text=False # 实时流建议关掉，用 prompt 代替
             )
             
-            texts = [s.text.strip() for s in segments]
-            text = " ".join(texts)
-            
-            inference_time = time.time() - start_time
-            if text:
-                logger.info(f"识别: {text} [耗时: {inference_time:.2f}s, 语言: {info.language}]")
-            
+            text = " ".join([s.text.strip() for s in segments])
             return (text, info.language) if text else None
             
         except Exception as e:
             logger.error(f"推理错误: {e}")
             return None
 
+    def _is_sentence_end(self, text: str) -> bool:
+        """判断一句话是否说完（根据标点符号）"""
+        if not text: return False
+        # 检查常见的结束标点
+        return any(text.endswith(p) for p in ['.', '?', '!', '。', '？', '！'])
+
     def _process_audio_loop(self, stream):
-        """后台处理循环（包含防积压机制）"""
         audio_buffer = []
         current_samples = 0
         
-        logger.info("音频处理线程已启动")
+        # 定义重叠时长（秒）
+        overlap_duration = 0.5 
+        overlap_samples = int(self.sample_rate * overlap_duration)
         
         while self.is_recording:
             try:
-                # 1. 检查队列积压情况
-                q_size = self.audio_queue.qsize()
-                # 如果积压超过 5 个块（约 1-2 秒延迟），说明处理速度跟不上录音速度
-                # 必须丢弃旧数据，否则延迟会无限累积
-                if q_size > 5:
-                    logger.warning(f"⚠️ 检测到高延迟 (积压 {q_size} 块)，正在丢弃旧音频以追赶实时...")
-                    while not self.audio_queue.empty():
-                        try:
-                            self.audio_queue.get_nowait()
-                        except queue.Empty:
-                            break
-                    audio_buffer = [] # 清空当前 buffer
+                # 1. 队列防积压（保留最新数据）
+                if self.audio_queue.qsize() > 6:
+                    with self.audio_queue.mutex:
+                        self.audio_queue.queue.clear()
+                    audio_buffer = []
                     current_samples = 0
+                    # 清空文本缓存，重新开始
+                    self.sentence_buffer = ""
                     continue
 
-                # 2. 获取音频数据
                 try:
-                    # timeout 设短一点，保证循环能响应停止信号
-                    chunk = self.audio_queue.get(timeout=0.5) 
+                    chunk = self.audio_queue.get(timeout=0.5)
                 except queue.Empty:
+                    # 如果长时间没有新音频（比如暂停了），清空文本缓冲
+                    if time.time() - self.last_speech_time > 3.0 and self.sentence_buffer:
+                        if self.floating_window:
+                            # 最终翻译一次完整的
+                            self._async_translate(self.sentence_buffer, self.target_lang, final=True)
+                        self.sentence_buffer = ""
                     continue
 
                 audio_buffer.append(chunk)
                 current_samples += len(chunk)
 
-                # 3. 当 buffer 填满时进行处理
                 if current_samples >= self.chunk_samples:
-                    # 拼接音频
-                    audio_np = np.concatenate(audio_buffer, axis=0).flatten().astype(np.float32)
+                    # 2. 拼接音频：上一段的尾巴 + 这一段
+                    current_audio = np.concatenate(audio_buffer, axis=0).flatten().astype(np.float32)
                     
-                    # 处理音频
-                    result = self.process_audio_chunk(audio_np)
+                    if len(self.prev_audio) > 0:
+                        # 加上重叠部分
+                        process_audio = np.concatenate((self.prev_audio, current_audio))
+                    else:
+                        process_audio = current_audio
+                        
+                    # 保存这段的尾部给下一次用
+                    self.prev_audio = current_audio[-overlap_samples:]
+                    
+                    # 3. 推理：传入当前缓冲区的内容作为提示词，帮助上下文连接
+                    # 取缓冲区最后50个字符作为提示
+                    prompt = self.sentence_buffer[-50:] if self.sentence_buffer else ""
+                    result = self.process_audio_chunk(process_audio, prompt_text=prompt)
                     
                     if result:
                         text, detected_lang = result
                         
-                        # UI更新：显示原文
-                        if self.floating_window:
-                            self.floating_window.update_text(text, "翻译中...")
+                        # 简单清洗文本（去重）
+                        # 有时候 Whisper 会因为重叠音频重复输出几个词，这里做简单去重
+                        if self.sentence_buffer.endswith(text):
+                            text = "" # 完全重复，忽略
                         
-                        # 翻译逻辑
-                        target = self.floating_window.target_lang if self.floating_window else self.target_lang
-                        
-                        # 简单的语言代码标准化
-                        src_code = detected_lang.lower().split('-')[0] # zh-cn -> zh
-                        tgt_code = target.lower().split('-')[0]
-                        
-                        if src_code != tgt_code and text.strip():
-                            self._async_translate(text, detected_lang, target)
-                        else:
+                        if text.strip():
+                            self.last_speech_time = time.time()
+                            
+                            # === 💡 核心逻辑：文本拼接缓冲 ===
+                            # 如果是新的一句话（比如上一句已经有标点了），加空格
+                            if self.sentence_buffer and not self._is_sentence_end(self.sentence_buffer):
+                                self.sentence_buffer += " " + text
+                            else:
+                                # 如果上一句已经结束了，或者缓冲区为空，直接赋值（保留一点上下文? 不，直接开新句）
+                                # 这里策略：只要缓冲区不太长，就一直追加，交给谷歌翻译去处理语序
+                                if len(self.sentence_buffer) > 200: # 防止无限长
+                                    self.sentence_buffer = text
+                                else:
+                                    self.sentence_buffer += " " + text
+                            
+                            # 清理多余空格
+                            self.sentence_buffer = self.sentence_buffer.strip()
+                            
+                            # 更新UI显示（显示当前正在积累的完整长句）
                             if self.floating_window:
-                                self.floating_window.update_text(text, text) # 同语言不翻译
-                    
-                    # 4. 重置 buffer (保留少量末尾数据以防止切断单词，但为了实时性，这里选择清空)
-                    # 实时性优先策略：直接清空，依靠重叠窗口太慢
+                                self.floating_window.update_text(self.sentence_buffer, "...")
+                            
+                            # 4. 翻译逻辑
+                            # 只有当原文不是中文时才翻译
+                            if self.target_lang.lower() not in detected_lang.lower():
+                                self._async_translate(self.sentence_buffer, self.target_lang)
+                            else:
+                                if self.floating_window:
+                                    self.floating_window.update_text(self.sentence_buffer, self.sentence_buffer)
+                            
+                            # 5. 如果检测到句号，可以在稍后清空缓冲区
+                            # 为了视觉稳定性，我们不立即清空，而是等下一句话开始时或者超时后清空
+                            if self._is_sentence_end(text):
+                                # 可以在这里标记一下，或者什么都不做，等长度超标自动重置
+                                pass
+
                     audio_buffer = []
                     current_samples = 0
-
             except Exception as e:
-                logger.error(f"循环异常: {e}")
-                time.sleep(0.1)
+                logger.error(f"Loop Error: {e}")
 
-    def _async_translate(self, text, src, tgt):
-        """异步翻译辅助函数"""
+    def _async_translate(self, text, tgt, final=False):
         def worker():
             try:
-                # 动态调整目标语言
                 if hasattr(self.translator, 'target') and self.translator.target != tgt:
                     self.translator = GoogleTranslator(source="auto", target=tgt)
                 
                 res = self.translator.translate(text)
-                if self.floating_window:
-                    self.floating_window.update_text(text, res)
-            except Exception as e:
-                logger.error(f"翻译失败: {e}")
                 
+                if self.floating_window:
+                    # 如果是最终确认的句子（超时结算），可以去掉省略号
+                    self.floating_window.update_text(text, res)
+            except:
+                pass
         threading.Thread(target=worker, daemon=True).start()
 
+    # ... (start_recording, stop_recording, run 等方法保持不变，直接复制之前的即可)
     def start_recording(self):
-        device_index = self.get_system_audio_device()
-        if device_index is None:
-            return False
-            
+        idx = self.get_system_audio_device()
+        if idx is None: return False
         self.is_recording = True
-        
-        # 减小 blocksize，提高响应频率
-        block_size = int(self.sample_rate * 0.1) # 100ms per block
-        
         try:
-            stream = sd.InputStream(
-                device=device_index,
-                channels=1,
-                samplerate=self.sample_rate,
-                callback=self.audio_callback,
-                blocksize=block_size
-            )
+            stream = sd.InputStream(device=idx, channels=1, samplerate=self.sample_rate,
+                                  callback=self.audio_callback, blocksize=int(self.sample_rate * 0.1))
             stream.start()
-            
-            # 启动后台处理线程
-            self.process_thread = threading.Thread(
-                target=self._process_audio_loop,
-                args=(stream,),
-                daemon=True
-            )
+            self.process_thread = threading.Thread(target=self._process_audio_loop, args=(stream,), daemon=True)
             self.process_thread.start()
             return True
         except Exception as e:
-            logger.error(f"启动录音流失败: {e}")
-            self.is_recording = False
-            return False
+            logger.error(e); return False
 
     def stop_recording(self):
         self.is_recording = False
 
     def run(self):
-        # 初始化
-        try:
-            self.initialize()
-        except Exception as e:
-            logger.error(f"初始化致命错误: {e}")
-            return
-
-        # UI 必须在主线程
-        self.floating_window = FloatingWindow(self.target_lang)
+        self.initialize()
+        self.floating_window = FloatingWindow(self.target_lang) 
         self.floating_window.create_window()
-        
-        # 延迟启动录音，等待 UI 加载
         self.floating_window.root.after(1000, self.start_recording)
-        
-        # 周期性检查录音状态，并在主循环中运行
-        def check_status():
-            if not self.is_recording and self.process_thread and not self.process_thread.is_alive():
-                logger.info("录音线程已结束")
-            else:
-                self.floating_window.root.after(1000, check_status)
-                
-        check_status()
-        
-        try:
-            self.floating_window.root.mainloop()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            self.stop_recording()
-
+        def check():
+            if not self.is_recording:
+                if self.process_thread and not self.process_thread.is_alive(): sys.exit(0)
+            else: self.floating_window.root.after(1000, check)
+        check()
+        try: self.floating_window.root.mainloop()
+        except: pass
+        finally: self.stop_recording()
 
 
 def main():
