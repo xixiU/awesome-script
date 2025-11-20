@@ -287,7 +287,7 @@ class SystemAudioSubtitleService:
         model_size: str = "base",
         target_lang: str = "zh-CN",
         sample_rate: int = 16000,
-        chunk_duration: float = 3.0
+        chunk_duration: float = 2.0  # 减小chunk时长以提高实时性
     ):
         """
         初始化服务
@@ -296,7 +296,7 @@ class SystemAudioSubtitleService:
             model_size: Whisper模型大小
             target_lang: 目标翻译语言
             sample_rate: 采样率
-            chunk_duration: 每次处理的音频时长（秒）
+            chunk_duration: 每次处理的音频时长（秒），越小越实时但可能影响准确性
         """
         self.model_size = model_size
         self.target_lang = target_lang
@@ -309,6 +309,34 @@ class SystemAudioSubtitleService:
         self.audio_queue = queue.Queue()
         self.is_recording = False
         self.floating_window: Optional[FloatingWindow] = None
+        
+        # 语言代码映射（Whisper -> Google Translator）
+        self.lang_code_map = {
+            "zh": "zh-CN",
+            "zh-cn": "zh-CN",
+            "zh-tw": "zh-TW",
+            "en": "en",
+            "ja": "ja",
+            "ko": "ko",
+            "fr": "fr",
+            "de": "de",
+            "es": "es",
+            "ru": "ru"
+        }
+        
+        # 语言代码映射（Whisper -> Google Translator）
+        self.lang_code_map = {
+            "zh": "zh-CN",
+            "zh-cn": "zh-CN",
+            "zh-tw": "zh-TW",
+            "en": "en",
+            "ja": "ja",
+            "ko": "ko",
+            "fr": "fr",
+            "de": "de",
+            "es": "es",
+            "ru": "ru"
+        }
         
     def initialize(self):
         """初始化模型和翻译器"""
@@ -386,8 +414,12 @@ class SystemAudioSubtitleService:
             # 将音频数据添加到队列
             self.audio_queue.put(indata.copy())
     
-    def process_audio_chunk(self, audio_data: np.ndarray) -> Optional[str]:
-        """处理音频块，返回识别的文本"""
+    def process_audio_chunk(self, audio_data: np.ndarray) -> Optional[tuple]:
+        """处理音频块，返回识别的文本和语言信息
+        
+        Returns:
+            tuple: (文本, 语言代码) 或 None
+        """
         try:
             # 确保音频数据是 float32 格式
             if audio_data.dtype != np.float32:
@@ -397,16 +429,18 @@ class SystemAudioSubtitleService:
             if audio_data.max() > 1.0 or audio_data.min() < -1.0:
                 audio_data = audio_data / np.max(np.abs(audio_data))
             
-            # 使用 Whisper 进行识别
+            # 使用 Whisper 进行识别（优化参数以提高速度）
             segments, info = self.model.transcribe(
                 audio_data,
                 language=None,  # 自动检测语言
-                beam_size=5,
+                beam_size=3,  # 减小beam_size以提高速度
                 vad_filter=True,
                 vad_parameters=dict(
-                    min_silence_duration_ms=500,
-                    speech_pad_ms=400
-                )
+                    min_silence_duration_ms=300,  # 减小静音检测时间
+                    speech_pad_ms=200
+                ),
+                condition_on_previous_text=False,  # 不依赖前文，提高速度
+                initial_prompt=None  # 不使用初始提示
             )
             
             # 合并所有片段
@@ -418,8 +452,9 @@ class SystemAudioSubtitleService:
             
             if texts:
                 combined_text = " ".join(texts)
-                logger.info(f"识别结果: {combined_text} (语言: {info.language})")
-                return combined_text
+                detected_lang = info.language
+                logger.info(f"识别结果: {combined_text} (语言: {detected_lang})")
+                return (combined_text, detected_lang)
             
             return None
             
@@ -427,29 +462,58 @@ class SystemAudioSubtitleService:
             logger.error(f"处理音频失败: {e}")
             return None
     
-    def translate_text(self, text: str) -> str:
-        """翻译文本"""
-        try:
-            if not self.translator:
-                return text
-            
-            # 更新目标语言
-            if self.floating_window:
-                target_lang = self.floating_window.target_lang
-            else:
-                target_lang = self.target_lang
-            
-            # 如果目标语言改变，重新创建翻译器
-            if hasattr(self.translator, 'target') and self.translator.target != target_lang:
-                self.translator = GoogleTranslator(source="auto", target=target_lang)
-            
-            translated = self.translator.translate(text)
-            logger.info(f"翻译结果: {translated}")
-            return translated
-            
-        except Exception as e:
-            logger.warning(f"翻译失败，返回原文: {e}")
-            return text
+    def translate_text_async(self, text: str, source_lang: str, target_lang: str, callback):
+        """异步翻译文本
+        
+        Args:
+            text: 要翻译的文本
+            source_lang: 源语言代码
+            target_lang: 目标语言代码
+            callback: 翻译完成后的回调函数 callback(translated_text)
+        """
+        def translate_worker():
+            try:
+                if not self.translator:
+                    callback(text)
+                    return
+                
+                # 如果目标语言改变，重新创建翻译器
+                if hasattr(self.translator, 'target') and self.translator.target != target_lang:
+                    self.translator = GoogleTranslator(source="auto", target=target_lang)
+                
+                translated = self.translator.translate(text)
+                logger.info(f"翻译结果: {translated}")
+                callback(translated)
+                
+            except Exception as e:
+                logger.warning(f"翻译失败，返回原文: {e}")
+                callback(text)
+        
+        # 在后台线程中执行翻译
+        translation_thread = threading.Thread(target=translate_worker, daemon=True)
+        translation_thread.start()
+    
+    def normalize_lang_code(self, lang_code: str) -> str:
+        """标准化语言代码（Whisper -> Google Translator）"""
+        lang_lower = lang_code.lower()
+        return self.lang_code_map.get(lang_lower, lang_code)
+    
+    def should_translate(self, detected_lang: str, target_lang: str) -> bool:
+        """判断是否需要翻译"""
+        # 标准化语言代码
+        detected_normalized = self.normalize_lang_code(detected_lang)
+        target_normalized = self.normalize_lang_code(target_lang)
+        
+        # 如果检测到的语言和目标语言相同，不需要翻译
+        if detected_normalized.lower() == target_normalized.lower():
+            return False
+        
+        # 特殊处理：zh 和 zh-CN 视为相同
+        if (detected_normalized.lower() in ['zh', 'zh-cn'] and 
+            target_normalized.lower() in ['zh', 'zh-cn']):
+            return False
+        
+        return True
     
     def start_recording(self):
         """开始录制系统音频"""
@@ -461,13 +525,13 @@ class SystemAudioSubtitleService:
         try:
             self.is_recording = True
             
-            # 启动音频流
+            # 启动音频流（减小块大小以提高实时性）
             stream = sd.InputStream(
                 device=device_index,
                 channels=1,  # 单声道
                 samplerate=self.sample_rate,
                 callback=self.audio_callback,
-                blocksize=int(self.sample_rate * 0.5)  # 0.5秒的块大小
+                blocksize=int(self.sample_rate * 0.25)  # 0.25秒的块大小，提高实时性
             )
             
             stream.start()
@@ -506,23 +570,48 @@ class SystemAudioSubtitleService:
                         combined_audio = np.concatenate(audio_buffer, axis=0)
                         combined_audio = combined_audio.flatten()
                         
-                        # 处理音频
-                        original_text = self.process_audio_chunk(combined_audio)
+                        # 处理音频（返回文本和语言）
+                        result = self.process_audio_chunk(combined_audio)
                         
-                        if original_text:
-                            # 先显示原文
+                        if result:
+                            original_text, detected_lang = result
+                            
+                            # 获取目标语言
+                            if self.floating_window:
+                                target_lang = self.floating_window.target_lang
+                            else:
+                                target_lang = self.target_lang
+                            
+                            # 先立即显示原文
                             if self.floating_window:
                                 self.floating_window.update_text(original_text, "")
                             
-                            # 翻译文本
-                            translated_text = self.translate_text(original_text)
-                            
-                            # 更新悬浮窗口（显示原文和译文）
-                            if self.floating_window:
-                                self.floating_window.update_text(original_text, translated_text)
+                            # 判断是否需要翻译
+                            if self.should_translate(detected_lang, target_lang):
+                                # 需要翻译，异步调用
+                                def on_translation_complete(translated_text: str):
+                                    if self.floating_window:
+                                        self.floating_window.update_text(original_text, translated_text)
+                                
+                                self.translate_text_async(
+                                    original_text,
+                                    detected_lang,
+                                    target_lang,
+                                    on_translation_complete
+                                )
+                            else:
+                                # 不需要翻译，直接显示原文（作为译文也显示原文）
+                                if self.floating_window:
+                                    self.floating_window.update_text(original_text, original_text)
                         
-                        # 清空缓冲区
-                        audio_buffer = []
+                        # 清空缓冲区（保留最后一点音频以保持连续性）
+                        # 保留最后0.5秒的音频，避免截断单词
+                        keep_samples = int(self.sample_rate * 0.5)
+                        if total_samples > keep_samples:
+                            # 只保留最后的部分
+                            audio_buffer = [audio_buffer[-1][-keep_samples:]]
+                        else:
+                            audio_buffer = []
                         
                 except queue.Empty:
                     # 超时，继续等待
@@ -630,8 +719,8 @@ def main():
     parser.add_argument(
         "--chunk-duration",
         type=float,
-        default=3.0,
-        help="每次处理的音频时长（秒）(默认: 3.0)"
+        default=2.0,
+        help="每次处理的音频时长（秒）(默认: 2.0，越小越实时)"
     )
     
     args = parser.parse_args()
