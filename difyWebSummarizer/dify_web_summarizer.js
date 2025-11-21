@@ -356,14 +356,94 @@
             border-radius: 3px;
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 0.9em;
+            color: #e83e8c;
         }
         
         #dify-panel-content pre {
-            background: #f3f4f6;
-            padding: 12px;
-            border-radius: 6px;
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 16px;
+            border-radius: 8px;
             overflow-x: auto;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
+            border: 1px solid #374151;
+        }
+        
+        #dify-panel-content pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 0.9em;
+        }
+        
+        #dify-panel-content a {
+            color: #667eea;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        #dify-panel-content a:hover {
+            color: #764ba2;
+            border-bottom-color: #764ba2;
+        }
+        
+        #dify-panel-content blockquote {
+            border-left: 4px solid #667eea;
+            padding-left: 16px;
+            margin: 16px 0;
+            color: #6b7280;
+            font-style: italic;
+            background: #f9fafb;
+            padding: 12px 16px;
+            border-radius: 4px;
+        }
+        
+        #dify-panel-content hr {
+            border: none;
+            border-top: 2px solid #e5e7eb;
+            margin: 24px 0;
+        }
+        
+        #dify-panel-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 0.95em;
+        }
+        
+        #dify-panel-content table th,
+        #dify-panel-content table td {
+            border: 1px solid #e5e7eb;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        
+        #dify-panel-content table th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        #dify-panel-content table tr:nth-child(even) {
+            background: #f9fafb;
+        }
+        
+        #dify-panel-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 16px 0;
+        }
+        
+        #dify-panel-content strong {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        #dify-panel-content em {
+            font-style: italic;
+            color: #4b5563;
         }
         
         .dify-loading-spinner {
@@ -1694,82 +1774,324 @@ ${newsContent}
         }
 
         renderMarkdownContent(text, container) {
-            // 将 Markdown 文本转换为 DOM 元素（简单实现）
+            // 将 Markdown 文本转换为 DOM 元素（增强版实现）
             const lines = text.split('\n');
+            let i = 0;
             let currentParagraph = null;
+            let inCodeBlock = false;
+            let codeBlockLanguage = '';
+            let codeBlockContent = [];
+            let inTable = false;
+            let tableHeaders = [];
+            let tableRows = [];
 
-            for (let line of lines) {
-                line = line.trim();
+            while (i < lines.length) {
+                const line = lines[i];
+                const trimmedLine = line.trim();
 
-                if (!line) {
-                    // 空行，结束当前段落
-                    if (currentParagraph && currentParagraph.textContent.trim()) {
-                        container.appendChild(currentParagraph);
+                // 处理代码块
+                if (trimmedLine.startsWith('```')) {
+                    if (inCodeBlock) {
+                        // 结束代码块
+                        const pre = document.createElement('pre');
+                        const code = document.createElement('code');
+                        code.textContent = codeBlockContent.join('\n');
+                        pre.appendChild(code);
+                        container.appendChild(pre);
+                        inCodeBlock = false;
+                        codeBlockContent = [];
+                        codeBlockLanguage = '';
                         currentParagraph = null;
+                    } else {
+                        // 开始代码块
+                        if (currentParagraph) {
+                            container.appendChild(currentParagraph);
+                            currentParagraph = null;
+                        }
+                        inCodeBlock = true;
+                        codeBlockLanguage = trimmedLine.substring(3).trim();
                     }
+                    i++;
                     continue;
                 }
 
-                // 标题处理
-                if (line.startsWith('### ')) {
+                if (inCodeBlock) {
+                    codeBlockContent.push(line);
+                    i++;
+                    continue;
+                }
+
+                // 处理分隔线
+                if (trimmedLine.match(/^[-*_]{3,}$/)) {
                     if (currentParagraph) {
                         container.appendChild(currentParagraph);
                         currentParagraph = null;
                     }
-                    const h3 = document.createElement('h3');
-                    h3.textContent = line.substring(4);
-                    container.appendChild(h3);
-                } else if (line.startsWith('## ')) {
-                    if (currentParagraph) {
-                        container.appendChild(currentParagraph);
-                        currentParagraph = null;
-                    }
-                    const h2 = document.createElement('h2');
-                    h2.textContent = line.substring(3);
-                    container.appendChild(h2);
-                } else if (line.startsWith('# ')) {
-                    if (currentParagraph) {
-                        container.appendChild(currentParagraph);
-                        currentParagraph = null;
-                    }
-                    const h1 = document.createElement('h1');
-                    h1.textContent = line.substring(2);
-                    container.appendChild(h1);
-                } else {
-                    // 普通文本，添加到段落
-                    if (!currentParagraph) {
-                        currentParagraph = document.createElement('p');
+                    const hr = document.createElement('hr');
+                    container.appendChild(hr);
+                    i++;
+                    continue;
+                }
+
+                // 处理表格
+                if (trimmedLine.includes('|') && trimmedLine.split('|').length >= 3) {
+                    // 检查是否是表头分隔行
+                    if (trimmedLine.match(/^\|[\s\-:]+$/)) {
+                        i++;
+                        continue;
                     }
 
-                    // 处理粗体和斜体（简单处理）
-                    this.appendFormattedText(line, currentParagraph);
-                    currentParagraph.appendChild(document.createElement('br'));
+                    const cells = trimmedLine.split('|').map(c => c.trim()).filter(c => c);
+                    if (cells.length > 0) {
+                        if (!inTable) {
+                            // 开始表格
+                            inTable = true;
+                            tableHeaders = cells;
+                            tableRows = [];
+                        } else {
+                            tableRows.push(cells);
+                        }
+                    }
+                    i++;
+                    continue;
+                } else if (inTable) {
+                    // 结束表格
+                    this.renderTable(tableHeaders, tableRows, container);
+                    inTable = false;
+                    tableHeaders = [];
+                    tableRows = [];
+                    currentParagraph = null;
+                    continue;
                 }
+
+                // 处理空行
+                if (!trimmedLine) {
+                    if (currentParagraph) {
+                        container.appendChild(currentParagraph);
+                        currentParagraph = null;
+                    }
+                    i++;
+                    continue;
+                }
+
+                // 处理标题
+                const headingMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/);
+                if (headingMatch) {
+                    if (currentParagraph) {
+                        container.appendChild(currentParagraph);
+                        currentParagraph = null;
+                    }
+                    const level = headingMatch[1].length;
+                    const text = headingMatch[2];
+                    const heading = document.createElement(`h${Math.min(level, 6)}`);
+                    this.appendFormattedText(text, heading);
+                    container.appendChild(heading);
+                    i++;
+                    continue;
+                }
+
+                // 处理引用
+                if (trimmedLine.startsWith('> ')) {
+                    // 如果当前不是引用块，先结束当前段落
+                    if (currentParagraph && currentParagraph.tagName !== 'BLOCKQUOTE') {
+                        container.appendChild(currentParagraph);
+                        currentParagraph = null;
+                    }
+                    // 如果当前没有引用块，创建新的引用块
+                    if (!currentParagraph) {
+                        currentParagraph = document.createElement('blockquote');
+                    }
+                    const quoteText = trimmedLine.substring(2);
+                    // 如果引用块中已有内容，添加换行
+                    if (currentParagraph.textContent.trim()) {
+                        const br = document.createElement('br');
+                        currentParagraph.appendChild(br);
+                    }
+                    this.appendFormattedText(quoteText, currentParagraph);
+                    i++;
+                    continue;
+                }
+
+                // 处理列表项（无序列表）
+                const unorderedListMatch = trimmedLine.match(/^[\*\-\+]\s+(.+)$/);
+                if (unorderedListMatch) {
+                    // 如果当前不是列表，先结束当前段落
+                    if (currentParagraph && currentParagraph.tagName !== 'UL') {
+                        container.appendChild(currentParagraph);
+                        currentParagraph = null;
+                    }
+                    // 如果当前没有列表或不是无序列表，创建新的无序列表
+                    if (!currentParagraph || currentParagraph.tagName !== 'UL') {
+                        if (currentParagraph) {
+                            container.appendChild(currentParagraph);
+                        }
+                        currentParagraph = document.createElement('ul');
+                    }
+                    const li = document.createElement('li');
+                    this.appendFormattedText(unorderedListMatch[1], li);
+                    currentParagraph.appendChild(li);
+                    i++;
+                    continue;
+                }
+
+                // 处理列表项（有序列表）
+                const orderedListMatch = trimmedLine.match(/^\d+\.\s+(.+)$/);
+                if (orderedListMatch) {
+                    // 如果当前不是列表，先结束当前段落
+                    if (currentParagraph && currentParagraph.tagName !== 'OL') {
+                        container.appendChild(currentParagraph);
+                        currentParagraph = null;
+                    }
+                    // 如果当前没有列表或不是有序列表，创建新的有序列表
+                    if (!currentParagraph || currentParagraph.tagName !== 'OL') {
+                        if (currentParagraph) {
+                            container.appendChild(currentParagraph);
+                        }
+                        currentParagraph = document.createElement('ol');
+                    }
+                    const li = document.createElement('li');
+                    this.appendFormattedText(orderedListMatch[1], li);
+                    currentParagraph.appendChild(li);
+                    i++;
+                    continue;
+                }
+
+                // 普通文本段落
+                // 如果当前是列表或其他非段落元素，先结束它
+                if (currentParagraph && currentParagraph.tagName !== 'P' && currentParagraph.tagName !== 'BLOCKQUOTE') {
+                    container.appendChild(currentParagraph);
+                    currentParagraph = null;
+                }
+
+                if (!currentParagraph) {
+                    currentParagraph = document.createElement('p');
+                }
+
+                this.appendFormattedText(trimmedLine, currentParagraph);
+                currentParagraph.appendChild(document.createElement('br'));
+                i++;
             }
 
-            // 添加最后一个段落
+            // 处理剩余内容
+            if (inCodeBlock && codeBlockContent.length > 0) {
+                const pre = document.createElement('pre');
+                const code = document.createElement('code');
+                code.textContent = codeBlockContent.join('\n');
+                pre.appendChild(code);
+                container.appendChild(pre);
+            }
+
+            if (inTable && tableRows.length > 0) {
+                this.renderTable(tableHeaders, tableRows, container);
+            }
+
             if (currentParagraph && currentParagraph.textContent.trim()) {
                 container.appendChild(currentParagraph);
             }
         }
 
+        renderTable(headers, rows, container) {
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const tbody = document.createElement('tbody');
+            const headerRow = document.createElement('tr');
+
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                this.appendFormattedText(header, th);
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+
+            rows.forEach(row => {
+                const tr = document.createElement('tr');
+                row.forEach(cell => {
+                    const td = document.createElement('td');
+                    this.appendFormattedText(cell, td);
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            table.appendChild(thead);
+            table.appendChild(tbody);
+            container.appendChild(table);
+        }
+
         appendFormattedText(text, container) {
-            // 简单的 Markdown 格式处理
+            // 增强的 Markdown 格式处理，支持链接、代码、粗体、斜体等
             const parts = [];
-            let currentText = '';
             let i = 0;
 
             while (i < text.length) {
-                // 处理粗体 **text**
-                if (text[i] === '*' && text[i + 1] === '*') {
-                    if (currentText) {
-                        parts.push({ type: 'text', content: currentText });
-                        currentText = '';
+                // 处理行内代码 `code`
+                if (text[i] === '`') {
+                    let codeText = '';
+                    i++;
+                    while (i < text.length && text[i] !== '`') {
+                        codeText += text[i];
+                        i++;
                     }
+                    if (i < text.length) {
+                        parts.push({ type: 'code', content: codeText });
+                        i++;
+                        continue;
+                    }
+                }
+
+                // 处理链接 [text](url)
+                if (text[i] === '[') {
+                    let linkText = '';
+                    i++;
+                    while (i < text.length && text[i] !== ']') {
+                        linkText += text[i];
+                        i++;
+                    }
+                    if (i < text.length && text[i + 1] === '(') {
+                        i += 2; // 跳过 ](
+                        let linkUrl = '';
+                        while (i < text.length && text[i] !== ')') {
+                            linkUrl += text[i];
+                            i++;
+                        }
+                        if (i < text.length) {
+                            parts.push({ type: 'link', text: linkText, url: linkUrl });
+                            i++;
+                            continue;
+                        }
+                    }
+                }
+
+                // 处理图片 ![alt](url)
+                if (text[i] === '!' && text[i + 1] === '[') {
+                    let altText = '';
+                    i += 2;
+                    while (i < text.length && text[i] !== ']') {
+                        altText += text[i];
+                        i++;
+                    }
+                    if (i < text.length && text[i + 1] === '(') {
+                        i += 2; // 跳过 ](
+                        let imgUrl = '';
+                        while (i < text.length && text[i] !== ')') {
+                            imgUrl += text[i];
+                            i++;
+                        }
+                        if (i < text.length) {
+                            parts.push({ type: 'image', alt: altText, url: imgUrl });
+                            i++;
+                            continue;
+                        }
+                    }
+                }
+
+                // 处理粗体 **text** 或 __text__
+                if ((text[i] === '*' && text[i + 1] === '*') || (text[i] === '_' && text[i + 1] === '_')) {
+                    const marker = text[i];
                     i += 2;
                     let boldText = '';
                     while (i < text.length - 1) {
-                        if (text[i] === '*' && text[i + 1] === '*') {
+                        if (text[i] === marker && text[i + 1] === marker) {
                             i += 2;
                             break;
                         }
@@ -1777,32 +2099,40 @@ ${newsContent}
                         i++;
                     }
                     parts.push({ type: 'bold', content: boldText });
+                    continue;
                 }
-                // 处理斜体 *text*
-                else if (text[i] === '*') {
-                    if (currentText) {
-                        parts.push({ type: 'text', content: currentText });
-                        currentText = '';
-                    }
-                    i++;
-                    let italicText = '';
-                    while (i < text.length) {
-                        if (text[i] === '*') {
-                            i++;
-                            break;
-                        }
-                        italicText += text[i];
-                        i++;
-                    }
-                    parts.push({ type: 'italic', content: italicText });
-                } else {
-                    currentText += text[i];
-                    i++;
-                }
-            }
 
-            if (currentText) {
-                parts.push({ type: 'text', content: currentText });
+                // 处理斜体 *text* 或 _text_（但不能是 ** 或 __）
+                if (text[i] === '*' || text[i] === '_') {
+                    if (text[i + 1] !== text[i]) {
+                        const marker = text[i];
+                        i++;
+                        let italicText = '';
+                        while (i < text.length) {
+                            if (text[i] === marker && (i === text.length - 1 || text[i + 1] !== marker)) {
+                                i++;
+                                break;
+                            }
+                            italicText += text[i];
+                            i++;
+                        }
+                        parts.push({ type: 'italic', content: italicText });
+                        continue;
+                    }
+                }
+
+                // 普通文本
+                let textStart = i;
+                while (i < text.length) {
+                    if (text[i] === '`' || text[i] === '[' || text[i] === '!' ||
+                        text[i] === '*' || text[i] === '_') {
+                        break;
+                    }
+                    i++;
+                }
+                if (i > textStart) {
+                    parts.push({ type: 'text', content: text.substring(textStart, i) });
+                }
             }
 
             // 创建 DOM 元素
@@ -1811,12 +2141,28 @@ ${newsContent}
                     container.appendChild(document.createTextNode(part.content));
                 } else if (part.type === 'bold') {
                     const strong = document.createElement('strong');
-                    strong.textContent = part.content;
+                    this.appendFormattedText(part.content, strong);
                     container.appendChild(strong);
                 } else if (part.type === 'italic') {
                     const em = document.createElement('em');
-                    em.textContent = part.content;
+                    this.appendFormattedText(part.content, em);
                     container.appendChild(em);
+                } else if (part.type === 'code') {
+                    const code = document.createElement('code');
+                    code.textContent = part.content;
+                    container.appendChild(code);
+                } else if (part.type === 'link') {
+                    const a = document.createElement('a');
+                    a.href = part.url;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    this.appendFormattedText(part.text, a);
+                    container.appendChild(a);
+                } else if (part.type === 'image') {
+                    const img = document.createElement('img');
+                    img.src = part.url;
+                    img.alt = part.alt;
+                    container.appendChild(img);
                 }
             }
         }
