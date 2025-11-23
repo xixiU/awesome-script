@@ -172,7 +172,6 @@ class FloatingWindow:
             self.root.destroy()
             self.root = None
 
-
 # ---------------------------------------------------------
 # 2. 服务类 (已修复语言判断逻辑)
 # ---------------------------------------------------------
@@ -217,6 +216,7 @@ class SystemAudioSubtitleService:
                 if self.model_size == "auto": self.model_size = "small"
         elif system == 'Linux':
             device = "cuda"
+            compute_type = "int8"
             if self.model_size == "auto": self.model_size = "small"
         logger.info(f"⚙️ 配置: {self.model_size} | {device} | {compute_type}")
         
@@ -243,13 +243,46 @@ class SystemAudioSubtitleService:
     def get_audio_device(self):
         try:
             devices = sd.query_devices()
-            keywords = ['blackhole', 'soundflower', 'loopback', 'stereo mix', 'what u hear']
+            system_type = platform.system() # 获取操作系统类型: 'Linux', 'Windows', 'Darwin'
+            
+            # 1. 定义关键词优先级
+            if system_type == 'Linux':
+                # Linux 必须优先找 pulse，否则容易崩
+                # 注意：Linux 下如果要“内录系统声音”，通常设备名里包含 'monitor'
+                # 如果只是想不崩（录麦克风），找 'pulse'
+                keywords = ['pulse', 'default'] 
+            else:
+                # Windows / Mac 继续找内录设备
+                keywords = ['blackhole', 'soundflower', 'loopback', 'stereo mix', 'what u hear']
+
+            # 2. 遍历查找
             for i, d in enumerate(devices):
-                if d['max_input_channels'] > 0 and any(k in d['name'].lower() for k in keywords):
-                    logger.info(f"🎤 选中设备: {d['name']}")
-                    return i
+                device_name = d['name'].lower()
+                if d['max_input_channels'] > 0:
+                    # 只要名字里包含关键词，就选中
+                    if any(k in device_name for k in keywords):
+                        # Linux 特殊处理：优先找 monitor (内录)，找不到再找普通的 pulse (麦克风)
+                        if system_type == 'Linux' and 'monitor' not in device_name:
+                            # 如果你想录系统声音，这里可以加个 pass 继续找 monitor
+                            # 但为了保证能跑，先选中它也行
+                            pass 
+                        
+                        print(f"🎤 [自动选择] 选中设备: {d['name']} (ID: {i})")
+                        return i
+            
+            # 3. 如果 Linux 上没找到 pulse，千万别直接返回 default[0]，会崩
+            if system_type == 'Linux':
+                # 再尝试暴力搜索一次包含 'pulse' 的
+                for i, d in enumerate(devices):
+                    if 'pulse' in d['name'].lower() and d['max_input_channels'] > 0:
+                        return i
+                        
+            print('⚠️ 未匹配到优选设备，使用系统默认')
             return sd.default.device[0]
-        except: return None
+            
+        except Exception as e:
+            print(f"❌ 获取设备失败: {e}")
+            return None
 
     def audio_callback(self, indata, frames, time, status):
         if self.is_recording: self.audio_queue.put(indata.copy())
