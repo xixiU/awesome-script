@@ -275,6 +275,7 @@ class SystemAudioSubtitleService:
                 # 再尝试暴力搜索一次包含 'pulse' 的
                 for i, d in enumerate(devices):
                     if 'pulse' in d['name'].lower() and d['max_input_channels'] > 0:
+                        print(f"🎤 [自动选择] 选中设备: {d['name']} (ID: {i})")
                         return i
                         
             print('⚠️ 未匹配到优选设备，使用系统默认')
@@ -291,9 +292,9 @@ class SystemAudioSubtitleService:
         t0 = time.time()
         try:
             segments, info = self.model.transcribe(
-                audio_data, beam_size=1, best_of=1, temperature=0,
+                audio_data, beam_size=2, best_of=1, temperature=0,
                 language=self.source_lang, initial_prompt=prompt,
-                vad_filter=True, vad_parameters=dict(min_silence_duration_ms=400),
+                vad_filter=False, vad_parameters=dict(min_silence_duration_ms=400),
                 condition_on_previous_text=False
             )
             text = " ".join([s.text.strip() for s in segments])
@@ -442,10 +443,12 @@ def main():
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--source-lang", type=str, default=None)
     parser.add_argument("--target-lang", type=str, default="zh-CN")
+    parser.add_argument("--chunk-duration", type=float, default=2.0)
+    
     args = parser.parse_args()
     
     s = SystemAudioSubtitleService(
-        model_size=args.model,device=args.device, target_lang=args.target_lang, source_lang=args.source_lang
+        model_size=args.model,device=args.device, target_lang=args.target_lang, source_lang=args.source_lang, chunk_duration=args.chunk_duration
     )
     s.start()
 
