@@ -28,9 +28,12 @@ logger = logging.getLogger(__name__)
 # 1. 悬浮窗口类
 # ---------------------------------------------------------
 class FloatingWindow:
-    def __init__(self, target_lang: str = "zh-CN", lang_callback: Callable = None):
+    def __init__(self, target_lang: str = "zh-CN", source_lang: str = "Auto", 
+                 lang_callback: Callable = None, source_lang_callback: Callable = None):
         self.target_lang = target_lang
+        self.source_lang = source_lang if source_lang else "Auto"
         self.lang_callback = lang_callback
+        self.source_lang_callback = source_lang_callback
         self.root = None
         self.original_text_label = None
         self.translated_text_label = None
@@ -102,14 +105,29 @@ class FloatingWindow:
         control_bar = tk.Frame(self.root, bg="#1a1a1a", height=30)
         control_bar.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
         
-        tk.Label(control_bar, text="目标语言:", fg="#888888", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
-        
-        self.lang_var = tk.StringVar(value=self.target_lang)
-        langs = ["zh-CN", "zh-TW", "en", "ja", "ko", "fr", "de", "es", "ru"]
+        # 1. 源语言选择
+        tk.Label(control_bar, text="源语言:", fg="#888888", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
+        self.source_lang_var = tk.StringVar(value=self.source_lang)
+        # Whisper 支持的常用语言代码
+        source_langs = ["Auto", "zh", "en", "ja", "ko", "fr", "de", "es", "ru"]
         
         style = ttk.Style()
         style.theme_use('default')
         style.configure("TCombobox", fieldbackground="#333333", background="#333333", foreground="white")
+        
+        self.source_combo = ttk.Combobox(control_bar, textvariable=self.source_lang_var, values=source_langs, 
+                                     width=6, state="readonly", style="TCombobox")
+        self.source_combo.pack(side=tk.LEFT, padx=5)
+        self.source_combo.bind("<<ComboboxSelected>>", self.on_source_lang_change)
+
+        # 间隔
+        tk.Label(control_bar, text="  →  ", fg="#555555", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
+
+        # 2. 目标语言选择
+        tk.Label(control_bar, text="目标语言:", fg="#888888", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
+        
+        self.lang_var = tk.StringVar(value=self.target_lang)
+        langs = ["zh-CN", "zh-TW", "en", "ja", "ko", "fr", "de", "es", "ru"]
         
         self.lang_combo = ttk.Combobox(control_bar, textvariable=self.lang_var, values=langs, 
                                      width=8, state="readonly", style="TCombobox")
@@ -122,6 +140,11 @@ class FloatingWindow:
         resize.bind("<B1-Motion>", self.on_resize)
 
         self.is_running = True
+
+    def on_source_lang_change(self, event):
+        new_lang = self.source_lang_var.get()
+        if self.source_lang_callback:
+            self.source_lang_callback(new_lang)
 
     def on_lang_change(self, event):
         new_lang = self.lang_var.get()
@@ -240,6 +263,12 @@ class SystemAudioSubtitleService:
         except Exception as e:
             logger.error(f"切换语言失败: {e}")
 
+    def update_source_lang(self, new_lang):
+        # "Auto" 转为 None，其他保持原样
+        lang_code = None if new_lang == "Auto" else new_lang
+        logger.info(f"🎤 切换源语言: {new_lang} -> {lang_code}")
+        self.source_lang = lang_code
+
     def get_audio_device(self):
         try:
             devices = sd.query_devices()
@@ -278,7 +307,12 @@ class SystemAudioSubtitleService:
                         print(f"🎤 [自动选择] 选中设备: {d['name']} (ID: {i})")
                         return i
                         
-            print('⚠️ 未匹配到优选设备，使用系统默认')
+            print('⚠️ 未匹配到优选设备，将使用系统默认输入设备。')
+            print('📋 当前可用设备列表:')
+            for i, d in enumerate(devices):
+                print(f"  [{i}] {d['name']} (In: {d['max_input_channels']}, Out: {d['max_output_channels']})")
+            
+            print('💡 提示: macOS 若需内录系统声音，请安装 BlackHole 并在系统声音设置中选为输出，同时在此脚本中被选中。')
             return sd.default.device[0]
             
         except Exception as e:
@@ -292,9 +326,13 @@ class SystemAudioSubtitleService:
         t0 = time.time()
         try:
             segments, info = self.model.transcribe(
-                audio_data, beam_size=2, best_of=1, temperature=0,
+                audio_data, beam_size=1, best_of=1, temperature=0,
                 language=self.source_lang, initial_prompt=prompt,
-                vad_filter=True, vad_parameters=dict(min_silence_duration_ms=100),
+                # 优化 VAD 参数: 
+                # threshold: 0.5->0.3 降低语音判定门槛，防丢字
+                # min_silence_duration_ms: 500ms 防止切碎语音
+                # speech_pad_ms: 400ms 保留首尾
+                vad_filter=False, vad_parameters=dict(threshold=0.3, min_silence_duration_ms=500, speech_pad_ms=400),
                 condition_on_previous_text=False
             )
             text = " ".join([s.text.strip() for s in segments])
@@ -408,7 +446,14 @@ class SystemAudioSubtitleService:
 
     def start(self):
         self.initialize()
-        self.floating_window = FloatingWindow(self.target_lang, self.update_translator)
+        # 传递初始的 source_lang (如果是 None，转为 "Auto" 给 UI 显示)
+        initial_source_ui = self.source_lang if self.source_lang else "Auto"
+        self.floating_window = FloatingWindow(
+            target_lang=self.target_lang, 
+            source_lang=initial_source_ui,
+            lang_callback=self.update_translator,
+            source_lang_callback=self.update_source_lang
+        )
         self.floating_window.create_window()
         
         idx = self.get_audio_device()
