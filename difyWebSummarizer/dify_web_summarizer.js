@@ -328,8 +328,9 @@
         }
         
         #dify-panel-content {
-            padding: 24px 24px 40px 24px;
+            padding: 24px;
             overflow-y: auto;
+            overflow-x: hidden;
             max-height: calc(80vh - 80px);
             line-height: 1.8;
             color: #333;
@@ -338,6 +339,7 @@
             -moz-user-select: text !important;
             -ms-user-select: text !important;
             cursor: text !important;
+            box-sizing: border-box;
         }
         
         #dify-panel-content h1, 
@@ -350,11 +352,6 @@
         
         #dify-panel-content p {
             margin-bottom: 12px;
-        }
-        
-        /* 确保最后一个元素有足够的底部间距 */
-        #dify-panel-content > *:last-child {
-            margin-bottom: 0;
         }
         
         #dify-panel-content ul, 
@@ -1654,6 +1651,9 @@ ${newsContent}
 
             // 将 Markdown 格式的结果转换为 DOM 元素
             this.renderMarkdownContent(result, contentDiv);
+
+            // 重置滚动位置到顶部，确保内容完整显示
+            contentDiv.scrollTop = 0;
 
             this.panel.classList.add('show');
             this.overlay.classList.add('show');
