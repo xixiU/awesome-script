@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.5.3
+// @version      1.5.4
 // @description  使用Dify工作流或Chrome Gemini AI智能总结网页内容，支持全文总结和选中文本总结
 // @author       xixiu
 // @match        *://*/*
@@ -326,6 +326,10 @@
             max-height: calc(80vh - 80px);
             line-height: 1.8;
             color: #333;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -moz-user-select: text !important;
+            -ms-user-select: text !important;
         }
         
         #dify-panel-content h1, 
@@ -1706,6 +1710,11 @@ ${newsContent}
             const handleMouseDown = (e) => {
                 // 如果点击的是按钮或其子元素，不触发拖拽
                 if (e.target.closest('button') || e.target.tagName === 'BUTTON') {
+                    return;
+                }
+
+                // 如果点击的是内容区域或其子元素，不触发拖拽，允许文本选择
+                if (e.target.closest('#dify-panel-content')) {
                     return;
                 }
 
