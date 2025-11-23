@@ -177,9 +177,9 @@
             animation: slideIn 0.3s ease;
         }
         
-        /* 拖拽状态 */
+        /* 拖拽状态 - 只在标题栏显示拖拽光标 */
         #dify-result-panel.draggable {
-            cursor: move;
+            cursor: default;
         }
         
         #dify-result-panel.dragging {
@@ -203,7 +203,7 @@
         #dify-result-panel.fullscreen #dify-panel-content {
             max-height: calc(100vh - 80px) !important;
             font-size: 18px !important;
-            padding: 32px !important;
+            padding: 32px 32px 48px 32px !important;
         }
         
         #dify-result-panel.fullscreen #dify-panel-content h1 {
@@ -236,6 +236,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            cursor: move;
         }
         
         #dify-panel-header h3 {
@@ -320,8 +321,14 @@
             cursor: grabbing;
         }
         
+        /* 标题栏中的按钮保持指针光标 */
+        #dify-panel-header button,
+        #dify-panel-header #dify-panel-actions {
+            cursor: pointer;
+        }
+        
         #dify-panel-content {
-            padding: 24px;
+            padding: 24px 24px 40px 24px;
             overflow-y: auto;
             max-height: calc(80vh - 80px);
             line-height: 1.8;
@@ -330,6 +337,7 @@
             -webkit-user-select: text !important;
             -moz-user-select: text !important;
             -ms-user-select: text !important;
+            cursor: text !important;
         }
         
         #dify-panel-content h1, 
@@ -342,6 +350,11 @@
         
         #dify-panel-content p {
             margin-bottom: 12px;
+        }
+        
+        /* 确保最后一个元素有足够的底部间距 */
+        #dify-panel-content > *:last-child {
+            margin-bottom: 0;
         }
         
         #dify-panel-content ul, 
@@ -385,6 +398,7 @@
             text-decoration: none;
             border-bottom: 1px solid transparent;
             transition: all 0.2s;
+            cursor: pointer;
         }
         
         #dify-panel-content a:hover {
