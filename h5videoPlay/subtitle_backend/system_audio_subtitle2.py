@@ -177,9 +177,10 @@ class FloatingWindow:
 # 2. 服务类 (已修复语言判断逻辑)
 # ---------------------------------------------------------
 class SystemAudioSubtitleService:
-    def __init__(self, model_size="small", target_lang="zh-CN", source_lang=None, 
+    def __init__(self, model_size="small", device = "cpu", target_lang="zh-CN", source_lang=None, 
                  sample_rate=16000, chunk_duration=2.0):
         self.model_size = model_size
+        self.device = device
         self.target_lang = target_lang
         self.source_lang = source_lang
         self.sample_rate = sample_rate
@@ -198,10 +199,9 @@ class SystemAudioSubtitleService:
 
     def initialize(self):
         system = platform.system()
-        device = "cpu"
         compute_type = "int8"
         threads = 4
-        
+        device = self.device
         if system == "Darwin":
             logger.info("💻 系统: macOS (Apple Silicon)")
             if self.model_size == "auto": self.model_size = "small"
@@ -215,11 +215,13 @@ class SystemAudioSubtitleService:
             else:
                 logger.info("💻 系统: Windows (CPU)")
                 if self.model_size == "auto": self.model_size = "small"
-        
+        elif system == 'Linux':
+            device = "cuda"
+            if self.model_size == "auto": self.model_size = "small"
         logger.info(f"⚙️ 配置: {self.model_size} | {device} | {compute_type}")
         
         self.model = WhisperModel(self.model_size, device=device, compute_type=compute_type, 
-                                cpu_threads=threads, num_workers=1, download_root="./models")
+                                cpu_threads=threads, num_workers=1)
         self.update_translator(self.target_lang)
         logger.info("✅ 服务就绪")
 
@@ -404,12 +406,13 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, default="auto")
+    parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--source-lang", type=str, default=None)
     parser.add_argument("--target-lang", type=str, default="zh-CN")
     args = parser.parse_args()
     
     s = SystemAudioSubtitleService(
-        model_size=args.model, target_lang=args.target_lang, source_lang=args.source_lang
+        model_size=args.model,device=args.device, target_lang=args.target_lang, source_lang=args.source_lang
     )
     s.start()
 
