@@ -294,7 +294,7 @@ class SystemAudioSubtitleService:
             segments, info = self.model.transcribe(
                 audio_data, beam_size=2, best_of=1, temperature=0,
                 language=self.source_lang, initial_prompt=prompt,
-                vad_filter=False, vad_parameters=dict(min_silence_duration_ms=400),
+                vad_filter=True, vad_parameters=dict(min_silence_duration_ms=100),
                 condition_on_previous_text=False
             )
             text = " ".join([s.text.strip() for s in segments])
