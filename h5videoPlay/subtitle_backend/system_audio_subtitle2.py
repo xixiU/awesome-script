@@ -38,7 +38,13 @@ class FloatingWindow:
         self.original_text_label = None
         self.translated_text_label = None
         self.is_running = False
+        self.show_latency_var = None  # 延迟显示开关
         
+        # 缓存最后一次显示的文本和延迟信息，用于切换开关时即时刷新
+        self.last_org = "Waiting for audio..."
+        self.last_trans = ""
+        self.last_latencies = {}
+
         # 拖拽相关
         self.drag_start_x = 0
         self.drag_start_y = 0
@@ -47,6 +53,10 @@ class FloatingWindow:
         self.dragging = False
         self.resizing = False
         
+        # UI 更新队列 (解决 Linux 下直接 callback 导致的 UI 卡死问题)
+        self.ui_queue = queue.Queue()
+        self.resize_mode = None
+
     def create_window(self):
         self.root = tk.Tk()
         self.root.title("实时字幕")
@@ -70,14 +80,25 @@ class FloatingWindow:
         self.root.geometry(f"{w}x{h}+{x}+{y}")
         self.root.configure(bg='#1a1a1a')
         
+        # --- 创建一个内部容器，留出 5px 间距作为边缘调整区 ---
+        self.container = tk.Frame(self.root, bg="#1a1a1a")
+        self.container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # --- 绑定边缘调整事件到 root ---
+        self.root.bind("<Motion>", self._on_root_motion)
+        self.root.bind("<Button-1>", self._start_root_drag)
+        self.root.bind("<B1-Motion>", self._on_root_drag)
+        self.root.bind("<ButtonRelease-1>", self._end_root_drag)
+
         # --- 标题栏 ---
-        title_bar = tk.Frame(self.root, bg="#2a2a2a", height=25, cursor="fleur")
+        title_bar = tk.Frame(self.container, bg="#2a2a2a", height=25, cursor="fleur")
         title_bar.pack(fill=tk.X, side=tk.TOP)
         title_bar.pack_propagate(False)
         
         title_lbl = tk.Label(title_bar, text="::: 拖拽移动 :::", fg="#888888", bg="#2a2a2a", font=("Arial", 8))
         title_lbl.pack(side=tk.LEFT, padx=10)
         
+        # 标题栏保留原有的移动窗口逻辑
         for w in [title_bar, title_lbl]:
             w.bind("<Button-1>", self.start_drag)
             w.bind("<B1-Motion>", self.on_drag)
@@ -86,7 +107,7 @@ class FloatingWindow:
                  bg="#ff4444", fg="white", relief=tk.FLAT, width=3).pack(side=tk.RIGHT)
 
         # --- 内容区 ---
-        content = tk.Frame(self.root, bg="#1a1a1a")
+        content = tk.Frame(self.container, bg="#1a1a1a")
         content.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         self.original_text_label = tk.Label(content, text="Waiting for audio...", 
@@ -102,7 +123,7 @@ class FloatingWindow:
         self.translated_text_label.pack(fill=tk.X, pady=(5,5))
 
         # --- 底部控制栏 (语言选择) ---
-        control_bar = tk.Frame(self.root, bg="#1a1a1a", height=30)
+        control_bar = tk.Frame(self.container, bg="#1a1a1a", height=30)
         control_bar.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
         
         # 1. 源语言选择
@@ -134,12 +155,112 @@ class FloatingWindow:
         self.lang_combo.pack(side=tk.LEFT, padx=5)
         self.lang_combo.bind("<<ComboboxSelected>>", self.on_lang_change)
         
-        resize = tk.Frame(control_bar, bg="#555555", width=12, height=12, cursor="sizing")
-        resize.pack(side=tk.RIGHT, anchor=tk.SE)
-        resize.bind("<Button-1>", self.start_resize)
-        resize.bind("<B1-Motion>", self.on_resize)
+        # 3. 延迟显示开关
+        self.show_latency_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(control_bar, text="显示延迟", variable=self.show_latency_var, 
+                      command=self.on_latency_toggle,
+                      bg="#1a1a1a", fg="#888888", selectcolor="#333333", 
+                      activebackground="#1a1a1a", activeforeground="#ffffff").pack(side=tk.LEFT, padx=10)
 
+        # 移除旧的右下角 Resize Grip，改用边缘拖拽
+        # resize = tk.Frame(control_bar, bg="#555555", width=12, height=12, cursor="sizing") ...
+        
         self.is_running = True
+        
+        # 启动 UI 轮询循环
+        self._process_ui_queue()
+
+    # --- 新增：边缘拖拽调整大小逻辑 ---
+    def _on_root_motion(self, event):
+        # 如果正在拖拽中，不改变光标
+        if self.resizing: return
+        
+        w, h = self.root.winfo_width(), self.root.winfo_height()
+        x, y = event.x, event.y
+        margin = 10  # 边缘检测范围
+        
+        self.resize_mode = None
+        cursor = ""
+        
+        on_right = (x > w - margin)
+        on_bottom = (y > h - margin)
+        
+        if on_right and on_bottom:
+            self.resize_mode = "se"
+            cursor = "bottom_right_corner" if platform.system() != "Windows" else "size_nw_se"
+        elif on_right:
+            self.resize_mode = "e"
+            cursor = "sb_h_double_arrow" if platform.system() != "Windows" else "size_we"
+        elif on_bottom:
+            self.resize_mode = "s"
+            cursor = "sb_v_double_arrow" if platform.system() != "Windows" else "size_ns"
+            
+        if cursor:
+            self.root.config(cursor=cursor)
+        else:
+            self.root.config(cursor="")
+
+    def _start_root_drag(self, event):
+        if self.resize_mode:
+            self.resizing = True
+            self.resize_start_x = event.x_root
+            self.resize_start_y = event.y_root
+            self.resize_start_w = self.root.winfo_width()
+            self.resize_start_h = self.root.winfo_height()
+
+    def _on_root_drag(self, event):
+        if self.resizing and self.resize_mode:
+            dx = event.x_root - self.resize_start_x
+            dy = event.y_root - self.resize_start_y
+            
+            new_w = self.resize_start_w
+            new_h = self.resize_start_h
+            
+            if "e" in self.resize_mode:
+                new_w = max(300, self.resize_start_w + dx)
+            if "s" in self.resize_mode:
+                new_h = max(150, self.resize_start_h + dy)
+                
+            self.root.geometry(f"{new_w}x{new_h}")
+            
+            # 更新换行宽度
+            if self.original_text_label:
+                self.original_text_label.config(wraplength=new_w-40)
+            if self.translated_text_label:
+                self.translated_text_label.config(wraplength=new_w-40)
+
+    def _end_root_drag(self, event):
+        self.resizing = False
+        self.resize_mode = None
+        self.root.config(cursor="")
+
+
+    def _process_ui_queue(self):
+        """
+        定时轮询 UI 队列，在主线程中更新界面。
+        这种 'Queue + Polling' 模式比直接 'root.after' 更稳健，
+        特别是在 Linux (X11/Wayland) 下能防止 UI 假死。
+        """
+        try:
+            latest = None
+            # 消费掉队列中积压的所有更新，只保留最新的一个
+            while True:
+                latest = self.ui_queue.get_nowait()
+        except queue.Empty:
+            pass
+        
+        if latest:
+            # 兼容旧的队列数据格式 (org, trans) 或 (org, trans, latencies)
+            if len(latest) == 3:
+                org, trans, latencies = latest
+            else:
+                org, trans = latest
+                latencies = {}
+            self._update_ui(org, trans, latencies)
+            
+        # 每 100ms 轮询一次
+        if self.is_running and self.root:
+            self.root.after(100, self._process_ui_queue)
 
     def on_source_lang_change(self, event):
         new_lang = self.source_lang_var.get()
@@ -150,6 +271,10 @@ class FloatingWindow:
         new_lang = self.lang_var.get()
         if self.lang_callback:
             self.lang_callback(new_lang)
+
+    def on_latency_toggle(self):
+        # 切换开关时，使用缓存的数据立即刷新 UI
+        self._update_ui(self.last_org, self.last_trans, self.last_latencies)
 
     def start_drag(self, event):
         self.dragging = True
@@ -181,13 +306,30 @@ class FloatingWindow:
             self.original_text_label.config(wraplength=w-20)
             self.translated_text_label.config(wraplength=w-20)
 
-    def update_text(self, org, trans):
-        if not self.root: return
-        self.root.after(0, lambda: self._update_ui(org, trans))
+    def update_text(self, org, trans, latencies=None):
+        # 将更新请求放入队列，而不是直接操作 UI
+        self.ui_queue.put((org, trans, latencies))
         
-    def _update_ui(self, org, trans):
-        if self.original_text_label: self.original_text_label.config(text=org)
-        if self.translated_text_label: self.translated_text_label.config(text=trans)
+    def _update_ui(self, org, trans, latencies=None):
+        # 更新缓存
+        self.last_org = org
+        self.last_trans = trans
+        self.last_latencies = latencies or {}
+
+        show_latency = self.show_latency_var.get() if self.show_latency_var else False
+        
+        # 格式化显示文本
+        org_display = org
+        trans_display = trans
+        
+        if show_latency and latencies:
+            if 'rec' in latencies:
+                org_display = f"{org}  [{latencies['rec']:.2f}s]"
+            if 'trans' in latencies:
+                trans_display = f"{trans}  [{latencies['trans']:.2f}s]"
+
+        if self.original_text_label: self.original_text_label.config(text=org_display)
+        if self.translated_text_label: self.translated_text_label.config(text=trans_display)
 
     def close_window(self):
         self.is_running = False
@@ -340,11 +482,11 @@ class SystemAudioSubtitleService:
             
             if text:
                 logger.info(f"👂 原文 [{info.language}][{cost:.2f}s]: {text}")
-                return text, info.language
-            return None, None
+                return text, info.language, cost
+            return None, None, 0
         except Exception as e:
             logger.error(f"推理错误: {e}")
-            return None, None
+            return None, None, 0
 
     # === 新增：判断语言是否一致 ===
     def _is_same_language(self, detected_lang, target_lang):
@@ -377,7 +519,7 @@ class SystemAudioSubtitleService:
                 try: chunk = self.audio_queue.get(timeout=0.5)
                 except:
                     if time.time() - self.last_speech_time > 3.0 and self.sentence_buffer:
-                        self._translate_worker(self.sentence_buffer, final=True)
+                        self._translate_worker(self.sentence_buffer, 0.0, final=True)
                         self.sentence_buffer = ""
                     continue
 
@@ -394,7 +536,7 @@ class SystemAudioSubtitleService:
                     self.prev_audio = raw_audio[-overlap_samples:]
                     prompt = self.sentence_buffer[-50:] if self.sentence_buffer else ""
                     
-                    text, lang = self.process_audio_chunk(proc_audio, prompt)
+                    text, lang, cost = self.process_audio_chunk(proc_audio, prompt)
                     
                     if text:
                         self.last_speech_time = time.time()
@@ -407,16 +549,16 @@ class SystemAudioSubtitleService:
                         
                         # 1. 先在原文区域显示（带省略号表示未完）
                         if self.floating_window:
-                            self.floating_window.update_text(self.sentence_buffer, "...")
+                            self.floating_window.update_text(self.sentence_buffer, "...", {'rec': cost})
                         
                         # 2. 判断是否需要翻译 (修复后的逻辑)
                         if not self._is_same_language(lang, self.target_lang):
-                            self._translate_worker(self.sentence_buffer, final=False)
+                            self._translate_worker(self.sentence_buffer, cost, final=False)
                         else:
                             # 同语言：译文区直接显示原文
                             logger.info(f"⏭️ 同语言 [{lang}=={self.target_lang}]，跳过翻译")
                             if self.floating_window:
-                                self.floating_window.update_text(self.sentence_buffer, self.sentence_buffer)
+                                self.floating_window.update_text(self.sentence_buffer, self.sentence_buffer, {'rec': cost})
                     
                     audio_buffer = []
                     curr_samples = 0
@@ -427,7 +569,7 @@ class SystemAudioSubtitleService:
         if not text: return False
         return any(u'\u4e00' <= char <= u'\u9fff' for char in text)
 
-    def _translate_worker(self, text, final=False):
+    def _translate_worker(self, text, rec_cost=0.0, final=False):
         def task():
             t0 = time.time()
             try:
@@ -439,7 +581,7 @@ class SystemAudioSubtitleService:
                 logger.info(f"🌍 译文 [{cost:.2f}s]: {res}")
                 
                 if self.floating_window:
-                    self.floating_window.update_text(text, res)
+                    self.floating_window.update_text(text, res, {'rec': rec_cost, 'trans': cost})
             except Exception as e:
                 logger.error(f"翻译失败: {e}")
         threading.Thread(target=task, daemon=True).start()
