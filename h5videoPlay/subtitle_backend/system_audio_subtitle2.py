@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+from typing import Any
 import os
 import sys
 import queue
@@ -350,8 +350,8 @@ class SystemAudioSubtitleService:
         self.sample_rate = sample_rate
         self.chunk_samples = int(sample_rate * chunk_duration)
         
-        self.model = None
-        self.translator = None
+        self.model : WhisperModel | None  = None
+        self.translator : GoogleTranslator | None= None
         self.audio_queue = queue.Queue()
         self.is_recording = False
         self.process_thread = None
@@ -467,6 +467,7 @@ class SystemAudioSubtitleService:
     def process_audio_chunk(self, audio_data, prompt=""):
         t0 = time.time()
         try:
+            assert self.model is not None
             segments, info = self.model.transcribe(
                 audio_data, beam_size=1, best_of=1, temperature=0,
                 language=self.source_lang, initial_prompt=prompt,
