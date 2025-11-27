@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.5.3
+// @version      1.5.4
 // @description  使用Dify工作流或Chrome Gemini AI智能总结网页内容，支持全文总结和选中文本总结
 // @author       xixiu
 // @match        *://*/*
@@ -177,9 +177,9 @@
             animation: slideIn 0.3s ease;
         }
         
-        /* 拖拽状态 */
+        /* 拖拽状态 - 只在标题栏显示拖拽光标 */
         #dify-result-panel.draggable {
-            cursor: move;
+            cursor: default;
         }
         
         #dify-result-panel.dragging {
@@ -203,7 +203,7 @@
         #dify-result-panel.fullscreen #dify-panel-content {
             max-height: calc(100vh - 80px) !important;
             font-size: 18px !important;
-            padding: 32px !important;
+            padding: 32px 32px 48px 32px !important;
         }
         
         #dify-result-panel.fullscreen #dify-panel-content h1 {
@@ -236,6 +236,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            cursor: move;
         }
         
         #dify-panel-header h3 {
@@ -320,12 +321,25 @@
             cursor: grabbing;
         }
         
+        /* 标题栏中的按钮保持指针光标 */
+        #dify-panel-header button,
+        #dify-panel-header #dify-panel-actions {
+            cursor: pointer;
+        }
+        
         #dify-panel-content {
             padding: 24px;
             overflow-y: auto;
+            overflow-x: hidden;
             max-height: calc(80vh - 80px);
             line-height: 1.8;
             color: #333;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -moz-user-select: text !important;
+            -ms-user-select: text !important;
+            cursor: text !important;
+            box-sizing: border-box;
         }
         
         #dify-panel-content h1, 
@@ -381,6 +395,7 @@
             text-decoration: none;
             border-bottom: 1px solid transparent;
             transition: all 0.2s;
+            cursor: pointer;
         }
         
         #dify-panel-content a:hover {
@@ -1637,6 +1652,9 @@ ${newsContent}
             // 将 Markdown 格式的结果转换为 DOM 元素
             this.renderMarkdownContent(result, contentDiv);
 
+            // 重置滚动位置到顶部，确保内容完整显示
+            contentDiv.scrollTop = 0;
+
             this.panel.classList.add('show');
             this.overlay.classList.add('show');
         }
@@ -1706,6 +1724,11 @@ ${newsContent}
             const handleMouseDown = (e) => {
                 // 如果点击的是按钮或其子元素，不触发拖拽
                 if (e.target.closest('button') || e.target.tagName === 'BUTTON') {
+                    return;
+                }
+
+                // 如果点击的是内容区域或其子元素，不触发拖拽，允许文本选择
+                if (e.target.closest('#dify-panel-content')) {
                     return;
                 }
 
