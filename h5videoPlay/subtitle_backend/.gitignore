@@ -14,8 +14,8 @@ venv/
 # 模型文件
 *.pt
 *.pth
-models/
-
+models/models--Systran--faster-whisper-small/
+models/.locks
 # 环境配置
 .env
 .env.local
@@ -29,4 +29,6 @@ models/
 # 系统文件
 .DS_Store
 Thumbs.db
+
+model_config.json
 

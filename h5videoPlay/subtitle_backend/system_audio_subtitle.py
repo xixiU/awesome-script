@@ -14,8 +14,12 @@ from typing import Optional, Callable
 
 import numpy as np
 import sounddevice as sd
-from faster_whisper import WhisperModel
 from deep_translator import GoogleTranslator
+
+# 导入模型管理器和配置管理器
+from models.model_manager import ModelManager
+from models.base_model import BaseSpeechToTextModel
+from config_manager import ConfigManager
 
 # 配置日志
 logging.basicConfig(
@@ -29,11 +33,15 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------
 class FloatingWindow:
     def __init__(self, target_lang: str = "zh-CN", source_lang: str = "Auto", 
-                 lang_callback: Callable = None, source_lang_callback: Callable = None):
+                 lang_callback: Callable = None, source_lang_callback: Callable = None,
+                 model_callback: Callable = None, available_models: list = None, current_model: str = "whisper"):
         self.target_lang = target_lang
         self.source_lang = source_lang if source_lang else "Auto"
         self.lang_callback = lang_callback
         self.source_lang_callback = source_lang_callback
+        self.model_callback = model_callback
+        self.available_models = available_models or ["whisper"]
+        self.current_model = current_model
         self.root = None
         self.original_text_label = None
         self.translated_text_label = None
@@ -122,19 +130,43 @@ class FloatingWindow:
                                             wraplength=780, justify="center")
         self.translated_text_label.pack(fill=tk.X, pady=(5,5))
 
-        # --- 底部控制栏 (语言选择) ---
+        # --- 底部控制栏 (语言选择和模型选择) ---
         control_bar = tk.Frame(self.container, bg="#1a1a1a", height=30)
         control_bar.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
+        
+        # 0. 模型选择（新增）
+        tk.Label(control_bar, text="模型:", fg="#888888", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
+        self.model_var = tk.StringVar(value=self.current_model)
+        
+        style = ttk.Style()
+        style.theme_use('default')
+        style.configure("TCombobox", fieldbackground="#333333", background="#333333", foreground="white")
+        
+        # 模型显示名称映射
+        model_display_names = {
+            "whisper": "Whisper (本地)",
+            "siliconflow": "硅基流动 (API)"
+        }
+        model_values = [model_display_names.get(m, m) for m in self.available_models]
+        
+        self.model_combo = ttk.Combobox(control_bar, textvariable=self.model_var, values=model_values, 
+                                     width=15, state="readonly", style="TCombobox")
+        self.model_combo.pack(side=tk.LEFT, padx=5)
+        self.model_combo.bind("<<ComboboxSelected>>", self.on_model_change)
+        
+        # 设置当前选中的模型
+        if self.current_model in self.available_models:
+            current_display = model_display_names.get(self.current_model, self.current_model)
+            self.model_var.set(current_display)
+        
+        # 间隔
+        tk.Label(control_bar, text="  |  ", fg="#555555", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
         
         # 1. 源语言选择
         tk.Label(control_bar, text="源语言:", fg="#888888", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
         self.source_lang_var = tk.StringVar(value=self.source_lang)
         # Whisper 支持的常用语言代码
         source_langs = ["Auto", "zh", "en", "ja", "ko", "fr", "de", "es", "ru"]
-        
-        style = ttk.Style()
-        style.theme_use('default')
-        style.configure("TCombobox", fieldbackground="#333333", background="#333333", foreground="white")
         
         self.source_combo = ttk.Combobox(control_bar, textvariable=self.source_lang_var, values=source_langs, 
                                      width=6, state="readonly", style="TCombobox")
@@ -154,7 +186,7 @@ class FloatingWindow:
                                      width=8, state="readonly", style="TCombobox")
         self.lang_combo.pack(side=tk.LEFT, padx=5)
         self.lang_combo.bind("<<ComboboxSelected>>", self.on_lang_change)
-        
+
         # 3. 延迟显示开关
         self.show_latency_var = tk.BooleanVar(value=False)
         tk.Checkbutton(control_bar, text="显示延迟", variable=self.show_latency_var, 
@@ -262,6 +294,27 @@ class FloatingWindow:
         if self.is_running and self.root:
             self.root.after(100, self._process_ui_queue)
 
+    def on_model_change(self, event):
+        """模型切换回调"""
+        display_name = self.model_var.get()
+        # 从显示名称映射回模型名称
+        model_display_map = {
+            "Whisper (本地)": "whisper",
+            "硅基流动 (API)": "siliconflow"
+        }
+        # 反向查找
+        model_name = None
+        for display, name in model_display_map.items():
+            if display == display_name:
+                model_name = name
+                break
+        if not model_name:
+            # 如果找不到映射，直接使用显示名称
+            model_name = display_name
+        
+        if self.model_callback:
+            self.model_callback(model_name)
+    
     def on_source_lang_change(self, event):
         new_lang = self.source_lang_var.get()
         if self.source_lang_callback:
@@ -342,7 +395,8 @@ class FloatingWindow:
 # ---------------------------------------------------------
 class SystemAudioSubtitleService:
     def __init__(self, model_size="small", device = "cpu", target_lang="zh-CN", source_lang=None, 
-                 sample_rate=16000, chunk_duration=2.0):
+                 sample_rate=16000, chunk_duration=2.0, config_file="model_config.json"):
+        # 保留旧参数以兼容，但优先使用配置管理器
         self.model_size = model_size
         self.device = device
         self.target_lang = target_lang
@@ -350,8 +404,12 @@ class SystemAudioSubtitleService:
         self.sample_rate = sample_rate
         self.chunk_samples = int(sample_rate * chunk_duration)
         
-        self.model : WhisperModel | None  = None
-        self.translator : GoogleTranslator | None= None
+        # 初始化配置管理器
+        self.config_manager = ConfigManager(config_file)
+        
+        # 使用新的模型接口
+        self.model: BaseSpeechToTextModel | None = None
+        self.translator: GoogleTranslator | None = None
         self.audio_queue = queue.Queue()
         self.is_recording = False
         self.process_thread = None
@@ -362,33 +420,98 @@ class SystemAudioSubtitleService:
         self.last_speech_time = time.time()
 
     def initialize(self):
-        system = platform.system()
-        compute_type = "int8"
-        threads = 4
-        device = self.device
-        if system == "Darwin":
-            logger.info("💻 系统: macOS (Apple Silicon)")
-            if self.model_size == "auto": self.model_size = "small"
-        elif system == "Windows":
-            if self._check_cuda():
-                logger.info("🚀 系统: Windows (CUDA加速)")
-                device = "cuda"
-                compute_type = "float16"
-                threads = 0
-                if self.model_size == "auto": self.model_size = "deepdml/faster-whisper-large-v3-turbo-ct2"
-            else:
-                logger.info("💻 系统: Windows (CPU)")
-                if self.model_size == "auto": self.model_size = "small"
-        elif system == 'Linux':
-            device = "cuda"
-            compute_type = "int8"
-            if self.model_size == "auto": self.model_size = "small"
-        logger.info(f"⚙️ 配置: {self.model_size} | {device} | {compute_type}")
+        """初始化服务，使用配置管理器加载模型"""
+        # 获取当前模型配置
+        current_model_name = self.config_manager.get_current_model()
+        model_config = self.config_manager.get_model_config(current_model_name)
         
-        self.model = WhisperModel(self.model_size, device=device, compute_type=compute_type, 
-                                cpu_threads=threads, num_workers=1)
+        if not model_config:
+            logger.error(f"❌ 无法加载模型配置: {current_model_name}")
+            # 回退到默认whisper配置
+            current_model_name = "whisper"
+            model_config = self.config_manager.get_model_config("whisper")
+            if not model_config:
+                logger.error("❌ 无法加载默认模型配置")
+                raise RuntimeError("模型配置加载失败")
+        
+        model_type = model_config.get("type", current_model_name)
+        logger.info(f"🚀 初始化模型: {current_model_name} (类型: {model_type})")
+        
+        # 如果是whisper模型，需要自动检测设备配置
+        if model_type == "whisper":
+            system = platform.system()
+            if "device" not in model_config or model_config["device"] == "auto":
+                if system == "Darwin":
+                    logger.info("💻 系统: macOS (Apple Silicon)")
+                    model_config["device"] = "cpu"
+                    model_config["compute_type"] = "int8"
+                    model_config["cpu_threads"] = 4
+                elif system == "Windows":
+                    if self._check_cuda():
+                        logger.info("🚀 系统: Windows (CUDA加速)")
+                        model_config["device"] = "cuda"
+                        model_config["compute_type"] = "float16"
+                        model_config["cpu_threads"] = 0
+                    else:
+                        logger.info("💻 系统: Windows (CPU)")
+                        model_config["device"] = "cpu"
+                        model_config["compute_type"] = "int8"
+                        model_config["cpu_threads"] = 4
+                elif system == 'Linux':
+                    model_config["device"] = "cuda"
+                    model_config["compute_type"] = "int8"
+                    model_config["cpu_threads"] = 4
+            
+            # 如果model_size是auto，自动选择
+            if model_config.get("model_size") == "auto":
+                system = platform.system()
+                if system == "Windows" and model_config.get("device") == "cuda":
+                    model_config["model_size"] = "deepdml/faster-whisper-large-v3-turbo-ct2"
+                else:
+                    model_config["model_size"] = "small"
+        
+        # 使用模型管理器创建模型
+        self.model = ModelManager.create_model(model_type, model_config)
+        
+        if not self.model:
+            logger.error(f"❌ 模型创建失败: {current_model_name}")
+            raise RuntimeError(f"模型创建失败: {current_model_name}")
+        
         self.update_translator(self.target_lang)
         logger.info("✅ 服务就绪")
+    
+    def switch_model(self, model_name: str):
+        """切换模型"""
+        logger.info(f"🔄 切换模型: {model_name}")
+        
+        # 保存旧模型
+        old_model = self.model
+        
+        # 获取新模型配置
+        model_config = self.config_manager.get_model_config(model_name)
+        if not model_config:
+            logger.error(f"❌ 无法加载模型配置: {model_name}")
+            return False
+        
+        model_type = model_config.get("type", model_name)
+        
+        # 创建新模型
+        new_model = ModelManager.create_model(model_type, model_config)
+        if not new_model:
+            logger.error(f"❌ 模型创建失败: {model_name}")
+            return False
+        
+        # 切换模型
+        if old_model:
+            try:
+                old_model.cleanup()
+            except:
+                pass
+        
+        self.model = new_model
+        self.config_manager.set_current_model(model_name)
+        logger.info(f"✅ 模型切换成功: {model_name}")
+        return True
 
     def _check_cuda(self):
         try:
@@ -465,26 +588,24 @@ class SystemAudioSubtitleService:
         if self.is_recording: self.audio_queue.put(indata.copy())
 
     def process_audio_chunk(self, audio_data, prompt=""):
-        t0 = time.time()
+        """处理音频块，使用统一的模型接口"""
+        if not self.model:
+            logger.error("模型未初始化")
+            return None, None, 0
+        
         try:
-            assert self.model is not None
-            segments, info = self.model.transcribe(
-                audio_data, beam_size=1, best_of=1, temperature=0,
-                language=self.source_lang, initial_prompt=prompt,
-                # 优化 VAD 参数: 
-                # threshold: 0.5->0.3 降低语音判定门槛，防丢字
-                # min_silence_duration_ms: 500ms 防止切碎语音
-                # speech_pad_ms: 400ms 保留首尾
-                vad_filter=False, vad_parameters=dict(threshold=0.3, min_silence_duration_ms=500, speech_pad_ms=400),
-                condition_on_previous_text=False
+            # 使用统一的模型接口
+            text, detected_lang, cost = self.model.transcribe(
+                audio_data,
+                sample_rate=self.sample_rate,
+                language=self.source_lang,
+                prompt=prompt
             )
-            text = " ".join([s.text.strip() for s in segments])
-            cost = time.time() - t0
             
             if text:
-                logger.info(f"👂 原文 [{info.language}][{cost:.2f}s]: {text}")
-                return text, info.language, cost
-            return None, None, 0
+                logger.info(f"👂 原文 [{detected_lang}][{cost:.2f}s]: {text}")
+                return text, detected_lang, cost
+            return None, None, cost
         except Exception as e:
             logger.error(f"推理错误: {e}")
             return None, None, 0
@@ -591,11 +712,19 @@ class SystemAudioSubtitleService:
         self.initialize()
         # 传递初始的 source_lang (如果是 None，转为 "Auto" 给 UI 显示)
         initial_source_ui = self.source_lang if self.source_lang else "Auto"
+        
+        # 获取可用模型列表
+        available_models = self.config_manager.get_available_models()
+        current_model = self.config_manager.get_current_model()
+        
         self.floating_window = FloatingWindow(
             target_lang=self.target_lang, 
             source_lang=initial_source_ui,
             lang_callback=self.update_translator,
-            source_lang_callback=self.update_source_lang
+            source_lang_callback=self.update_source_lang,
+            model_callback=self.switch_model,
+            available_models=available_models,
+            current_model=current_model
         )
         self.floating_window.create_window()
         

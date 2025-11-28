@@ -1,0 +1,25 @@
+{
+    "current_model": "whisper",
+    "models": {
+        "whisper": {
+            "type": "whisper",
+            "enabled": true,
+            "config": {
+                "model_size": "small",
+                "device": "cpu",
+                "compute_type": "int8",
+                "cpu_threads": 4
+            }
+        },
+        "siliconflow": {
+            "type": "siliconflow",
+            "enabled": true,
+            "config": {
+                "api_key": "your-api-key-here",
+                "base_url": "https://api.siliconflow.cn/v1",
+                "model_id": "siliconflow/asr-paraformer-zh",
+                "timeout": 30
+            }
+        }
+    }
+}
