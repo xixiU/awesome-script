@@ -15,7 +15,7 @@ from .base_model import BaseSpeechToTextModel
 
 logger = logging.getLogger(__name__)
 
-
+#https://docs.siliconflow.cn/cn/api-reference/audio/create-audio-transcriptions
 class SiliconFlowSTTModel(BaseSpeechToTextModel):
     """硅基流动语音转文字模型 - OpenAI兼容API"""
     
@@ -25,7 +25,7 @@ class SiliconFlowSTTModel(BaseSpeechToTextModel):
         # 使用OpenAI兼容的API端点
         self.base_url = config.get('base_url', 'https://api.siliconflow.cn/v1')
         self.api_url = f"{self.base_url}/audio/transcriptions"
-        # 硅基流动支持的模型ID，可根据实际调整
+        # 硅基流动支持的模型ID，可根据实际调整,支持FunAudioLLM/SenseVoiceSmall，TeleAI/TeleSpeechASR
         self.model_id = config.get('model_id', 'FunAudioLLM/SenseVoiceSmall')
         self.timeout = config.get('timeout', 30)
         self._initialized = False

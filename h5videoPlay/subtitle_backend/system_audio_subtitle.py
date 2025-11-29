@@ -1,25 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-from typing import Any
-import os
-import sys
-import queue
-import threading
+"""
+系统音频实时字幕服务
+整合UI、音频采集、语音转文字、翻译等模块
+"""
 import logging
-import platform
+import threading
 import time
-import tkinter as tk
-from tkinter import ttk
-from typing import Optional, Callable
-
 import numpy as np
-import sounddevice as sd
-from deep_translator import GoogleTranslator
 
-# 导入模型管理器和配置管理器
-from models.model_manager import ModelManager
-from models.base_model import BaseSpeechToTextModel
-from config_manager import ConfigManager
+# 导入各个模块
+from ui.floating_window import FloatingWindow
+from audio.audio_capture import AudioCapture
+from stt_service import STTService
+from translation.translator import Translator
 
 # 配置日志
 logging.basicConfig(
@@ -28,593 +22,97 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------
-# 1. 悬浮窗口类
-# ---------------------------------------------------------
-class FloatingWindow:
-    def __init__(self, target_lang: str = "zh-CN", source_lang: str = "Auto", 
-                 lang_callback: Callable = None, source_lang_callback: Callable = None,
-                 model_callback: Callable = None, available_models: list = None, current_model: str = "whisper"):
-        self.target_lang = target_lang
-        self.source_lang = source_lang if source_lang else "Auto"
-        self.lang_callback = lang_callback
-        self.source_lang_callback = source_lang_callback
-        self.model_callback = model_callback
-        self.available_models = available_models or ["whisper"]
-        self.current_model = current_model
-        self.root = None
-        self.original_text_label = None
-        self.translated_text_label = None
-        self.is_running = False
-        self.show_latency_var = None  # 延迟显示开关
-        
-        # 缓存最后一次显示的文本和延迟信息，用于切换开关时即时刷新
-        self.last_org = "Waiting for audio..."
-        self.last_trans = ""
-        self.last_latencies = {}
 
-        # 拖拽相关
-        self.drag_start_x = 0
-        self.drag_start_y = 0
-        self.window_start_x = 0
-        self.window_start_y = 0
-        self.dragging = False
-        self.resizing = False
-        
-        # UI 更新队列 (解决 Linux 下直接 callback 导致的 UI 卡死问题)
-        self.ui_queue = queue.Queue()
-        self.resize_mode = None
-
-    def create_window(self):
-        self.root = tk.Tk()
-        self.root.title("实时字幕")
-        self.root.attributes('-topmost', True)
-        self.root.attributes('-alpha', 0.85)
-        
-        # Mac 兼容性设置
-        system_type = platform.system()
-        self.root.overrideredirect(True)
-        if system_type == "Darwin":
-            try:
-                self.root.createcommand('::tk::mac::OnHide', lambda: None)
-            except: pass
-        
-        # 初始位置
-        w, h = 800, 200
-        sw = self.root.winfo_screenwidth()
-        sh = self.root.winfo_screenheight()
-        x = (sw - w) // 2
-        y = sh - h - 100
-        self.root.geometry(f"{w}x{h}+{x}+{y}")
-        self.root.configure(bg='#1a1a1a')
-        
-        # --- 创建一个内部容器，留出 5px 间距作为边缘调整区 ---
-        self.container = tk.Frame(self.root, bg="#1a1a1a")
-        self.container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # --- 绑定边缘调整事件到 root ---
-        self.root.bind("<Motion>", self._on_root_motion)
-        self.root.bind("<Button-1>", self._start_root_drag)
-        self.root.bind("<B1-Motion>", self._on_root_drag)
-        self.root.bind("<ButtonRelease-1>", self._end_root_drag)
-
-        # --- 标题栏 ---
-        title_bar = tk.Frame(self.container, bg="#2a2a2a", height=25, cursor="fleur")
-        title_bar.pack(fill=tk.X, side=tk.TOP)
-        title_bar.pack_propagate(False)
-        
-        title_lbl = tk.Label(title_bar, text="::: 拖拽移动 :::", fg="#888888", bg="#2a2a2a", font=("Arial", 8))
-        title_lbl.pack(side=tk.LEFT, padx=10)
-        
-        # 标题栏保留原有的移动窗口逻辑
-        for w in [title_bar, title_lbl]:
-            w.bind("<Button-1>", self.start_drag)
-            w.bind("<B1-Motion>", self.on_drag)
-            
-        tk.Button(title_bar, text="×", command=self.close_window, 
-                 bg="#ff4444", fg="white", relief=tk.FLAT, width=3).pack(side=tk.RIGHT)
-
-        # --- 内容区 ---
-        content = tk.Frame(self.container, bg="#1a1a1a")
-        content.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        self.original_text_label = tk.Label(content, text="Waiting for audio...", 
-                                          font=("Arial", 14), fg="#aaaaaa", bg="#1a1a1a", 
-                                          wraplength=780, justify="center")
-        self.original_text_label.pack(fill=tk.X, pady=(5,5))
-        
-        tk.Frame(content, bg="#444444", height=1).pack(fill=tk.X, padx=20)
-        
-        self.translated_text_label = tk.Label(content, text="", 
-                                            font=("Arial", 18, "bold"), fg="#44ff44", bg="#1a1a1a", 
-                                            wraplength=780, justify="center")
-        self.translated_text_label.pack(fill=tk.X, pady=(5,5))
-
-        # --- 底部控制栏 (语言选择和模型选择) ---
-        control_bar = tk.Frame(self.container, bg="#1a1a1a", height=30)
-        control_bar.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
-        
-        # 0. 模型选择（新增）
-        tk.Label(control_bar, text="模型:", fg="#888888", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
-        self.model_var = tk.StringVar(value=self.current_model)
-        
-        style = ttk.Style()
-        style.theme_use('default')
-        style.configure("TCombobox", fieldbackground="#333333", background="#333333", foreground="white")
-        
-        # 模型显示名称映射
-        model_display_names = {
-            "whisper": "Whisper (本地)",
-            "siliconflow": "硅基流动 (API)"
-        }
-        model_values = [model_display_names.get(m, m) for m in self.available_models]
-        
-        self.model_combo = ttk.Combobox(control_bar, textvariable=self.model_var, values=model_values, 
-                                     width=15, state="readonly", style="TCombobox")
-        self.model_combo.pack(side=tk.LEFT, padx=5)
-        self.model_combo.bind("<<ComboboxSelected>>", self.on_model_change)
-        
-        # 设置当前选中的模型
-        if self.current_model in self.available_models:
-            current_display = model_display_names.get(self.current_model, self.current_model)
-            self.model_var.set(current_display)
-        
-        # 间隔
-        tk.Label(control_bar, text="  |  ", fg="#555555", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
-        
-        # 1. 源语言选择
-        tk.Label(control_bar, text="源语言:", fg="#888888", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
-        self.source_lang_var = tk.StringVar(value=self.source_lang)
-        # Whisper 支持的常用语言代码
-        source_langs = ["Auto", "zh", "en", "ja", "ko", "fr", "de", "es", "ru"]
-        
-        self.source_combo = ttk.Combobox(control_bar, textvariable=self.source_lang_var, values=source_langs, 
-                                     width=6, state="readonly", style="TCombobox")
-        self.source_combo.pack(side=tk.LEFT, padx=5)
-        self.source_combo.bind("<<ComboboxSelected>>", self.on_source_lang_change)
-
-        # 间隔
-        tk.Label(control_bar, text="  →  ", fg="#555555", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
-
-        # 2. 目标语言选择
-        tk.Label(control_bar, text="目标语言:", fg="#888888", bg="#1a1a1a", font=("Arial", 10)).pack(side=tk.LEFT)
-        
-        self.lang_var = tk.StringVar(value=self.target_lang)
-        langs = ["zh-CN", "zh-TW", "en", "ja", "ko", "fr", "de", "es", "ru"]
-        
-        self.lang_combo = ttk.Combobox(control_bar, textvariable=self.lang_var, values=langs, 
-                                     width=8, state="readonly", style="TCombobox")
-        self.lang_combo.pack(side=tk.LEFT, padx=5)
-        self.lang_combo.bind("<<ComboboxSelected>>", self.on_lang_change)
-
-        # 3. 延迟显示开关
-        self.show_latency_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(control_bar, text="显示延迟", variable=self.show_latency_var, 
-                      command=self.on_latency_toggle,
-                      bg="#1a1a1a", fg="#888888", selectcolor="#333333", 
-                      activebackground="#1a1a1a", activeforeground="#ffffff").pack(side=tk.LEFT, padx=10)
-
-        # 移除旧的右下角 Resize Grip，改用边缘拖拽
-        # resize = tk.Frame(control_bar, bg="#555555", width=12, height=12, cursor="sizing") ...
-        
-        self.is_running = True
-        
-        # 启动 UI 轮询循环
-        self._process_ui_queue()
-
-    # --- 新增：边缘拖拽调整大小逻辑 ---
-    def _on_root_motion(self, event):
-        # 如果正在拖拽中，不改变光标
-        if self.resizing: return
-        
-        w, h = self.root.winfo_width(), self.root.winfo_height()
-        x, y = event.x, event.y
-        margin = 10  # 边缘检测范围
-        
-        self.resize_mode = None
-        cursor = ""
-        
-        on_right = (x > w - margin)
-        on_bottom = (y > h - margin)
-        
-        if on_right and on_bottom:
-            self.resize_mode = "se"
-            cursor = "bottom_right_corner" if platform.system() != "Windows" else "size_nw_se"
-        elif on_right:
-            self.resize_mode = "e"
-            cursor = "sb_h_double_arrow" if platform.system() != "Windows" else "size_we"
-        elif on_bottom:
-            self.resize_mode = "s"
-            cursor = "sb_v_double_arrow" if platform.system() != "Windows" else "size_ns"
-            
-        if cursor:
-            self.root.config(cursor=cursor)
-        else:
-            self.root.config(cursor="")
-
-    def _start_root_drag(self, event):
-        if self.resize_mode:
-            self.resizing = True
-            self.resize_start_x = event.x_root
-            self.resize_start_y = event.y_root
-            self.resize_start_w = self.root.winfo_width()
-            self.resize_start_h = self.root.winfo_height()
-
-    def _on_root_drag(self, event):
-        if self.resizing and self.resize_mode:
-            dx = event.x_root - self.resize_start_x
-            dy = event.y_root - self.resize_start_y
-            
-            new_w = self.resize_start_w
-            new_h = self.resize_start_h
-            
-            if "e" in self.resize_mode:
-                new_w = max(300, self.resize_start_w + dx)
-            if "s" in self.resize_mode:
-                new_h = max(150, self.resize_start_h + dy)
-                
-            self.root.geometry(f"{new_w}x{new_h}")
-            
-            # 更新换行宽度
-            if self.original_text_label:
-                self.original_text_label.config(wraplength=new_w-40)
-            if self.translated_text_label:
-                self.translated_text_label.config(wraplength=new_w-40)
-
-    def _end_root_drag(self, event):
-        self.resizing = False
-        self.resize_mode = None
-        self.root.config(cursor="")
-
-
-    def _process_ui_queue(self):
-        """
-        定时轮询 UI 队列，在主线程中更新界面。
-        这种 'Queue + Polling' 模式比直接 'root.after' 更稳健，
-        特别是在 Linux (X11/Wayland) 下能防止 UI 假死。
-        """
-        try:
-            latest = None
-            # 消费掉队列中积压的所有更新，只保留最新的一个
-            while True:
-                latest = self.ui_queue.get_nowait()
-        except queue.Empty:
-            pass
-        
-        if latest:
-            # 兼容旧的队列数据格式 (org, trans) 或 (org, trans, latencies)
-            if len(latest) == 3:
-                org, trans, latencies = latest
-            else:
-                org, trans = latest
-                latencies = {}
-            self._update_ui(org, trans, latencies)
-            
-        # 每 100ms 轮询一次
-        if self.is_running and self.root:
-            self.root.after(100, self._process_ui_queue)
-
-    def on_model_change(self, event):
-        """模型切换回调"""
-        display_name = self.model_var.get()
-        # 从显示名称映射回模型名称
-        model_display_map = {
-            "Whisper (本地)": "whisper",
-            "硅基流动 (API)": "siliconflow"
-        }
-        # 反向查找
-        model_name = None
-        for display, name in model_display_map.items():
-            if display == display_name:
-                model_name = name
-                break
-        if not model_name:
-            # 如果找不到映射，直接使用显示名称
-            model_name = display_name
-        
-        if self.model_callback:
-            self.model_callback(model_name)
-    
-    def on_source_lang_change(self, event):
-        new_lang = self.source_lang_var.get()
-        if self.source_lang_callback:
-            self.source_lang_callback(new_lang)
-
-    def on_lang_change(self, event):
-        new_lang = self.lang_var.get()
-        if self.lang_callback:
-            self.lang_callback(new_lang)
-
-    def on_latency_toggle(self):
-        # 切换开关时，使用缓存的数据立即刷新 UI
-        self._update_ui(self.last_org, self.last_trans, self.last_latencies)
-
-    def start_drag(self, event):
-        self.dragging = True
-        self.drag_start_x = event.x_root
-        self.drag_start_y = event.y_root
-        self.window_start_x = self.root.winfo_x()
-        self.window_start_y = self.root.winfo_y()
-
-    def on_drag(self, event):
-        if self.dragging:
-            dx = event.x_root - self.drag_start_x
-            dy = event.y_root - self.drag_start_y
-            self.root.geometry(f"+{self.window_start_x + dx}+{self.window_start_y + dy}")
-
-    def start_resize(self, event):
-        self.resizing = True
-        self.resize_start_x = event.x_root
-        self.resize_start_y = event.y_root
-        self.resize_start_w = self.root.winfo_width()
-        self.resize_start_h = self.root.winfo_height()
-
-    def on_resize(self, event):
-        if self.resizing:
-            dx = event.x_root - self.resize_start_x
-            dy = event.y_root - self.resize_start_y
-            w = max(300, self.resize_start_w + dx)
-            h = max(150, self.resize_start_h + dy)
-            self.root.geometry(f"{w}x{h}")
-            self.original_text_label.config(wraplength=w-20)
-            self.translated_text_label.config(wraplength=w-20)
-
-    def update_text(self, org, trans, latencies=None):
-        # 将更新请求放入队列，而不是直接操作 UI
-        self.ui_queue.put((org, trans, latencies))
-        
-    def _update_ui(self, org, trans, latencies=None):
-        # 更新缓存
-        self.last_org = org
-        self.last_trans = trans
-        self.last_latencies = latencies or {}
-
-        show_latency = self.show_latency_var.get() if self.show_latency_var else False
-        
-        # 格式化显示文本
-        org_display = org
-        trans_display = trans
-        
-        if show_latency and latencies:
-            if 'rec' in latencies:
-                org_display = f"{org}  [{latencies['rec']:.2f}s]"
-            if 'trans' in latencies:
-                trans_display = f"{trans}  [{latencies['trans']:.2f}s]"
-
-        if self.original_text_label: self.original_text_label.config(text=org_display)
-        if self.translated_text_label: self.translated_text_label.config(text=trans_display)
-
-    def close_window(self):
-        self.is_running = False
-        if self.root:
-            self.root.destroy()
-            self.root = None
-
-# ---------------------------------------------------------
-# 2. 服务类 (已修复语言判断逻辑)
-# ---------------------------------------------------------
 class SystemAudioSubtitleService:
-    def __init__(self, model_size="small", device = "cpu", target_lang="zh-CN", source_lang=None, 
+    """系统音频实时字幕服务"""
+    
+    def __init__(self, model_size="small", device="cpu", target_lang="zh-CN", source_lang=None, 
                  sample_rate=16000, chunk_duration=2.0, config_file="model_config.json"):
-        # 保留旧参数以兼容，但优先使用配置管理器
-        self.model_size = model_size
-        self.device = device
+        """
+        初始化服务
+        
+        Args:
+            model_size: 模型大小（保留兼容性，实际从配置文件读取）
+            device: 设备（保留兼容性，实际从配置文件读取）
+            target_lang: 目标语言，默认"zh-CN"
+            source_lang: 源语言，None表示自动检测
+            sample_rate: 采样率，默认16000Hz
+            chunk_duration: 音频块时长（秒），默认2.0秒
+            config_file: 配置文件路径
+        """
         self.target_lang = target_lang
         self.source_lang = source_lang
         self.sample_rate = sample_rate
-        self.chunk_samples = int(sample_rate * chunk_duration)
+        self.chunk_duration = chunk_duration
         
-        # 初始化配置管理器
-        self.config_manager = ConfigManager(config_file)
+        # 初始化各个模块
+        self.stt_service = STTService(config_file)
+        self.translator = Translator(target_lang=target_lang)
+        self.audio_capture = AudioCapture(sample_rate=sample_rate, chunk_duration=chunk_duration)
         
-        # 使用新的模型接口
-        self.model: BaseSpeechToTextModel | None = None
-        self.translator: GoogleTranslator | None = None
-        self.audio_queue = queue.Queue()
-        self.is_recording = False
-        self.process_thread = None
+        # UI和线程控制
         self.floating_window = None
+        self.process_thread = None
+        self.is_recording = False
         
+        # 音频处理相关
         self.prev_audio = np.array([], dtype=np.float32)
         self.sentence_buffer = ""
         self.last_speech_time = time.time()
-
-    def initialize(self):
-        """初始化服务，使用配置管理器加载模型"""
-        # 获取当前模型配置
-        current_model_name = self.config_manager.get_current_model()
-        model_config = self.config_manager.get_model_config(current_model_name)
-        
-        if not model_config:
-            logger.error(f"❌ 无法加载模型配置: {current_model_name}")
-            # 回退到默认whisper配置
-            current_model_name = "whisper"
-            model_config = self.config_manager.get_model_config("whisper")
-            if not model_config:
-                logger.error("❌ 无法加载默认模型配置")
-                raise RuntimeError("模型配置加载失败")
-        
-        model_type = model_config.get("type", current_model_name)
-        logger.info(f"🚀 初始化模型: {current_model_name} (类型: {model_type})")
-        
-        # 如果是whisper模型，需要自动检测设备配置
-        if model_type == "whisper":
-            system = platform.system()
-            if "device" not in model_config or model_config["device"] == "auto":
-                if system == "Darwin":
-                    logger.info("💻 系统: macOS (Apple Silicon)")
-                    model_config["device"] = "cpu"
-                    model_config["compute_type"] = "int8"
-                    model_config["cpu_threads"] = 4
-                elif system == "Windows":
-                    if self._check_cuda():
-                        logger.info("🚀 系统: Windows (CUDA加速)")
-                        model_config["device"] = "cuda"
-                        model_config["compute_type"] = "float16"
-                        model_config["cpu_threads"] = 0
-                    else:
-                        logger.info("💻 系统: Windows (CPU)")
-                        model_config["device"] = "cpu"
-                        model_config["compute_type"] = "int8"
-                        model_config["cpu_threads"] = 4
-                elif system == 'Linux':
-                    model_config["device"] = "cuda"
-                    model_config["compute_type"] = "int8"
-                    model_config["cpu_threads"] = 4
-            
-            # 如果model_size是auto，自动选择
-            if model_config.get("model_size") == "auto":
-                system = platform.system()
-                if system == "Windows" and model_config.get("device") == "cuda":
-                    model_config["model_size"] = "deepdml/faster-whisper-large-v3-turbo-ct2"
-                else:
-                    model_config["model_size"] = "small"
-        
-        # 使用模型管理器创建模型
-        self.model = ModelManager.create_model(model_type, model_config)
-        
-        if not self.model:
-            logger.error(f"❌ 模型创建失败: {current_model_name}")
-            raise RuntimeError(f"模型创建失败: {current_model_name}")
-        
-        self.update_translator(self.target_lang)
-        logger.info("✅ 服务就绪")
     
-    def switch_model(self, model_name: str):
-        """切换模型"""
-        logger.info(f"🔄 切换模型: {model_name}")
+    def initialize(self):
+        """初始化服务"""
+        # 初始化语音转文字服务
+        if not self.stt_service.initialize():
+            raise RuntimeError("语音转文字服务初始化失败")
         
-        # 保存旧模型
-        old_model = self.model
+        logger.info("✅ 服务初始化完成")
+    
+    def switch_model(self, model_name: str) -> bool:
+        """
+        切换模型
         
-        # 获取新模型配置
-        model_config = self.config_manager.get_model_config(model_name)
-        if not model_config:
-            logger.error(f"❌ 无法加载模型配置: {model_name}")
-            return False
+        Args:
+            model_name: 模型名称
+            
+        Returns:
+            是否切换成功
+        """
+        return self.stt_service.switch_model(model_name)
+    
+    def update_translator(self, new_lang: str):
+        """
+        更新翻译器目标语言
         
-        model_type = model_config.get("type", model_name)
-        
-        # 创建新模型
-        new_model = ModelManager.create_model(model_type, model_config)
-        if not new_model:
-            logger.error(f"❌ 模型创建失败: {model_name}")
-            return False
-        
-        # 切换模型
-        if old_model:
-            try:
-                old_model.cleanup()
-            except:
-                pass
-        
-        self.model = new_model
-        self.config_manager.set_current_model(model_name)
-        logger.info(f"✅ 模型切换成功: {model_name}")
-        return True
-
-    def _check_cuda(self):
-        try:
-            import ctypes
-            ctypes.cdll.LoadLibrary('nvcuda.dll')
-            return True
-        except: return False
-
-    def update_translator(self, new_lang):
-        logger.info(f"🔄 切换目标语言: {new_lang}")
+        Args:
+            new_lang: 新的目标语言代码
+        """
         self.target_lang = new_lang
-        try:
-            self.translator = GoogleTranslator(source="auto", target=new_lang)
-        except Exception as e:
-            logger.error(f"切换语言失败: {e}")
-
-    def update_source_lang(self, new_lang):
+        self.translator.update_target_lang(new_lang)
+    
+    def update_source_lang(self, new_lang: str):
+        """
+        更新源语言
+        
+        Args:
+            new_lang: 新的源语言代码，"Auto"表示自动检测
+        """
         # "Auto" 转为 None，其他保持原样
         lang_code = None if new_lang == "Auto" else new_lang
         logger.info(f"🎤 切换源语言: {new_lang} -> {lang_code}")
         self.source_lang = lang_code
-
-    def get_audio_device(self):
-        try:
-            devices = sd.query_devices()
-            system_type = platform.system() # 获取操作系统类型: 'Linux', 'Windows', 'Darwin'
-            
-            # 1. 定义关键词优先级
-            if system_type == 'Linux':
-                # Linux 必须优先找 pulse，否则容易崩
-                # 注意：Linux 下如果要“内录系统声音”，通常设备名里包含 'monitor'
-                # 如果只是想不崩（录麦克风），找 'pulse'
-                keywords = ['pulse', 'default'] 
-            else:
-                # Windows / Mac 继续找内录设备
-                keywords = ['blackhole', 'soundflower', 'loopback', 'stereo mix', 'what u hear']
-
-            # 2. 遍历查找
-            for i, d in enumerate(devices):
-                device_name = d['name'].lower()
-                if d['max_input_channels'] > 0:
-                    # 只要名字里包含关键词，就选中
-                    if any(k in device_name for k in keywords):
-                        # Linux 特殊处理：优先找 monitor (内录)，找不到再找普通的 pulse (麦克风)
-                        if system_type == 'Linux' and 'monitor' not in device_name:
-                            # 如果你想录系统声音，这里可以加个 pass 继续找 monitor
-                            # 但为了保证能跑，先选中它也行
-                            pass 
-                        
-                        print(f"🎤 [自动选择] 选中设备: {d['name']} (ID: {i})")
-                        return i
-            
-            # 3. 如果 Linux 上没找到 pulse，千万别直接返回 default[0]，会崩
-            if system_type == 'Linux':
-                # 再尝试暴力搜索一次包含 'pulse' 的
-                for i, d in enumerate(devices):
-                    if 'pulse' in d['name'].lower() and d['max_input_channels'] > 0:
-                        print(f"🎤 [自动选择] 选中设备: {d['name']} (ID: {i})")
-                        return i
-                        
-            print('⚠️ 未匹配到优选设备，将使用系统默认输入设备。')
-            print('📋 当前可用设备列表:')
-            for i, d in enumerate(devices):
-                print(f"  [{i}] {d['name']} (In: {d['max_input_channels']}, Out: {d['max_output_channels']})")
-            
-            print('💡 提示: macOS 若需内录系统声音，请安装 BlackHole 并在系统声音设置中选为输出，同时在此脚本中被选中。')
-            return sd.default.device[0]
-            
-        except Exception as e:
-            print(f"❌ 获取设备失败: {e}")
-            return None
-
-    def audio_callback(self, indata, frames, time, status):
-        if self.is_recording: self.audio_queue.put(indata.copy())
-
-    def process_audio_chunk(self, audio_data, prompt=""):
-        """处理音频块，使用统一的模型接口"""
-        if not self.model:
-            logger.error("模型未初始化")
-            return None, None, 0
-        
-        try:
-            # 使用统一的模型接口
-            text, detected_lang, cost = self.model.transcribe(
-                audio_data,
-                sample_rate=self.sample_rate,
-                language=self.source_lang,
-                prompt=prompt
-            )
-            
-            if text:
-                logger.info(f"👂 原文 [{detected_lang}][{cost:.2f}s]: {text}")
-                return text, detected_lang, cost
-            return None, None, cost
-        except Exception as e:
-            logger.error(f"推理错误: {e}")
-            return None, None, 0
-
-    # === 新增：判断语言是否一致 ===
-    def _is_same_language(self, detected_lang, target_lang):
+        self.translator.update_source_lang(new_lang)
+    
+    def _is_same_language(self, detected_lang: str, target_lang: str) -> bool:
         """
-        标准化语言代码对比
-        例如: zh (Whisper) vs zh-CN (Google) -> 认为是同一种语言
+        判断检测到的语言和目标语言是否相同
+        
+        Args:
+            detected_lang: 检测到的语言代码
+            target_lang: 目标语言代码
+            
+        Returns:
+            是否相同
         """
         if not detected_lang or not target_lang:
             return False
@@ -622,24 +120,34 @@ class SystemAudioSubtitleService:
         d_code = detected_lang.lower().split('-')[0]
         t_code = target_lang.lower().split('-')[0]
         return d_code == t_code
-
-    def _process_loop(self, stream):
+    
+    def _is_cjk(self, text: str) -> bool:
+        """判断文本是否包含中日韩字符"""
+        if not text:
+            return False
+        return any(u'\u4e00' <= char <= u'\u9fff' for char in text)
+    
+    def _process_loop(self):
+        """音频处理循环"""
         audio_buffer = []
         curr_samples = 0
         overlap_samples = int(self.sample_rate * 0.5)
         
         while self.is_recording:
             try:
-                if self.audio_queue.qsize() > 6:
+                # 检查队列积压
+                if self.audio_capture.get_queue_size() > 6:
                     logger.warning("⚡ 丢弃积压数据...")
-                    with self.audio_queue.mutex: self.audio_queue.queue.clear()
+                    self.audio_capture.clear_queue()
                     audio_buffer = []
                     curr_samples = 0
                     self.sentence_buffer = ""
                     continue
 
-                try: chunk = self.audio_queue.get(timeout=0.5)
-                except:
+                # 获取音频块
+                chunk = self.audio_capture.get_chunk(timeout=0.5)
+                if chunk is None:
+                    # 超时，检查是否需要处理缓冲区中的文本
                     if time.time() - self.last_speech_time > 3.0 and self.sentence_buffer:
                         self._translate_worker(self.sentence_buffer, 0.0, final=True)
                         self.sentence_buffer = ""
@@ -648,17 +156,28 @@ class SystemAudioSubtitleService:
                 audio_buffer.append(chunk)
                 curr_samples += len(chunk)
 
-                if curr_samples >= self.chunk_samples:
+                # 当积累足够的音频时进行处理
+                if curr_samples >= self.audio_capture.chunk_samples:
+                    # 拼接音频
                     raw_audio = np.concatenate(audio_buffer, axis=0).flatten().astype(np.float32)
                     if len(self.prev_audio) > 0:
                         proc_audio = np.concatenate((self.prev_audio, raw_audio))
                     else:
                         proc_audio = raw_audio
                     
+                    # 保存重叠部分用于下次处理
                     self.prev_audio = raw_audio[-overlap_samples:]
+                    
+                    # 使用上一句的后50个字符作为提示
                     prompt = self.sentence_buffer[-50:] if self.sentence_buffer else ""
                     
-                    text, lang, cost = self.process_audio_chunk(proc_audio, prompt)
+                    # 语音转文字
+                    text, lang, cost = self.stt_service.transcribe(
+                        proc_audio,
+                        sample_rate=self.sample_rate,
+                        language=self.source_lang,
+                        prompt=prompt
+                    )
                     
                     if text:
                         self.last_speech_time = time.time()
@@ -669,105 +188,152 @@ class SystemAudioSubtitleService:
                             self.sentence_buffer += sep + text
                         self.sentence_buffer = self.sentence_buffer.strip()
                         
-                        # 1. 先在原文区域显示（带省略号表示未完）
+                        # 先在原文区域显示（带省略号表示未完）
                         if self.floating_window:
                             self.floating_window.update_text(self.sentence_buffer, "...", {'rec': cost})
                         
-                        # 2. 判断是否需要翻译 (修复后的逻辑)
+                        # 判断是否需要翻译
                         if not self._is_same_language(lang, self.target_lang):
                             self._translate_worker(self.sentence_buffer, cost, final=False)
                         else:
                             # 同语言：译文区直接显示原文
                             logger.info(f"⏭️ 同语言 [{lang}=={self.target_lang}]，跳过翻译")
                             if self.floating_window:
-                                self.floating_window.update_text(self.sentence_buffer, self.sentence_buffer, {'rec': cost})
+                                self.floating_window.update_text(
+                                    self.sentence_buffer, 
+                                    self.sentence_buffer, 
+                                    {'rec': cost}
+                                )
                     
+                    # 清空缓冲区
                     audio_buffer = []
                     curr_samples = 0
+                    
             except Exception as e:
-                pass
-
-    def _is_cjk(self, text):
-        if not text: return False
-        return any(u'\u4e00' <= char <= u'\u9fff' for char in text)
-
-    def _translate_worker(self, text, rec_cost=0.0, final=False):
-        def task():
-            t0 = time.time()
-            try:
-                if hasattr(self.translator, 'target') and self.translator.target != self.target_lang:
-                    self.translator = GoogleTranslator(source="auto", target=self.target_lang)
-                
-                res = self.translator.translate(text)
-                cost = time.time() - t0
-                logger.info(f"🌍 译文 [{cost:.2f}s]: {res}")
-                
-                if self.floating_window:
-                    self.floating_window.update_text(text, res, {'rec': rec_cost, 'trans': cost})
-            except Exception as e:
-                logger.error(f"翻译失败: {e}")
-        threading.Thread(target=task, daemon=True).start()
-
-    def start(self):
-        self.initialize()
-        # 传递初始的 source_lang (如果是 None，转为 "Auto" 给 UI 显示)
-        initial_source_ui = self.source_lang if self.source_lang else "Auto"
+                logger.error(f"处理音频时出错: {e}", exc_info=True)
+    
+    def _translate_worker(self, text: str, rec_cost: float = 0.0, final: bool = False):
+        """
+        翻译工作线程
         
-        # 获取可用模型列表
-        available_models = self.config_manager.get_available_models()
-        current_model = self.config_manager.get_current_model()
+        Args:
+            text: 要翻译的文本
+            rec_cost: 识别耗时
+            final: 是否为最终翻译
+        """
+        def on_translate_complete(translated_text: str, trans_cost: float):
+            """翻译完成回调"""
+            if self.floating_window:
+                self.floating_window.update_text(
+                    text, 
+                    translated_text or text, 
+                    {'rec': rec_cost, 'trans': trans_cost}
+                )
+        
+        self.translator.translate_async(text, on_translate_complete, rec_cost)
+    
+    def start(self):
+        """启动服务"""
+        # 初始化服务
+        self.initialize()
+        
+        # 创建UI窗口
+        initial_source_ui = self.source_lang if self.source_lang else "Auto"
+        available_models = self.stt_service.get_available_models()
+        current_model = self.stt_service.get_current_model()
         
         self.floating_window = FloatingWindow(
-            target_lang=self.target_lang, 
+            target_lang=self.target_lang,
             source_lang=initial_source_ui,
             lang_callback=self.update_translator,
             source_lang_callback=self.update_source_lang,
             model_callback=self.switch_model,
             available_models=available_models,
-            current_model=current_model
+            current_model=current_model or "whisper"
         )
         self.floating_window.create_window()
         
-        idx = self.get_audio_device()
-        if idx is None: return
+        # 启动音频采集
+        if not self.audio_capture.start():
+            logger.error("音频采集启动失败")
+            return
         
+        # 启动处理线程
         self.is_recording = True
-        stream = sd.InputStream(device=idx, channels=1, samplerate=self.sample_rate,
-                              callback=self.audio_callback, blocksize=int(self.sample_rate*0.1))
-        stream.start()
-        
-        self.process_thread = threading.Thread(target=self._process_loop, args=(stream,), daemon=True)
+        self.process_thread = threading.Thread(target=self._process_loop, daemon=True)
         self.process_thread.start()
         
+        # 保持主线程运行
         def keep_alive():
             if not self.is_recording:
                 if self.process_thread and not self.process_thread.is_alive():
-                    self.floating_window.root.quit()
+                    if self.floating_window and self.floating_window.root:
+                        self.floating_window.root.quit()
             else:
-                self.floating_window.root.after(1000, keep_alive)
+                if self.floating_window and self.floating_window.root:
+                    self.floating_window.root.after(1000, keep_alive)
+        
         keep_alive()
         
-        try: self.floating_window.root.mainloop()
-        except: pass
+        try:
+            if self.floating_window and self.floating_window.root:
+                self.floating_window.root.mainloop()
+        except KeyboardInterrupt:
+            logger.info("收到中断信号，正在关闭...")
+        except Exception as e:
+            logger.error(f"运行出错: {e}", exc_info=True)
         finally:
-            self.is_recording = False
-            stream.stop()
+            self.stop()
+    
+    def stop(self):
+        """停止服务"""
+        logger.info("正在停止服务...")
+        self.is_recording = False
+        
+        # 停止音频采集
+        self.audio_capture.stop()
+        
+        # 清理资源
+        self.stt_service.cleanup()
+        
+        # 关闭UI
+        if self.floating_window:
+            self.floating_window.close_window()
+        
+        logger.info("服务已停止")
+
 
 def main():
+    """主函数"""
     import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="auto")
-    parser.add_argument("--device", type=str, default="cpu")
-    parser.add_argument("--source-lang", type=str, default=None)
-    parser.add_argument("--target-lang", type=str, default="zh-CN")
-    parser.add_argument("--chunk-duration", type=float, default=2.0)
+    parser = argparse.ArgumentParser(description="系统音频实时字幕服务")
+    parser.add_argument("--model", type=str, default="auto", help="模型大小（已废弃，使用配置文件）")
+    parser.add_argument("--device", type=str, default="cpu", help="设备（已废弃，使用配置文件）")
+    parser.add_argument("--source-lang", type=str, default=None, help="源语言")
+    parser.add_argument("--target-lang", type=str, default="zh-CN", help="目标语言")
+    parser.add_argument("--chunk-duration", type=float, default=2.0, help="音频块时长（秒）")
+    parser.add_argument("--config", type=str, default="model_config.json", help="配置文件路径")
     
     args = parser.parse_args()
     
-    s = SystemAudioSubtitleService(
-        model_size=args.model,device=args.device, target_lang=args.target_lang, source_lang=args.source_lang, chunk_duration=args.chunk_duration
+    service = SystemAudioSubtitleService(
+        model_size=args.model,
+        device=args.device,
+        target_lang=args.target_lang,
+        source_lang=args.source_lang,
+        chunk_duration=args.chunk_duration,
+        config_file=args.config
     )
-    s.start()
+    
+    try:
+        service.start()
+    except KeyboardInterrupt:
+        logger.info("程序被用户中断")
+    except Exception as e:
+        logger.error(f"程序运行出错: {e}", exc_info=True)
+    finally:
+        service.stop()
+
 
 if __name__ == "__main__":
     main()
