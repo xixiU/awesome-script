@@ -45,7 +45,7 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y python3-tk portaudio19-dev
+        sudo apt-get install -y python3-tk portaudio19-dev pkg-config libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
 
     - name: Install system dependencies (macOS)
       if: runner.os == 'macOS'
