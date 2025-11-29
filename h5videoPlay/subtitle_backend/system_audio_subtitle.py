@@ -7,6 +7,7 @@
 import logging
 import threading
 import time
+import queue
 import numpy as np
 
 # 导入各个模块
@@ -28,7 +29,9 @@ class SystemAudioSubtitleService:
     
     def __init__(self, model_size="small", device="cpu", target_lang="zh-CN", source_lang=None, 
                  sample_rate=16000, chunk_duration=2.0, config_file="model_config.json",
-                 min_rms_for_stt: float = 3e-3):
+                 min_rms_for_stt: float = 3e-3,
+                 silence_duration_for_sentence_end: float = 1.5,
+                 max_sentence_duration: float = 10.0):
         """
         初始化服务
         
@@ -38,8 +41,11 @@ class SystemAudioSubtitleService:
             target_lang: 目标语言，默认"zh-CN"
             source_lang: 源语言，None表示自动检测
             sample_rate: 采样率，默认16000Hz
-            chunk_duration: 音频块时长（秒），默认2.0秒
+            chunk_duration: 音频块时长（秒），默认2.0秒（用于识别，但会累积句子）
             config_file: 配置文件路径
+            min_rms_for_stt: 送入识别的最小RMS阈值
+            silence_duration_for_sentence_end: 静音持续时间（秒），超过此值认为句子结束
+            max_sentence_duration: 最大句子持续时间（秒），超过此值强制输出
         """
         self.target_lang = target_lang
         self.source_lang = source_lang
@@ -47,21 +53,35 @@ class SystemAudioSubtitleService:
         self.chunk_duration = chunk_duration
         # 额外的整体能量门限，用于在进入大模型前再过滤一层静音 / 环境噪声
         self.min_rms_for_stt = min_rms_for_stt
+        self.silence_duration_for_sentence_end = silence_duration_for_sentence_end
+        self.max_sentence_duration = max_sentence_duration
         
         # 初始化各个模块
         self.stt_service = STTService(config_file)
         self.translator = Translator(target_lang=target_lang)
+        # 使用较短的chunk_duration进行快速识别，但会累积成完整句子
         self.audio_capture = AudioCapture(sample_rate=sample_rate, chunk_duration=chunk_duration)
         
-        # UI和线程控制
+        # 线程控制
         self.floating_window = None
+        self.capture_thread = None
         self.process_thread = None
         self.is_recording = False
         
+        # 线程安全的数据队列
+        self.data_queue = queue.Queue()
+        
         # 音频处理相关
         self.prev_audio = np.array([], dtype=np.float32)
-        self.sentence_buffer = ""
+        self.sentence_buffer = ""  # 累积的完整句子
         self.last_speech_time = time.time()
+        self.last_silence_start_time = None  # 静音开始时间
+        self.sentence_start_time = None  # 当前句子开始时间
+        self.is_in_sentence = False  # 是否正在构建句子
+        self.pending_translation = None  # 待翻译的句子（避免重复翻译）
+        self.last_detected_lang = None  # 最后一次检测到的语言
+        self.current_translation_task_id = 0  # 当前翻译任务ID，用于取消旧任务
+        self.last_translated_text = ""  # 最后一次翻译的文本
     
     def initialize(self):
         """初始化服务"""
@@ -130,34 +150,78 @@ class SystemAudioSubtitleService:
             return False
         return any(u'\u4e00' <= char <= u'\u9fff' for char in text)
     
+    def _capture_loop(self):
+        """
+        音频采集线程
+        只负责从设备采集音频并放入队列，不做耗时处理
+        """
+        while self.is_recording:
+            try:
+                # 从音频设备获取数据
+                chunk = self.audio_capture.get_chunk(timeout=0.5)
+                if chunk is not None:
+                    # 监控队列长度
+                    qsize = self.data_queue.qsize()
+                    if qsize > 50:
+                        # 积压严重，丢弃数据防止内存溢出
+                        logger.warning(f"⚡ 队列积压严重 ({qsize}块)，丢弃当前帧...")
+                        # 尝试清空一部分旧数据
+                        try:
+                            for _ in range(10):
+                                self.data_queue.get_nowait()
+                        except queue.Empty:
+                            pass
+                    elif qsize > 10:
+                        # 积压警告，但不丢弃
+                        logger.warning(f"⚠️ 队列积压警告: {qsize}块待处理")
+                    
+                    # 放入内部数据队列
+                    self.data_queue.put(chunk)
+            except Exception as e:
+                logger.error(f"采集线程出错: {e}")
+                time.sleep(0.1)
+
     def _process_loop(self):
-        """音频处理循环"""
+        """
+        音频处理线程
+        负责从队列取出数据进行识别和翻译
+        """
         audio_buffer = []
         curr_samples = 0
         overlap_samples = int(self.sample_rate * 0.5)
+        current_time = time.time()
         
         while self.is_recording:
             try:
-                # 检查队列积压
-                if self.audio_capture.get_queue_size() > 6:
-                    logger.warning("⚡ 丢弃积压数据...")
-                    self.audio_capture.clear_queue()
-                    audio_buffer = []
-                    curr_samples = 0
-                    self.sentence_buffer = ""
+                # 从队列获取音频数据（非阻塞，或者短超时）
+                try:
+                    # 一次性取出队列中所有积压的数据，防止处理速度跟不上
+                    chunks = []
+                    while not self.data_queue.empty():
+                        chunks.append(self.data_queue.get_nowait())
+                    
+                    # 如果队列为空，尝试等待一小会儿
+                    if not chunks:
+                        chunk = self.data_queue.get(timeout=0.1)
+                        chunks.append(chunk)
+                except queue.Empty:
+                    # 超时，检查句子是否应该结束
+                    current_time = time.time()
+                    self._check_sentence_end(current_time, force_check=True)
                     continue
 
-                # 获取音频块
-                chunk = self.audio_capture.get_chunk(timeout=0.5)
-                if chunk is None:
-                    # 超时，检查是否需要处理缓冲区中的文本
-                    if time.time() - self.last_speech_time > 3.0 and self.sentence_buffer:
-                        self._translate_worker(self.sentence_buffer, 0.0, final=True)
-                        self.sentence_buffer = ""
-                    continue
+                # 监控处理延迟
+                process_start_time = time.time()
+                queue_wait_time = process_start_time - current_time if current_time > 0 else 0
+                if queue_wait_time > 1.0:
+                    logger.info(f"🕒 处理延迟: {queue_wait_time:.2f}s")
 
-                audio_buffer.append(chunk)
-                curr_samples += len(chunk)
+                current_time = process_start_time
+                
+                # 将所有新获取的块加入缓冲区
+                for chunk in chunks:
+                    audio_buffer.append(chunk)
+                    curr_samples += len(chunk)
 
                 # 当积累足够的音频时进行处理
                 if curr_samples >= self.audio_capture.chunk_samples:
@@ -178,13 +242,43 @@ class SystemAudioSubtitleService:
                         logger.warning(f"计算整体RMS失败，仍然送入识别: {e}")
                         rms = self.min_rms_for_stt
 
-                    if rms < self.min_rms_for_stt:
-                        # 整体能量也很低，认为主要是环境底噪 / 静音，直接跳过识别
+                    is_silence = rms < self.min_rms_for_stt
+                    
+                    # 积压处理策略：如果积压严重，且当前是静音，则更激进地丢弃
+                    qsize = self.data_queue.qsize()
+                    if qsize > 5 and is_silence:
+                        # 积压中，且当前是静音，直接跳过，不计入静音时长，加速追赶
+                        logger.debug(f"积压追赶：跳过静音块 (qsize={qsize})")
+                        audio_buffer = []
+                        curr_samples = 0
+                        continue
+
+                    if is_silence:
+                        # 整体能量很低，认为是静音
                         logger.debug(f"跳过静音块，不送入识别 (rms={rms:.6f} < {self.min_rms_for_stt:.6f})")
+                        
+                        # 如果正在构建句子，记录静音开始时间
+                        if self.is_in_sentence:
+                            if self.last_silence_start_time is None:
+                                self.last_silence_start_time = current_time
+                            # 检查是否应该结束句子
+                            self._check_sentence_end(current_time)
+                        
                         audio_buffer = []
                         curr_samples = 0
                         continue
                     # ===== 额外静音过滤结束 =====
+                    
+                    # 检测到有效音频，重置静音计时
+                    if self.last_silence_start_time is not None:
+                        self.last_silence_start_time = None
+                    
+                    # 如果这是新句子的开始
+                    if not self.is_in_sentence:
+                        self.is_in_sentence = True
+                        self.sentence_start_time = current_time
+                        self.sentence_buffer = ""
+                        logger.debug("🎤 开始新句子")
 
                     # 使用上一句的后50个字符作为提示
                     prompt = self.sentence_buffer[-50:] if self.sentence_buffer else ""
@@ -198,7 +292,8 @@ class SystemAudioSubtitleService:
                     )
                     
                     if text:
-                        self.last_speech_time = time.time()
+                        self.last_speech_time = current_time
+                        self.last_detected_lang = lang  # 保存检测到的语言
                         
                         # 文本拼接逻辑
                         if not self.sentence_buffer.endswith(text):
@@ -206,22 +301,17 @@ class SystemAudioSubtitleService:
                             self.sentence_buffer += sep + text
                         self.sentence_buffer = self.sentence_buffer.strip()
                         
-                        # 先在原文区域显示（带省略号表示未完）
+                        # 实时预览：显示当前累积的句子（带省略号表示未完）
+                        current_sentence = self.sentence_buffer + "..."
                         if self.floating_window:
-                            self.floating_window.update_text(self.sentence_buffer, "...", {'rec': cost})
+                            # 传 None 给翻译部分，保持上一句翻译或等待实时翻译
+                            self.floating_window.update_text(current_sentence, None, {'rec': cost})
                         
-                        # 判断是否需要翻译
-                        if not self._is_same_language(lang, self.target_lang):
-                            self._translate_worker(self.sentence_buffer, cost, final=False)
-                        else:
-                            # 同语言：译文区直接显示原文
-                            logger.info(f"⏭️ 同语言 [{lang}=={self.target_lang}]，跳过翻译")
-                            if self.floating_window:
-                                self.floating_window.update_text(
-                                    self.sentence_buffer, 
-                                    self.sentence_buffer, 
-                                    {'rec': cost}
-                                )
+                        # 实时翻译：立即翻译当前累积的句子（预览）
+                        self._translate_realtime(current_sentence, cost)
+                        
+                        # 检查句子是否应该结束（基于最大时长）
+                        self._check_sentence_end(current_time)
                     
                     # 清空缓冲区
                     audio_buffer = []
@@ -230,25 +320,132 @@ class SystemAudioSubtitleService:
             except Exception as e:
                 logger.error(f"处理音频时出错: {e}", exc_info=True)
     
-    def _translate_worker(self, text: str, rec_cost: float = 0.0, final: bool = False):
+    def _check_sentence_end(self, current_time: float, force_check: bool = False):
         """
-        翻译工作线程
+        检查句子是否应该结束
         
         Args:
-            text: 要翻译的文本
-            rec_cost: 识别耗时
-            final: 是否为最终翻译
+            current_time: 当前时间
+            force_check: 是否强制检查（即使没有静音）
         """
-        def on_translate_complete(translated_text: str, trans_cost: float):
-            """翻译完成回调"""
-            if self.floating_window:
-                self.floating_window.update_text(
-                    text, 
-                    translated_text or text, 
-                    {'rec': rec_cost, 'trans': trans_cost}
-                )
+        if not self.is_in_sentence or not self.sentence_buffer:
+            return
         
-        self.translator.translate_async(text, on_translate_complete, rec_cost)
+        should_end = False
+        reason = ""
+        
+        # 情况1: 检测到足够长的静音
+        if self.last_silence_start_time is not None:
+            silence_duration = current_time - self.last_silence_start_time
+            if silence_duration >= self.silence_duration_for_sentence_end:
+                should_end = True
+                reason = f"静音持续 {silence_duration:.2f}秒"
+        
+        # 情况2: 句子持续时间过长（强制输出，避免延迟）
+        if self.sentence_start_time is not None:
+            sentence_duration = current_time - self.sentence_start_time
+            if sentence_duration >= self.max_sentence_duration:
+                should_end = True
+                reason = f"句子持续 {sentence_duration:.2f}秒（超时）"
+        
+        # 情况3: 强制检查且距离上次语音时间过长
+        if force_check and (current_time - self.last_speech_time) > 3.0:
+            should_end = True
+            reason = "长时间无语音"
+        
+        if should_end:
+            logger.info(f"📝 句子结束: {reason}")
+            self._finalize_sentence()
+    
+    def _translate_realtime(self, text: str, rec_cost: float = 0.0):
+        """
+        实时翻译预览（句子构建过程中）
+        
+        Args:
+            text: 当前累积的文本（可能带省略号）
+            rec_cost: 识别耗时
+        """
+        # 使用最后一次检测到的语言
+        detected_lang = self.last_detected_lang
+        
+        # 判断是否需要翻译
+        if detected_lang and not self._is_same_language(detected_lang, self.target_lang):
+            # 生成新的翻译任务ID
+            self.current_translation_task_id += 1
+            task_id = self.current_translation_task_id
+            
+            def on_translate_complete(translated_text: str, trans_cost: float):
+                """翻译完成回调"""
+                # 只处理最新的翻译任务，忽略旧的
+                if task_id == self.current_translation_task_id:
+                    if self.floating_window:
+                        # 显示原文和实时翻译预览
+                        self.floating_window.update_text(
+                            text, 
+                            translated_text or text, 
+                            {'rec': rec_cost, 'trans': trans_cost}
+                        )
+                    self.last_translated_text = translated_text or text
+            
+            # 异步翻译
+            self.translator.translate_async(text, on_translate_complete, rec_cost)
+        else:
+            # 同语言或语言未知：直接显示原文
+            if self.floating_window:
+                self.floating_window.update_text(text, text, {'rec': rec_cost})
+    
+    def _finalize_sentence(self):
+        """完成当前句子，显示并翻译（最终纠正版）"""
+        if not self.sentence_buffer:
+            self._reset_sentence_state()
+            return
+        
+        final_text = self.sentence_buffer.strip()
+        logger.info(f"✅ 完整句子: {final_text}")
+        
+        # 使用最后一次检测到的语言
+        detected_lang = self.last_detected_lang
+        
+        # 判断是否需要翻译
+        if detected_lang and not self._is_same_language(detected_lang, self.target_lang):
+            # 生成新的翻译任务ID（最终翻译会覆盖实时翻译）
+            self.current_translation_task_id += 1
+            task_id = self.current_translation_task_id
+            
+            def on_final_translate_complete(translated_text: str, trans_cost: float):
+                """最终翻译完成回调"""
+                # 只处理最新的翻译任务
+                if task_id == self.current_translation_task_id:
+                    logger.info(f"🌍 最终翻译: {translated_text}")
+                    if self.floating_window:
+                        # 显示最终完整句子和最终翻译（覆盖之前的预览）
+                        self.floating_window.update_text(
+                            final_text, 
+                            translated_text or final_text, 
+                            {'trans': trans_cost}
+                        )
+                    self.last_translated_text = translated_text or final_text
+            
+            # 异步翻译完整句子（最终版本）
+            self.translator.translate_async(final_text, on_final_translate_complete, 0.0)
+        else:
+            # 同语言或语言未知：直接显示完整句子
+            logger.info(f"⏭️ 同语言或语言未知 [{detected_lang}=={self.target_lang}]，跳过翻译")
+            if self.floating_window:
+                self.floating_window.update_text(final_text, final_text, {})
+        
+        # 重置状态
+        self._reset_sentence_state()
+    
+    def _reset_sentence_state(self):
+        """重置句子状态"""
+        self.sentence_buffer = ""
+        self.is_in_sentence = False
+        self.last_silence_start_time = None
+        self.sentence_start_time = None
+        self.pending_translation = None
+        # 注意：不重置 last_detected_lang 和 current_translation_task_id
+        # 因为下一句可能还是同一种语言，且翻译任务ID用于区分新旧任务
     
     def start(self):
         """启动服务"""
@@ -278,7 +475,9 @@ class SystemAudioSubtitleService:
         
         # 启动处理线程
         self.is_recording = True
+        self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.process_thread = threading.Thread(target=self._process_loop, daemon=True)
+        self.capture_thread.start()
         self.process_thread.start()
         
         # 保持主线程运行

@@ -11,7 +11,7 @@ cd subtitle_backend
 ./start.sh
 ```
 
-服务启动后访问：<http://localhost:8765>5>
+服务启动后访问：<http://localhost:8765>
 
 ### 2. 测试服务
 
@@ -68,7 +68,6 @@ curl -X POST "http://localhost:8765/transcribe" \
 
 ```bash
 POST /translate
-
 ```
 
 **参数：**
@@ -117,7 +116,6 @@ uvicorn.run(app, host="0.0.0.0", port=8765)  # 修改端口号
 
 ```python
 WhisperModel(model_size, device="cuda", compute_type="float16")
-
 ```
 
 ## 🔧 故障排查
@@ -160,7 +158,7 @@ python -c "from faster_whisper import WhisperModel; WhisperModel('base')"
 3. 使用 HTTPS
 4. 设置请求限流
 
-## 💻 系统要求<http://localhost:8765/docs>
+## 💻 系统要求
 
 - Python 3.8+
 - 4GB+ RAM（推荐 8GB）
@@ -314,7 +312,49 @@ subtitle_backend/
 - **翻译 (`translation/`)**: 负责文本翻译，提供同步与异步两种接口
 - **配置 (`config_manager.py`)**: 负责读取、写入和管理 `model_config.json`
 
-### 后续优化方向
+## 更新日志与技术实现 (2025-11-29)
+
+### 1. 架构重构：多线程生产者-消费者模型
+
+**问题**：原单线程模式下，语音识别（STT）或翻译的网络/计算耗时会阻塞音频读取，导致音频丢失（丢字）和界面卡顿。
+
+**解决手段**：
+
+- **分离采集与处理**：实现了标准的生产者-消费者模型。
+  - **生产者 (`_capture_loop`)**：独立线程，只负责从 `PyAudio` 极速读取音频流并推入 `queue`，确保 0 丢帧。
+  - **消费者 (`_process_loop`)**：独立线程，负责从队列取出数据，执行 VAD、STT 和翻译等耗时操作。
+- **队列缓冲**：使用 `queue.Queue` 作为线程间缓冲区，平滑处理速度波动。
+
+### 2. 性能优化：自适应积压追赶策略
+
+**问题**：当大模型响应慢或网络波动时，待处理音频队列会堆积，导致识别结果严重滞后于当前语音。
+
+**解决手段**：
+
+- **队列深度监控**：实时监控处理队列的积压数量 (`qsize`)。
+- **智能丢帧**：当积压严重（>5个块，约0.5s）且当前音频块判断为静音（低 RMS 能量）时，**直接丢弃**该块，跳过后续复杂的 VAD 和 STT 计算。这使得系统能在说话间歇期迅速“消化”积压，追赶实时进度。
+
+### 3. 用户体验：UI 状态保持与增量更新
+
+**问题**：新句子刚开始识别时只有原文，导致翻译区被清空，出现视觉上的“闪烁”和“信息断层”。
+
+**解决手段**：
+
+- **UI 缓存机制**：在 `FloatingWindow` 中引入 `last_trans` 缓存。
+- **条件更新逻辑**：
+  - 当 STT 输出实时预览（只有原文）时，向 UI 发送 `trans=None`。
+  - UI层接收到 `None` 时**保持显示上一句的翻译结果**，直到该句的第一个有效翻译到达才覆盖更新。
+
+### 4. 扩展性：OpenAI 兼容接口集成
+
+**问题**：为了支持 SiliconFlow 等高性能大模型，且保持未来对其他模型的兼容性。
+
+**解决手段**：
+
+- **接口标准化**：严格遵循 OpenAI Audio API (`/v1/audio/transcriptions`) 规范封装 `SiliconFlowModel`。
+- **协议适配**：实现了 `multipart/form-data` 格式的内存音频文件上传，无需落地临时文件，统一了不同下游模型的调用方式。
+
+## 后续优化方向
 
 - UI：主题/样式自定义、字幕历史、导出 SRT/ASS 文件
 - 音频：降噪、增益、设备选择 UI、音频可视化

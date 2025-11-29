@@ -337,21 +337,25 @@ class FloatingWindow:
     def _update_ui(self, org, trans, latencies=None):
         """实际更新UI（在主线程中调用）"""
         # 更新缓存
-        self.last_org = org
-        self.last_trans = trans
+        if org is not None:
+            self.last_org = org
+        # 只有当 trans 不为 None 时才更新，避免用空字符串覆盖已有的旧翻译
+        if trans is not None:
+            self.last_trans = trans
+        
         self.last_latencies = latencies or {}
 
         show_latency = self.show_latency_var.get() if self.show_latency_var else False
         
         # 格式化显示文本
-        org_display = org
-        trans_display = trans
+        org_display = self.last_org
+        trans_display = self.last_trans
         
         if show_latency and latencies:
             if 'rec' in latencies:
-                org_display = f"{org}  [{latencies['rec']:.2f}s]"
+                org_display = f"{self.last_org}  [{latencies['rec']:.2f}s]"
             if 'trans' in latencies:
-                trans_display = f"{trans}  [{latencies['trans']:.2f}s]"
+                trans_display = f"{self.last_trans}  [{latencies['trans']:.2f}s]"
 
         if self.original_text_label: 
             self.original_text_label.config(text=org_display)
