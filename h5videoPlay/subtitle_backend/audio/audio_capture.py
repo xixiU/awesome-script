@@ -14,24 +14,43 @@ logger = logging.getLogger(__name__)
 
 
 class AudioCapture:
-    """音频采集器"""
+    """音频采集器
     
-    def __init__(self, sample_rate: int = 16000, chunk_duration: float = 2.0):
+    目标：
+    - 尽量过滤掉纯静音 / 环境噪声，避免把空白音频送去识别
+    - 保证一旦出现语音，能及时、连续地采集，尽量不丢字
+    """
+    
+    def __init__(
+        self,
+        sample_rate: int = 16000,
+        chunk_duration: float = 2.0,
+        silence_threshold: float = 1e-3,
+        vad_hangover_chunks: int = 3,
+    ):
         """
         初始化音频采集器
         
         Args:
             sample_rate: 采样率，默认16000Hz
             chunk_duration: 每次处理的音频时长（秒），默认2.0秒
+            silence_threshold: 静音判定阈值（基于 RMS），越小越敏感
+            vad_hangover_chunks: 语音结束后保留的尾部块数，防止尾音被截断
         """
         self.sample_rate = sample_rate
         self.chunk_duration = chunk_duration
         self.chunk_samples = int(sample_rate * chunk_duration)
+        self.silence_threshold = silence_threshold
+        self.vad_hangover_chunks = vad_hangover_chunks
         
         self.audio_queue = queue.Queue()
         self.is_recording = False
         self.stream = None
         self.device_index = None
+        
+        # 简单 VAD 状态
+        self._speech_active = False     # 当前是否处于“有语音”的状态
+        self._hangover_count = 0        # 已经保留了多少个尾部静音块
     
     def get_audio_device(self) -> int:
         """
@@ -81,9 +100,49 @@ class AudioCapture:
             return None
     
     def audio_callback(self, indata, frames, time, status):
-        """音频回调函数"""
-        if self.is_recording:
+        """音频回调函数（带简单 VAD）"""
+        if not self.is_recording:
+            return
+        
+        # indata: shape = (frames, channels)
+        # 转为 float32 一维数据做能量计算，但队列里仍然放原始形状
+        try:
+            audio = indata.astype(np.float32, copy=False).flatten()
+            if audio.size == 0:
+                return
+            
+            # 计算 RMS 能量，范围大致在 0~1
+            rms = float(np.sqrt(np.mean(audio * audio)))
+        except Exception as e:
+            logger.warning(f"计算音频能量失败: {e}")
+            # 出现异常时，为了安全起见仍然入队，避免丢失数据
             self.audio_queue.put(indata.copy())
+            return
+        
+        # 判定是否为“静音块”
+        is_silence = rms < self.silence_threshold
+        
+        if not is_silence:
+            # 检测到明显语音：进入语音活动状态，重置尾部计数
+            if not self._speech_active:
+                logger.debug(f"VAD: 语音开始，rms={rms:.6f}")
+            self._speech_active = True
+            self._hangover_count = 0
+            self.audio_queue.put(indata.copy())
+        else:
+            if self._speech_active:
+                # 语音刚结束的一小段静音，仍然保留若干块，防止尾音被截断
+                if self._hangover_count < self.vad_hangover_chunks:
+                    self._hangover_count += 1
+                    self.audio_queue.put(indata.copy())
+                else:
+                    # 尾部静音结束，复位状态，不再入队这类静音
+                    logger.debug("VAD: 语音结束，进入静音段")
+                    self._speech_active = False
+                    self._hangover_count = 0
+            else:
+                # 纯静音段：直接丢弃，不入队，避免送入大模型
+                pass
     
     def start(self, device_index: int = None) -> bool:
         """

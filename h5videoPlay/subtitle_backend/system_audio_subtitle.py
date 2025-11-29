@@ -27,7 +27,8 @@ class SystemAudioSubtitleService:
     """系统音频实时字幕服务"""
     
     def __init__(self, model_size="small", device="cpu", target_lang="zh-CN", source_lang=None, 
-                 sample_rate=16000, chunk_duration=2.0, config_file="model_config.json"):
+                 sample_rate=16000, chunk_duration=2.0, config_file="model_config.json",
+                 min_rms_for_stt: float = 3e-3):
         """
         初始化服务
         
@@ -44,6 +45,8 @@ class SystemAudioSubtitleService:
         self.source_lang = source_lang
         self.sample_rate = sample_rate
         self.chunk_duration = chunk_duration
+        # 额外的整体能量门限，用于在进入大模型前再过滤一层静音 / 环境噪声
+        self.min_rms_for_stt = min_rms_for_stt
         
         # 初始化各个模块
         self.stt_service = STTService(config_file)
@@ -168,6 +171,21 @@ class SystemAudioSubtitleService:
                     # 保存重叠部分用于下次处理
                     self.prev_audio = raw_audio[-overlap_samples:]
                     
+                    # ===== 额外的静音过滤（整体能量门） =====
+                    try:
+                        rms = float(np.sqrt(np.mean(proc_audio * proc_audio)))
+                    except Exception as e:
+                        logger.warning(f"计算整体RMS失败，仍然送入识别: {e}")
+                        rms = self.min_rms_for_stt
+
+                    if rms < self.min_rms_for_stt:
+                        # 整体能量也很低，认为主要是环境底噪 / 静音，直接跳过识别
+                        logger.debug(f"跳过静音块，不送入识别 (rms={rms:.6f} < {self.min_rms_for_stt:.6f})")
+                        audio_buffer = []
+                        curr_samples = 0
+                        continue
+                    # ===== 额外静音过滤结束 =====
+
                     # 使用上一句的后50个字符作为提示
                     prompt = self.sentence_buffer[-50:] if self.sentence_buffer else ""
                     
