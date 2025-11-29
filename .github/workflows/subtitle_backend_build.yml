@@ -1,0 +1,99 @@
+name: Build Subtitle Backend (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release Version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      prerelease:
+        description: 'Is this a pre-release?'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: subtitle-backend-linux
+            sep: ':'
+          - os: windows-latest
+            artifact_name: subtitle-backend-windows.exe
+            sep: ';'
+          - os: macos-latest
+            artifact_name: subtitle-backend-macos
+            sep: ':'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install system dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk portaudio19-dev
+
+    - name: Install system dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install portaudio
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r h5videoPlay/subtitle_backend/requirements.txt
+        pip install pyinstaller
+
+    - name: Build with PyInstaller
+      working-directory: h5videoPlay/subtitle_backend
+      shell: bash
+      run: |
+        # Select icon based on OS
+        ICON_ARG=""
+        if [ "${{ runner.os }}" == "Windows" ]; then
+          ICON_ARG="--icon=assets/icon.ico"
+        elif [ "${{ runner.os }}" == "macOS" ]; then
+          ICON_ARG="--icon=assets/icon.icns"
+        else
+          ICON_ARG="--icon=assets/icon.png"
+        fi
+
+        pyinstaller --noconfirm --onefile --windowed \
+          --name "subtitle-backend" \
+          --add-data "assets${{ matrix.sep }}assets" \
+          --add-data "model_config.example.json${{ matrix.sep }}." \
+          --hidden-import="faster_whisper" \
+          $ICON_ARG \
+          system_audio_subtitle.py
+
+    - name: Move and Rename Artifact (Unix)
+      if: runner.os != 'Windows'
+      run: mv h5videoPlay/subtitle_backend/dist/subtitle-backend h5videoPlay/subtitle_backend/dist/${{ matrix.artifact_name }}
+
+    - name: Move and Rename Artifact (Windows)
+      if: runner.os == 'Windows'
+      run: move h5videoPlay/subtitle_backend/dist/subtitle-backend.exe h5videoPlay/subtitle_backend/dist/${{ matrix.artifact_name }}
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ inputs.version }}
+        name: Subtitle Backend ${{ inputs.version }}
+        draft: false
+        prerelease: ${{ inputs.prerelease }}
+        files: h5videoPlay/subtitle_backend/dist/${{ matrix.artifact_name }}
+        generate_release_notes: true

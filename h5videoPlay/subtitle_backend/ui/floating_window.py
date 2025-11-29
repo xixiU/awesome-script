@@ -6,6 +6,7 @@
 """
 import queue
 import platform
+import os
 import tkinter as tk
 from tkinter import ttk
 from typing import Optional, Callable
@@ -51,6 +52,29 @@ class FloatingWindow:
         """创建并显示窗口"""
         self.root = tk.Tk()
         self.root.title("实时字幕")
+
+        # --- 设置程序图标 ---
+        try:
+            # 计算 assets 目录的绝对路径
+            # 当前文件: .../subtitle_backend/ui/floating_window.py
+            # 目标目录: .../subtitle_backend/assets/
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            assets_dir = os.path.join(os.path.dirname(current_dir), "assets")
+            
+            system_type = platform.system()
+            if system_type == "Windows":
+                icon_path = os.path.join(assets_dir, "icon.ico")
+                if os.path.exists(icon_path):
+                    self.root.iconbitmap(icon_path)
+            else:
+                # Linux 和 macOS 使用 iconphoto
+                icon_path = os.path.join(assets_dir, "icon.png")
+                if os.path.exists(icon_path):
+                    icon_img = tk.PhotoImage(file=icon_path)
+                    self.root.iconphoto(True, icon_img)
+        except Exception as e:
+            print(f"加载图标失败: {e}")
+
         self.root.attributes('-topmost', True)
         self.root.attributes('-alpha', 0.85)
         
