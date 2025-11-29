@@ -18,6 +18,10 @@
                 "api_key": "your-api-key-here",
                 "base_url": "https://api.siliconflow.cn/v1",
                 "model_id": "siliconflow/asr-paraformer-zh",
+                "model_choice": [
+                    "siliconflow/asr-paraformer-zh",
+                    "TeleAI/TeleSpeechASR"
+                ],
                 "timeout": 30
             }
         }

@@ -29,7 +29,7 @@ class SystemAudioSubtitleService:
     
     def __init__(self, model_size="small", device="cpu", target_lang="zh-CN", source_lang=None, 
                  sample_rate=16000, chunk_duration=2.0, config_file="model_config.json",
-                 min_rms_for_stt: float = 3e-3,
+                 min_rms_for_stt: float = 1e-3,
                  silence_duration_for_sentence_end: float = 1.5,
                  max_sentence_duration: float = 10.0):
         """
@@ -162,7 +162,13 @@ class SystemAudioSubtitleService:
                 if chunk is not None:
                     # 监控队列长度
                     qsize = self.data_queue.qsize()
-                    if qsize > 50:
+                    # 计算正常的累积量：chunk_duration (2s) / 0.1s = 20块
+                    # 只有远超正常累积量才警告
+                    normal_buffer_size = int(self.chunk_duration / 0.1)
+                    warning_threshold = max(30, normal_buffer_size * 2)
+                    drop_threshold = max(100, normal_buffer_size * 5)
+
+                    if qsize > drop_threshold:
                         # 积压严重，丢弃数据防止内存溢出
                         logger.warning(f"⚡ 队列积压严重 ({qsize}块)，丢弃当前帧...")
                         # 尝试清空一部分旧数据
@@ -171,7 +177,7 @@ class SystemAudioSubtitleService:
                                 self.data_queue.get_nowait()
                         except queue.Empty:
                             pass
-                    elif qsize > 10:
+                    elif qsize > warning_threshold:
                         # 积压警告，但不丢弃
                         logger.warning(f"⚠️ 队列积压警告: {qsize}块待处理")
                     
@@ -219,6 +225,9 @@ class SystemAudioSubtitleService:
                 current_time = process_start_time
                 
                 # 将所有新获取的块加入缓冲区
+                if len(chunks) > 10:
+                    logger.info(f"🚀 正在合并处理 {len(chunks)} 个积压音频块 (约 {len(chunks)*0.1:.1f}秒)...")
+                
                 for chunk in chunks:
                     audio_buffer.append(chunk)
                     curr_samples += len(chunk)

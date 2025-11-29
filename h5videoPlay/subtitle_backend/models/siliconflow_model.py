@@ -113,11 +113,12 @@ class SiliconFlowSTTModel(BaseSpeechToTextModel):
             
             response.raise_for_status()
             result = response.json()
+            #logger.warning(f"👂 [硅基流动] 原始响应: {result}")
             
             cost = time.time() - t0
             
-            # 解析响应（OpenAI兼容格式：{"text": "...", "language": "..."}）
-            text = result.get('text', '') or result.get('transcription', '')
+            # 硅基流动返回格式：{"text": "..."}
+            text = result.get('text', '') 
             detected_lang = result.get('language', language) if language else result.get('language', 'auto')
             
             if text:
