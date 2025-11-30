@@ -88,11 +88,27 @@ jobs:
       if: runner.os == 'Windows'
       run: move h5videoPlay/subtitle_backend/dist/subtitle-backend.exe h5videoPlay/subtitle_backend/dist/${{ matrix.artifact_name }}
 
-    - name: Package Artifact (Unix)
-      if: runner.os != 'Windows'
+    - name: Package Artifact (Linux)
+      if: runner.os == 'Linux'
       run: |
+        mv h5videoPlay/subtitle_backend/dist/subtitle-backend h5videoPlay/subtitle_backend/dist/${{ matrix.artifact_name }}
         cd h5videoPlay/subtitle_backend/dist
         zip -r ${{ matrix.artifact_name }}.zip ${{ matrix.artifact_name }}
+
+    - name: Package Artifact (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        # macOS: PyInstaller with --windowed creates a .app bundle
+        # We rename the .app and zip it
+        cd h5videoPlay/subtitle_backend/dist
+        if [ -d "subtitle-backend.app" ]; then
+          mv subtitle-backend.app ${{ matrix.artifact_name }}.app
+          zip -r ${{ matrix.artifact_name }}.zip ${{ matrix.artifact_name }}.app
+        else
+          # Fallback if only binary exists
+          mv subtitle-backend ${{ matrix.artifact_name }}
+          zip -r ${{ matrix.artifact_name }}.zip ${{ matrix.artifact_name }}
+        fi
 
     - name: Package Artifact (Windows)
       if: runner.os == 'Windows'
@@ -109,3 +125,4 @@ jobs:
         prerelease: ${{ inputs.prerelease }}
         files: h5videoPlay/subtitle_backend/dist/${{ matrix.artifact_name }}.zip
         generate_release_notes: true
+

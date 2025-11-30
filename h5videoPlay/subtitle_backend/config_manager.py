@@ -6,6 +6,7 @@
 import json
 import os
 import sys
+import platform
 import logging
 from typing import Dict, Optional, Any
 from pathlib import Path
@@ -26,7 +27,13 @@ class ConfigManager:
         # 获取脚本所在目录
         if getattr(sys, 'frozen', False):
             # 如果是打包后的可执行文件
-            script_dir = Path(sys.executable).parent
+            exe_path = Path(sys.executable)
+            # macOS .app 包特殊处理：将配置生成在 .app 同级目录
+            if platform.system() == 'Darwin' and 'Contents/MacOS' in str(exe_path):
+                # .../AppName.app/Contents/MacOS/AppName -> .../AppName.app/..
+                script_dir = exe_path.parent.parent.parent.parent
+            else:
+                script_dir = exe_path.parent
         else:
             # 如果是脚本运行
             script_dir = Path(__file__).parent
