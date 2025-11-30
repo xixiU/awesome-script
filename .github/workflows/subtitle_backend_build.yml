@@ -88,6 +88,18 @@ jobs:
       if: runner.os == 'Windows'
       run: move h5videoPlay/subtitle_backend/dist/subtitle-backend.exe h5videoPlay/subtitle_backend/dist/${{ matrix.artifact_name }}
 
+    - name: Package Artifact (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        cd h5videoPlay/subtitle_backend/dist
+        zip -r ${{ matrix.artifact_name }}.zip ${{ matrix.artifact_name }}
+
+    - name: Package Artifact (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        cd h5videoPlay/subtitle_backend/dist
+        Compress-Archive -Path ${{ matrix.artifact_name }} -DestinationPath ${{ matrix.artifact_name }}.zip
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
@@ -95,5 +107,5 @@ jobs:
         name: Subtitle Backend ${{ inputs.version }}
         draft: false
         prerelease: ${{ inputs.prerelease }}
-        files: h5videoPlay/subtitle_backend/dist/${{ matrix.artifact_name }}
+        files: h5videoPlay/subtitle_backend/dist/${{ matrix.artifact_name }}.zip
         generate_release_notes: true

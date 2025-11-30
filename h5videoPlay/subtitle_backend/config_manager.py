@@ -5,6 +5,7 @@
 """
 import json
 import os
+import sys
 import logging
 from typing import Dict, Optional, Any
 from pathlib import Path
@@ -23,7 +24,13 @@ class ConfigManager:
             config_file: 配置文件路径（相对于当前工作目录）
         """
         # 获取脚本所在目录
-        script_dir = Path(__file__).parent
+        if getattr(sys, 'frozen', False):
+            # 如果是打包后的可执行文件
+            script_dir = Path(sys.executable).parent
+        else:
+            # 如果是脚本运行
+            script_dir = Path(__file__).parent
+            
         self.config_path = script_dir / config_file
         self.config: Dict[str, Any] = {}
         self._load_config()
@@ -64,7 +71,7 @@ class ConfigManager:
                     "config": {
                         "api_key": "",
                         "base_url": "https://api.siliconflow.cn/v1",
-                        "model_id": "siliconflow/asr-paraformer-zh",
+                        "model_id": "FunAudioLLM/SenseVoiceSmall",
                         "timeout": 30
                     }
                 }
