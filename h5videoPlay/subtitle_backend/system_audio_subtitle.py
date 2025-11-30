@@ -9,6 +9,8 @@ import threading
 import time
 import queue
 import numpy as np
+import multiprocessing
+import sys
 
 # 导入各个模块
 from ui.floating_window import FloatingWindow
@@ -573,4 +575,6 @@ def main():
 
 
 if __name__ == "__main__":
+    # PyInstaller打包在Windows/macOS下需要此调用来支持multiprocessing
+    multiprocessing.freeze_support()
     main()
