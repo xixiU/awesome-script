@@ -56,6 +56,9 @@ class SystemAudioSubtitleService:
         self.silence_duration_for_sentence_end = silence_duration_for_sentence_end
         self.max_sentence_duration = max_sentence_duration
         
+        # 日志限流计数器
+        self.log_counter = 0
+        
         # 初始化各个模块
         self.stt_service = STTService(config_file)
         self.translator = Translator(target_lang=target_lang)
@@ -170,7 +173,10 @@ class SystemAudioSubtitleService:
 
                     if qsize > drop_threshold:
                         # 积压严重，丢弃数据防止内存溢出
-                        logger.warning(f"⚡ 队列积压严重 ({qsize}块)，丢弃当前帧...")
+                        if self.log_counter % 10 == 0:
+                            logger.warning(f"⚡ 队列积压严重 ({qsize}块)，丢弃当前帧...")
+                        self.log_counter += 1
+                        
                         # 尝试清空一部分旧数据
                         try:
                             for _ in range(10):
@@ -178,8 +184,13 @@ class SystemAudioSubtitleService:
                         except queue.Empty:
                             pass
                     elif qsize > warning_threshold:
-                        # 积压警告，但不丢弃
-                        logger.warning(f"⚠️ 队列积压警告: {qsize}块待处理")
+                        # 积压警告，但不丢弃（限制打印频率，每10次/1秒打印一次）
+                        if self.log_counter % 10 == 0:
+                            logger.warning(f"⚠️ 队列积压警告: {qsize}块待处理")
+                        self.log_counter += 1
+                    else:
+                        # 正常状态重置计数器（可选，为了保持计数连续性也可以不重置）
+                        pass
                     
                     # 放入内部数据队列
                     self.data_queue.put(chunk)

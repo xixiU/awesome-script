@@ -103,6 +103,9 @@ class SiliconFlowSTTModel(BaseSpeechToTextModel):
                 data['prompt'] = prompt
             
             # 发送请求
+            audio_duration = len(audio_data) / sample_rate
+            logger.info(f"📡 [硅基流动] 发送请求... (音频: {audio_duration:.2f}s)")
+            
             response = requests.post(
                 self.api_url,
                 headers=headers,
