@@ -1,14 +1,14 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-faster-whisper==1.0.0
-pydub==0.25.1
-numpy==1.24.3
-torch==2.1.0
-deep-translator==1.11.4
-python-dotenv==1.0.0
-aiofiles==23.2.1
-sounddevice==0.4.6
-soundfile==0.12.1
-requests==2.31.0
+fastapi
+uvicorn[standard]
+python-multipart
+faster-whisper
+pydub
+numpy
+torch
+deep-translator
+python-dotenv
+aiofiles
+sounddevice
+soundfile
+requests
 
