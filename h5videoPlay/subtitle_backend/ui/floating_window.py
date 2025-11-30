@@ -75,12 +75,14 @@ class FloatingWindow:
         except Exception as e:
             print(f"加载图标失败: {e}")
 
-        self.root.attributes('-topmost', True)
-        self.root.attributes('-alpha', 0.85)
-        
         # Mac 兼容性设置
         system_type = platform.system()
         self.root.overrideredirect(True)
+        
+        # 确保窗口在最顶层 (移动到 overrideredirect 之后)
+        self.root.attributes('-topmost', True)
+        self.root.attributes('-alpha', 0.85)
+        
         if system_type == "Darwin":
             try:
                 self.root.createcommand('::tk::mac::OnHide', lambda: None)
@@ -295,7 +297,17 @@ class FloatingWindow:
                 org, trans = latest
                 latencies = {}
             self._update_ui(org, trans, latencies)
-            
+        
+        # 周期性强制置顶 (解决全屏下被覆盖的问题)
+        if self.root:
+            try:
+                self.root.lift()
+                self.root.attributes('-topmost', True)
+                # macOS 特殊处理：对于全屏应用，可能需要强制聚焦一次（慎用，可能会抢焦点）
+                # self.root.call('wm', 'attributes', '.', '-topmost', '1')
+            except Exception:
+                pass
+
         # 每 100ms 轮询一次
         if self.is_running and self.root:
             self.root.after(100, self._process_ui_queue)
