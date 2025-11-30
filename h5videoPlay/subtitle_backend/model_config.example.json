@@ -17,9 +17,9 @@
             "config": {
                 "api_key": "your-api-key-here",
                 "base_url": "https://api.siliconflow.cn/v1",
-                "model_id": "siliconflow/asr-paraformer-zh",
+                "model_id": "FunAudioLLM/SenseVoiceSmall",
                 "model_choice": [
-                    "siliconflow/asr-paraformer-zh",
+                    "FunAudioLLM/SenseVoiceSmall",
                     "TeleAI/TeleSpeechASR"
                 ],
                 "timeout": 30
