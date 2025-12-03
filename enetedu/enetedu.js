@@ -928,9 +928,29 @@
             } else {
                 // 所有视频都已完成
                 utils.log(`${source}：所有视频播放完成`);
-                const closeDelay = source === '页面元素检测' ? 2000 : 5000;
-                console.log(`【课程切换】所有课程均已学习完毕或被锁定，${closeDelay / 1000}秒后自动关闭页面...`);
-                setTimeout(() => { window.close(); }, closeDelay);
+
+                if (window.location.href.includes('onlinenew.enetedu.com')) {
+                    utils.log('当前课程已完成，3秒后返回课程列表继续处理下一个课程...');
+                    setTimeout(() => {
+                        // 动态获取院校代码
+                        const pathParts = window.location.pathname.split('/');
+                        // url like /nnsy/MyTrainCourse/ChoiceCourse
+                        // pathParts[0] is empty string, pathParts[1] is 'nnsy'
+                        const schoolCode = pathParts[1];
+                        if (schoolCode) {
+                            const listUrl = `${window.location.origin}/${schoolCode}/MyTrainCourse/Index?newSearchFlag=true`;
+                            utils.log(`跳转回列表: ${listUrl}`);
+                            window.location.href = listUrl;
+                        } else {
+                            utils.error('无法提取院校代码，执行默认关闭操作');
+                            setTimeout(() => { window.close(); }, 3000);
+                        }
+                    }, 3000);
+                } else {
+                    const closeDelay = source === '页面元素检测' ? 2000 : 5000;
+                    console.log(`【课程切换】所有课程均已学习完毕或被锁定，${closeDelay / 1000}秒后自动关闭页面...`);
+                    setTimeout(() => { window.close(); }, closeDelay);
+                }
             }
         }
 
@@ -1730,7 +1750,8 @@
     // 主程序修改
     window.onload = function () {
         const pageTitle = document.title;
-        utils.log(`当前页面: ${pageTitle} `);
+        const currentUrl = window.location.href;
+        utils.log(`当前页面: ${pageTitle}, URL: ${currentUrl}`);
 
         if (utils.isChengKejiPahe()) { // Check for QChengKeji first
             utils.log('[QChengKeji] Page detected by URL.');
@@ -1745,12 +1766,15 @@
             const liveController = new LiveController();
             liveController.init();
         } else if (pageTitle === "课程学习") {
-            // 原有的视频课程处理
+            // 原有的视频课程处理 (包括 onlinenew 的播放页面)
             const controller = new VideoController();
             controller.initVideoPlay();
             controller.initProgressMonitor();
+
         } else if (pageTitle === "我的培训课程") {
-            // 原有的课程列表处理
+            // 原有的课程列表处理 (保留作为兜底或兼容旧版)
+            utils.log("进入旧版课程列表处理逻辑");
+            let hasOpened = false;
             $(".detail-act2 li").each(function () {
                 const statusSpan = $($(this).find("span.right1")[3]);
                 if (statusSpan.text().trim() === "学习") {
@@ -1763,9 +1787,15 @@
                         newWindow.blur(); // 将新窗口置于后台
                         window.focus(); // 保持当前窗口焦点
                         utils.log(`已打开课程: ${classLink} `);
+                        hasOpened = true;
+                        return false; // 找到第一个即停止
                     }
                 }
             });
+
+            if (!hasOpened) {
+                utils.log("没有找到需要学习的课程");
+            }
         }
     };
 })();
