@@ -1846,16 +1846,17 @@
                             return true; // continue
                         }
 
-                        // 在后台打开新标签页
-                        const newWindow = window.open(classLink, '_blank');
-                        if (newWindow) {
-                            newWindow.blur(); // 将新窗口置于后台
-                            window.focus(); // 保持当前窗口焦点
-                            utils.log(`已打开课程: ${classLink} `);
-                            CourseCache.add(classLink); // 加入缓存
-                            hasOpened = true;
-                            return false; // 找到第一个即停止
-                        }
+                        window.location.href = classLink;
+                        // // 在后台打开新标签页
+                        // const newWindow = window.open(classLink, '_blank');
+                        // if (newWindow) {
+                        //     newWindow.blur(); // 将新窗口置于后台
+                        //     window.focus(); // 保持当前窗口焦点
+                        //     utils.log(`已打开课程: ${classLink} `);
+                        //     CourseCache.add(classLink); // 加入缓存
+                        //     hasOpened = true;
+                        //     return false; // 找到第一个即停止
+                        // }
                     }
                 });
 
