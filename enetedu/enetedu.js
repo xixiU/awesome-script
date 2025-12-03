@@ -493,6 +493,54 @@
         }
     };
 
+    // 课程缓存管理
+    const CourseCache = {
+        key: 'enetedu_learning_courses',
+
+        // 辅助：从URL提取课程ID
+        getCourseId(url) {
+            // 匹配 ?id=123 或 &id=123
+            const match = url.match(/[?&]id=(\d+)/);
+            return match ? match[1] : null;
+        },
+
+        getAll() {
+            try {
+                return JSON.parse(localStorage.getItem(this.key) || '[]');
+            } catch (e) {
+                return [];
+            }
+        },
+
+        add(urlOrId) {
+            const id = this.getCourseId(urlOrId) || urlOrId; // 尝试提取ID，如果本身就是ID则直接使用
+            if (!id) return;
+
+            const list = this.getAll();
+            if (!list.includes(id)) {
+                list.push(id);
+                localStorage.setItem(this.key, JSON.stringify(list));
+                utils.log(`[缓存] 添加课程ID: ${id}`);
+            }
+        },
+
+        remove(urlOrId) {
+            const id = this.getCourseId(urlOrId) || urlOrId;
+            if (!id) return;
+
+            const list = this.getAll();
+            const newList = list.filter(item => item !== id);
+            localStorage.setItem(this.key, JSON.stringify(newList));
+            utils.log(`[缓存] 移除课程ID: ${id}`);
+        },
+
+        has(urlOrId) {
+            const id = this.getCourseId(urlOrId) || urlOrId;
+            if (!id) return false;
+            return this.getAll().includes(id);
+        }
+    };
+
     // 视频控制器
     class VideoController {
         constructor() {
@@ -503,6 +551,12 @@
 
         // 初始化视频播放
         initVideoPlay() {
+            // 注册页面关闭时移除缓存
+            window.addEventListener('beforeunload', () => {
+                // 尝试移除当前页面的 URL，使用 href 确保匹配
+                CourseCache.remove(window.location.href);
+            });
+
             this.playInterval = setInterval(() => {
                 try {
                     const iframe = $(".classcenter-chapter1 iframe").contents();
@@ -928,6 +982,9 @@
             } else {
                 // 所有视频都已完成
                 utils.log(`${source}：所有视频播放完成`);
+
+                // 学完移除缓存
+                CourseCache.remove(window.location.href);
 
                 if (window.location.href.includes('onlinenew.enetedu.com')) {
                     utils.log('当前课程已完成，3秒后返回课程列表继续处理下一个课程...');
@@ -1778,8 +1835,15 @@
             $(".detail-act2 li").each(function () {
                 const statusSpan = $($(this).find("span.right1")[3]);
                 if (statusSpan.text().trim() === "学习") {
-                    const classLink = "https://onlinenew.enetedu.com/" +
-                        $($(this).find("a")[0]).attr("href");
+                    const relativeLink = $($(this).find("a")[0]).attr("href");
+                    // 构造完整 URL 以匹配缓存键
+                    const classLink = new URL(relativeLink, "https://onlinenew.enetedu.com").href;
+
+                    // 检查是否已在学习列表中
+                    if (CourseCache.has(classLink)) {
+                        utils.log(`课程已在学习中，跳过: ${classLink}`);
+                        return true; // continue
+                    }
 
                     // 在后台打开新标签页
                     const newWindow = window.open(classLink, '_blank');
@@ -1787,6 +1851,7 @@
                         newWindow.blur(); // 将新窗口置于后台
                         window.focus(); // 保持当前窗口焦点
                         utils.log(`已打开课程: ${classLink} `);
+                        CourseCache.add(classLink); // 加入缓存
                         hasOpened = true;
                         return false; // 找到第一个即停止
                     }
