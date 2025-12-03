@@ -1828,7 +1828,7 @@
             // 直播页面处理
             const liveController = new LiveController();
             liveController.init();
-        } else if (isEneteduPage.isisEneteduPage()) {
+        } else if (utils.isisEneteduPage()) {
             if (utils.isOnlineNewListPage()) {
                 // 原有的课程列表处理 (保留作为兜底或兼容旧版)
                 utils.log("进入旧版课程列表处理逻辑");
