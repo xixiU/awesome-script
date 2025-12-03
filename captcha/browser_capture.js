@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.2.3
+// @version      4.2.4
 // @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。修复跨域图片处理问题。
 // @author       xixiu
 // @thanks       哈士奇

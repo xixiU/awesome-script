@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.5.4
+// @version      1.5.5
 // @description  使用Dify工作流或Chrome Gemini AI智能总结网页内容，支持全文总结和选中文本总结
 // @author       xixiu
 // @match        *://*/*
