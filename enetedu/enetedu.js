@@ -490,6 +490,12 @@
         },
         isChengKejiPahe() {
             return window.location.href.includes("bwgl.qchengkeji.com/user/node");
+        },
+        isEneteduPage() {
+            return window.location.href.includes('onlinenew.enetedu.com');
+        },
+        isOnlineNewListPage() {
+            return window.location.href.includes('onlinenew.enetedu.com') && window.location.href.includes('/MyTrainCourse/Index');
         }
     };
 
@@ -1822,47 +1828,48 @@
             // 直播页面处理
             const liveController = new LiveController();
             liveController.init();
-        } else if (pageTitle === "课程学习") {
-            // 原有的视频课程处理 (包括 onlinenew 的播放页面)
-            const controller = new VideoController();
-            controller.initVideoPlay();
-            controller.initProgressMonitor();
+        } else if (isEneteduPage.isisEneteduPage()) {
+            if (utils.isOnlineNewListPage()) {
+                // 原有的课程列表处理 (保留作为兜底或兼容旧版)
+                utils.log("进入旧版课程列表处理逻辑");
+                let hasOpened = false;
+                $(".detail-act2 li").each(function () {
+                    const statusSpan = $($(this).find("span.right1")[3]);
+                    if (statusSpan.text().trim() === "学习") {
+                        const relativeLink = $($(this).find("a")[0]).attr("href");
+                        // 构造完整 URL 以匹配缓存键
+                        const classLink = new URL(relativeLink, "https://onlinenew.enetedu.com").href;
 
-        } else if (pageTitle === "我的培训课程") {
-            // 原有的课程列表处理 (保留作为兜底或兼容旧版)
-            utils.log("进入旧版课程列表处理逻辑");
-            let hasOpened = false;
-            $(".detail-act2 li").each(function () {
-                const statusSpan = $($(this).find("span.right1")[3]);
-                if (statusSpan.text().trim() === "学习") {
-                    const relativeLink = $($(this).find("a")[0]).attr("href");
-                    // 构造完整 URL 以匹配缓存键
-                    const classLink = new URL(relativeLink, "https://onlinenew.enetedu.com").href;
+                        // 检查是否已在学习列表中
+                        if (CourseCache.has(classLink)) {
+                            utils.log(`课程已在学习中，跳过: ${classLink}`);
+                            return true; // continue
+                        }
 
-                    // 检查是否已在学习列表中
-                    if (CourseCache.has(classLink)) {
-                        utils.log(`课程已在学习中，跳过: ${classLink}`);
-                        return true; // continue
+                        // 在后台打开新标签页
+                        const newWindow = window.open(classLink, '_blank');
+                        if (newWindow) {
+                            newWindow.blur(); // 将新窗口置于后台
+                            window.focus(); // 保持当前窗口焦点
+                            utils.log(`已打开课程: ${classLink} `);
+                            CourseCache.add(classLink); // 加入缓存
+                            hasOpened = true;
+                            return false; // 找到第一个即停止
+                        }
                     }
+                });
 
-                    // 在后台打开新标签页
-                    const newWindow = window.open(classLink, '_blank');
-                    if (newWindow) {
-                        newWindow.blur(); // 将新窗口置于后台
-                        window.focus(); // 保持当前窗口焦点
-                        utils.log(`已打开课程: ${classLink} `);
-                        CourseCache.add(classLink); // 加入缓存
-                        hasOpened = true;
-                        return false; // 找到第一个即停止
-                    }
+                if (!hasOpened) {
+                    utils.log("没有找到需要学习的课程，准备关闭页面");
+                    setTimeout(() => {
+                        window.close();
+                    }, 3000);
                 }
-            });
-
-            if (!hasOpened) {
-                utils.log("没有找到需要学习的课程，准备关闭页面");
-                setTimeout(() => {
-                    window.close();
-                }, 3000);
+            } else {
+                // 原有的视频课程处理 (包括 onlinenew 的播放页面)
+                const controller = new VideoController();
+                controller.initVideoPlay();
+                controller.initProgressMonitor();
             }
         }
     };
