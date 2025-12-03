@@ -1859,7 +1859,10 @@
             });
 
             if (!hasOpened) {
-                utils.log("没有找到需要学习的课程");
+                utils.log("没有找到需要学习的课程，准备关闭页面");
+                setTimeout(() => {
+                    window.close();
+                }, 3000);
             }
         }
     };
