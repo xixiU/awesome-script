@@ -5,10 +5,9 @@
 // @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。修复跨域图片处理问题。
 // @author       xixiu
 // @thanks       哈士奇
-// @include        http://*
-// @include        https://*
+// @match        *://*/*
+// @exclude      https://www.youtube.com/*
 // @license        MIT
-
 // @grant        unsafeWindow
 // @grant        GM_addStyle
 // @grant        GM_listValues
