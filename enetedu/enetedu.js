@@ -1833,6 +1833,8 @@
                 // 原有的课程列表处理 (保留作为兜底或兼容旧版)
                 utils.log("进入旧版课程列表处理逻辑");
                 let hasOpened = false;
+                // 收集所有不在缓存中的课程链接
+                const availableCourses = [];
                 $(".detail-act2 li").each(function () {
                     const statusSpan = $($(this).find("span.right1")[3]);
                     if (statusSpan.text().trim() === "学习") {
@@ -1846,19 +1848,32 @@
                             return true; // continue
                         }
 
-                        window.location.href = classLink;
-                        // // 在后台打开新标签页
-                        // const newWindow = window.open(classLink, '_blank');
-                        // if (newWindow) {
-                        //     newWindow.blur(); // 将新窗口置于后台
-                        //     window.focus(); // 保持当前窗口焦点
-                        //     utils.log(`已打开课程: ${classLink} `);
-                        //     CourseCache.add(classLink); // 加入缓存
-                        //     hasOpened = true;
-                        //     return false; // 找到第一个即停止
-                        // }
+                        // 添加到可用课程列表
+                        availableCourses.push(classLink);
                     }
                 });
+
+                // 如果有可用课程，随机选择一个打开
+                if (availableCourses.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * availableCourses.length);
+                    const selectedCourse = availableCourses[randomIndex];
+
+                    // // 在后台打开新标签页
+                    // const newWindow = window.open(selectedCourse, '_blank');
+                    // if (newWindow) {
+                    //     newWindow.blur(); // 将新窗口置于后台
+                    //     window.focus(); // 保持当前窗口焦点
+                    //     utils.log(`已随机打开课程: ${selectedCourse} `);
+                    //     CourseCache.add(selectedCourse); // 加入缓存
+                    //     hasOpened = true;
+                    // }
+
+                    // 在当前标签页打开
+                    utils.log(`已随机选择课程，正在打开: ${selectedCourse} `);
+                    CourseCache.add(selectedCourse); // 加入缓存
+                    window.location.href = selectedCourse;
+                    hasOpened = true;
+                }
 
                 if (!hasOpened) {
                     utils.log("没有找到需要学习的课程，准备关闭页面");
