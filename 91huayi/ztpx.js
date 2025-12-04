@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         91终极学习助手 
+// @name         91学习助手 
 // @namespace    http://tampermonkey.net/
 // @version      3.0
 // @description  过拦截课程完成API请求，实现更精准的自动切换下一课功能，兼容所有场景。
