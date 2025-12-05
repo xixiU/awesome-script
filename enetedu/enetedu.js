@@ -547,6 +547,31 @@
         }
     };
 
+    // 返回课程列表页的通用函数
+    function returnToCourseList(delay = 3000, logMessage = '返回课程列表页') {
+        if (window.location.href.includes('onlinenew.enetedu.com')) {
+            utils.log(logMessage);
+            setTimeout(() => {
+                // 动态获取院校代码
+                const pathParts = window.location.pathname.split('/');
+                // url like /nnsy/MyTrainCourse/ChoiceCourse
+                // pathParts[0] is empty string, pathParts[1] is 'nnsy'
+                const schoolCode = pathParts[1];
+                if (schoolCode) {
+                    const listUrl = `${window.location.origin}/${schoolCode}/MyTrainCourse/Index?newSearchFlag=true`;
+                    utils.log(`跳转回列表: ${listUrl}`);
+                    window.location.href = listUrl;
+                } else {
+                    utils.error('无法提取院校代码，执行默认关闭操作');
+                    setTimeout(() => { window.close(); }, 3000);
+                }
+            }, delay);
+        } else {
+            utils.log('非 onlinenew.enetedu.com 页面，3秒后关闭');
+            setTimeout(() => { window.close(); }, 3000);
+        }
+    }
+
     // 视频控制器
     class VideoController {
         constructor() {
@@ -557,6 +582,17 @@
 
         // 初始化视频播放
         initVideoPlay() {
+            // 检测当前页面是否已在缓存中（可能在其他标签页学习）
+            if (CourseCache.has(window.location.href)) {
+                utils.log(`当前课程已在其他标签页学习中，返回课程列表页: ${window.location.href}`);
+                returnToCourseList(3000, '当前课程已在其他标签页学习中，返回课程列表页');
+                return; // 如果已在缓存中，直接返回，不继续执行后续逻辑
+            }
+
+            // 当前页面不在缓存中，添加到缓存表示正在学习
+            CourseCache.add(window.location.href);
+            utils.log(`课程已添加到学习缓存: ${window.location.href}`);
+
             // 注册页面关闭时移除缓存
             window.addEventListener('beforeunload', () => {
                 // 尝试移除当前页面的 URL，使用 href 确保匹配
@@ -993,22 +1029,7 @@
                 CourseCache.remove(window.location.href);
 
                 if (window.location.href.includes('onlinenew.enetedu.com')) {
-                    utils.log('当前课程已完成，3秒后返回课程列表继续处理下一个课程...');
-                    setTimeout(() => {
-                        // 动态获取院校代码
-                        const pathParts = window.location.pathname.split('/');
-                        // url like /nnsy/MyTrainCourse/ChoiceCourse
-                        // pathParts[0] is empty string, pathParts[1] is 'nnsy'
-                        const schoolCode = pathParts[1];
-                        if (schoolCode) {
-                            const listUrl = `${window.location.origin}/${schoolCode}/MyTrainCourse/Index?newSearchFlag=true`;
-                            utils.log(`跳转回列表: ${listUrl}`);
-                            window.location.href = listUrl;
-                        } else {
-                            utils.error('无法提取院校代码，执行默认关闭操作');
-                            setTimeout(() => { window.close(); }, 3000);
-                        }
-                    }, 3000);
+                    returnToCourseList(3000, '当前课程已完成，3秒后返回课程列表继续处理下一个课程...');
                 } else {
                     const closeDelay = source === '页面元素检测' ? 2000 : 5000;
                     console.log(`【课程切换】所有课程均已学习完毕或被锁定，${closeDelay / 1000}秒后自动关闭页面...`);
@@ -1862,8 +1883,9 @@
             const selectedCourse = availableCourses[randomIndex];
 
             // 在当前标签页打开
+            // 注意：不在跳转前添加到缓存，而是在视频页面成功加载后再添加
+            // 这样可以避免在 initVideoPlay 中误判为已在其他标签页学习
             utils.log(`已随机选择课程，正在打开: ${selectedCourse} `);
-            CourseCache.add(selectedCourse); // 加入缓存
             window.location.href = selectedCourse;
             hasOpened = true;
         }
