@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.6.2.8
+// @version      0.6.2.9
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频。优先使用接口检测学习进度，页面元素检测作为兜底。已移除tab切换时视频自动停止的限制。
 // @author       xixiu
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -578,6 +578,9 @@
             this.playInterval = null;
             this.lastForceReportTime = 0; // 新增：上次强制上报时间
             this.lastLogTime = 0; // 新增：上次打印视频进度日志的时间
+            this.lastProgressUpdateTime = Date.now(); // 记录上次进度更新时间
+            this.lastProgressValue = 0; // 记录上次进度值
+            this.progressCheckInterval = null; // 进度检查定时器
         }
 
         // 初始化视频播放
@@ -634,6 +637,24 @@
 
         // 监听视频进度
         initProgressMonitor() {
+            // 初始化进度更新时间
+            this.lastProgressUpdateTime = Date.now();
+            this.lastProgressValue = 0;
+
+            // 启动10分钟无变化检测
+            const STUCK_CHECK_INTERVAL = 600000; // 10分钟 = 600000毫秒
+            this.progressCheckInterval = setInterval(() => {
+                const now = Date.now();
+                const timeSinceLastUpdate = now - this.lastProgressUpdateTime;
+
+                if (timeSinceLastUpdate >= STUCK_CHECK_INTERVAL) {
+                    utils.log(`检测到10分钟内进度无变化（上次更新: ${Math.floor(timeSinceLastUpdate / 1000)}秒前），可能页面卡住，强制刷新页面`);
+                    window.location.reload();
+                } else {
+                    utils.log(`进度正常，距离上次更新: ${Math.floor(timeSinceLastUpdate / 1000)}秒`);
+                }
+            }, 60000); // 每分钟检查一次
+
             // 针对 onlinenew.enetedu.com 页面，增强学习逻辑
             if (window.location.href.includes('onlinenew.enetedu.com')) {
                 const iframeElement = $(".classcenter-chapter1 iframe")[0];
@@ -663,6 +684,10 @@
                                     utils.log(`拦截 iframe 中的 RecordDuration，继续页面原有上报。原始调用参数: start=${start}, end=${end}`);
                                     originalRecordDuration(start, end); // 执行原始上报
                                     self.lastForceReportTime = end; // 使用 end 而不是 start，更新到最新的上报时间点
+                                    // 更新进度记录
+                                    self.lastProgressUpdateTime = Date.now();
+                                    self.lastProgressValue = end;
+                                    utils.log(`章节学习进度已更新: ${end.toFixed(0)}s`);
                                 };
                             } else {
                                 utils.error("iframeWindow.RecordDuration 函数未找到，无法拦截原有上报。");
@@ -679,6 +704,10 @@
                                             utils.log(`强制上报进度: 从 ${this.lastForceReportTime.toFixed(0)}s 到 ${currentTime.toFixed(0)}s`);
                                             originalRecordDuration(this.lastForceReportTime, currentTime);
                                             this.lastForceReportTime = currentTime;
+                                            // 更新进度记录
+                                            this.lastProgressUpdateTime = Date.now();
+                                            this.lastProgressValue = currentTime;
+                                            utils.log(`章节学习进度已更新: ${currentTime.toFixed(0)}s`);
                                         }
                                     }
                                 }
@@ -692,6 +721,10 @@
                                         utils.log(`检测到拖拽 (seeked 事件)，立即上报进度到 ${currentTime.toFixed(0)}s`);
                                         originalRecordDuration(this.lastForceReportTime, currentTime);
                                         this.lastForceReportTime = currentTime;
+                                        // 更新进度记录
+                                        this.lastProgressUpdateTime = Date.now();
+                                        this.lastProgressValue = currentTime;
+                                        utils.log(`章节学习进度已更新: ${currentTime.toFixed(0)}s`);
                                     });
                                     clearInterval(checkH5PlayerInterval); // 停止轮询
                                 }
@@ -729,6 +762,18 @@
             }, 8000);
         }
 
+        // 清理资源
+        destroy() {
+            if (this.progressCheckInterval) {
+                clearInterval(this.progressCheckInterval);
+                this.progressCheckInterval = null;
+            }
+            if (this.playInterval) {
+                clearInterval(this.playInterval);
+                this.playInterval = null;
+            }
+        }
+
         // 处理视频进度
         handleVideoProgress(event) {
             const video = event.target;
@@ -749,6 +794,9 @@
             if (Math.abs(currentTime - this.lastLogTime) >= 6) {
                 utils.log(`当前视频进度: ${currentTime}s/${duration}s，播放速度: ${video.playbackRate}倍`);
                 this.lastLogTime = currentTime;
+                // 更新进度记录（用于检测页面卡住）
+                this.lastProgressUpdateTime = Date.now();
+                this.lastProgressValue = currentTime;
                 this.checkCurrentProgress();
             }
             // if (currentTime >= duration) {
