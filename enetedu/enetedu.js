@@ -1810,6 +1810,72 @@
         }
     }
 
+    // 处理课程列表页面
+    function handleOnlineNewListPage() {
+        utils.log("进入课程列表处理逻辑");
+
+        // 从地址栏动态获取院校代码
+        const pathParts = window.location.pathname.split('/');
+        // url like /nnsy/MyTrainCourse/Index
+        // pathParts[0] is empty string, pathParts[1] is 'nnsy'
+        const schoolCode = pathParts[1];
+
+        // 后台打开学分页面
+        if (schoolCode) {
+            const creditUrl = `https://onlinenew.enetedu.com/${schoolCode}/MyCredit/Index`;
+            const creditWindow = window.open(creditUrl, '_blank');
+            if (creditWindow) {
+                creditWindow.blur(); // 将新窗口置于后台
+                window.focus(); // 保持当前窗口焦点
+                utils.log(`已在后台打开学分页面: ${creditUrl}`);
+            } else {
+                utils.error(`无法打开学分页面: ${creditUrl}`);
+            }
+        } else {
+            utils.error('无法从地址栏提取院校代码，跳过学分页面打开');
+        }
+
+        let hasOpened = false;
+        // 收集所有不在缓存中的课程链接
+        const availableCourses = [];
+        $(".detail-act2 li").each(function () {
+            const statusSpan = $($(this).find("span.right1")[3]);
+            if (statusSpan.text().trim() === "学习") {
+                const relativeLink = $($(this).find("a")[0]).attr("href");
+                // 构造完整 URL 以匹配缓存键
+                const classLink = new URL(relativeLink, "https://onlinenew.enetedu.com").href;
+
+                // 检查是否已在学习列表中
+                if (CourseCache.has(classLink)) {
+                    utils.log(`课程已在学习中，跳过: ${classLink}`);
+                    return true; // continue
+                }
+
+                // 添加到可用课程列表
+                availableCourses.push(classLink);
+            }
+        });
+
+        // 如果有可用课程，随机选择一个打开
+        if (availableCourses.length > 0) {
+            const randomIndex = Math.floor(Math.random() * availableCourses.length);
+            const selectedCourse = availableCourses[randomIndex];
+
+            // 在当前标签页打开
+            utils.log(`已随机选择课程，正在打开: ${selectedCourse} `);
+            CourseCache.add(selectedCourse); // 加入缓存
+            window.location.href = selectedCourse;
+            hasOpened = true;
+        }
+
+        if (!hasOpened) {
+            utils.log("没有找到需要学习的课程，准备关闭页面");
+            setTimeout(() => {
+                window.close();
+            }, 3000);
+        }
+    }
+
     // 主程序修改
     window.onload = function () {
         const pageTitle = document.title;
@@ -1830,57 +1896,7 @@
             liveController.init();
         } else if (utils.isEneteduPage()) {
             if (utils.isOnlineNewListPage()) {
-                // 原有的课程列表处理 (保留作为兜底或兼容旧版)
-                utils.log("进入旧版课程列表处理逻辑");
-                let hasOpened = false;
-                // 收集所有不在缓存中的课程链接
-                const availableCourses = [];
-                $(".detail-act2 li").each(function () {
-                    const statusSpan = $($(this).find("span.right1")[3]);
-                    if (statusSpan.text().trim() === "学习") {
-                        const relativeLink = $($(this).find("a")[0]).attr("href");
-                        // 构造完整 URL 以匹配缓存键
-                        const classLink = new URL(relativeLink, "https://onlinenew.enetedu.com").href;
-
-                        // 检查是否已在学习列表中
-                        if (CourseCache.has(classLink)) {
-                            utils.log(`课程已在学习中，跳过: ${classLink}`);
-                            return true; // continue
-                        }
-
-                        // 添加到可用课程列表
-                        availableCourses.push(classLink);
-                    }
-                });
-
-                // 如果有可用课程，随机选择一个打开
-                if (availableCourses.length > 0) {
-                    const randomIndex = Math.floor(Math.random() * availableCourses.length);
-                    const selectedCourse = availableCourses[randomIndex];
-
-                    // // 在后台打开新标签页
-                    // const newWindow = window.open(selectedCourse, '_blank');
-                    // if (newWindow) {
-                    //     newWindow.blur(); // 将新窗口置于后台
-                    //     window.focus(); // 保持当前窗口焦点
-                    //     utils.log(`已随机打开课程: ${selectedCourse} `);
-                    //     CourseCache.add(selectedCourse); // 加入缓存
-                    //     hasOpened = true;
-                    // }
-
-                    // 在当前标签页打开
-                    utils.log(`已随机选择课程，正在打开: ${selectedCourse} `);
-                    CourseCache.add(selectedCourse); // 加入缓存
-                    window.location.href = selectedCourse;
-                    hasOpened = true;
-                }
-
-                if (!hasOpened) {
-                    utils.log("没有找到需要学习的课程，准备关闭页面");
-                    setTimeout(() => {
-                        window.close();
-                    }, 3000);
-                }
+                handleOnlineNewListPage();
             } else {
                 // 原有的视频课程处理 (包括 onlinenew 的播放页面)
                 const controller = new VideoController();
