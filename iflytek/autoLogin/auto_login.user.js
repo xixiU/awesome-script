@@ -25,50 +25,57 @@
     let isSubmitting = false;
 
     // 辅助函数：尝试激活浏览器的自动填充值
-    // 很多现代浏览器在用户产生交互前，不会将密码填入 value 属性
     function tryActivateAutofill(input) {
         if (input && !input.value) {
             try {
-                // 仅当检测到浏览器标记为 autofill 时尝试，或在特定的安全策略下尝试 focus
-                // 注意: matches(':-webkit-autofill') 在某些浏览器可能不准确或需要特定时机
                 input.focus();
-                // 某些情况下模拟点击也有帮助
-                // input.click();
+                input.click();
             } catch (e) { }
         }
     }
 
+    // 辅助函数：判断输入框是否已填充
+    function isFilled(input) {
+        if (!input) return false;
+        if (input.value && input.value.length > 0) return true;
+        // 即使检测到伪类，如果 value 是空，也不能算 filled，因为提交会失败
+        // 我们需要等待浏览器真的把值填进去
+        return false;
+    }
+
+    // 记录每种场景是否已经尝试过自动点击，避免死循环
+    const attempts = {
+        scene1: false,
+        scene3: false
+    };
+
     function autoLogin() {
-        if (isSubmitting) return; // 如果正在提交中，不再重复执行
+        if (isSubmitting) return;
 
         try {
             // --- 场景 1: Coremail 风格登录窗口 ---
-            // 特征: form action包含 coremail, 包含 uid 和 password 输入框
             const form1 = document.querySelector('form.j-login-form');
             if (form1) {
                 const uidInput = form1.querySelector('input[name="uid"]');
                 const pwdInput = form1.querySelector('input[name="password"]');
                 const loginBtn = form1.querySelector('.j-submit');
 
-                // 尝试“唤醒”自动填充
-                // 如果值为空，尝试 focus 一下，诱导浏览器写入 value
+                // 尝试唤醒: 反复 Focus 可能有助于触发浏览器填充
                 if (uidInput && !uidInput.value) tryActivateAutofill(uidInput);
                 if (pwdInput && !pwdInput.value) tryActivateAutofill(pwdInput);
 
-                // 检查元素是否存在且输入框有值 (浏览器自动填充)
-                if (uidInput && uidInput.value && pwdInput && pwdInput.value && loginBtn) {
-                    // 再次检查按钮是否可见且未被禁用
-                    if (loginBtn.offsetParent !== null && !loginBtn.disabled) {
-                        console.log('检测到场景1 (Coremail): 账号密码已填充，准备执行登录');
+                // 只有当 JS 真正读到值时才点击，避免提交空值导致报错
+                if (loginBtn && !attempts.scene1) {
+                    // 只要用户名有值，通常密码也已经就绪（浏览器机制）
+                    if (uidInput && uidInput.value) {
+                        console.log('检测到场景1 (Coremail): 账号数据已就绪，执行登录');
                         isSubmitting = true;
+                        attempts.scene1 = true;
 
-                        // 延迟点击，确保页面 JS 事件已绑定
                         setTimeout(() => {
                             loginBtn.click();
-                            // 5秒后重置锁，防止因网络慢或登录失败导致的脚本卡死
-                            setTimeout(() => { isSubmitting = false; }, 5000);
-                        }, 500);
-
+                            setTimeout(() => { isSubmitting = false; }, 3000);
+                        }, 300);
                         return;
                     }
                 }
@@ -95,27 +102,25 @@
                 const submitBtn = document.querySelector('input.user-btn[type="submit"]');
                 const vercodeInput = document.querySelector('li.vercode');
 
-                // 尝试“唤醒”自动填充
+                // 尝试唤醒
                 if (userInput && !userInput.value) tryActivateAutofill(userInput);
                 if (pwdInput && !pwdInput.value) tryActivateAutofill(pwdInput);
 
-                // 检查是否需要验证码 (如果验证码区域显示，则不自动点击，以免打断用户输入)
                 const isVercodeVisible = vercodeInput && getComputedStyle(vercodeInput).display !== 'none';
 
-                if (userInput && userInput.value && pwdInput && pwdInput.value && submitBtn) {
-                    if (!isVercodeVisible) {
-                        console.log('检测到场景3 (集团认证): 账号密码已填充且无验证码，执行登录');
+                if (submitBtn && !attempts.scene3) {
+                    // 同样，只有当 JS 读到用户名有值时才点击
+                    if (userInput && userInput.value && !isVercodeVisible) {
+                        console.log('检测到场景3 (集团认证): 账号数据已就绪，执行登录');
                         isSubmitting = true;
+                        attempts.scene3 = true;
 
                         setTimeout(() => {
                             submitBtn.click();
-                            setTimeout(() => { isSubmitting = false; }, 5000);
-                        }, 500);
-                    } else {
-                        // 如果有验证码，可以打印日志，但不自动点击
-                        // console.log('检测到场景3: 需要验证码，等待用户操作');
+                            setTimeout(() => { isSubmitting = false; }, 3000);
+                        }, 300);
+                        return;
                     }
-                    return;
                 }
             }
 
