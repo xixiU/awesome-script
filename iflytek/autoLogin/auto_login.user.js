@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         iFlytek Unified Login Assistant
+// @name         iFlytek Unified Login Assistant统一认证登录助手
 // @namespace    http://tampermonkey.net/
 // @version      0.1
 // @description  自动处理 iFlytek 各种登录场景：自动点击登录、跳转集团账号
