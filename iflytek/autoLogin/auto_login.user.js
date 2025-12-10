@@ -21,6 +21,9 @@
     // 定义检测间隔 (毫秒)
     const CHECK_INTERVAL = 800;
 
+    // 防止重复提交的锁
+    let isSubmitting = false;
+
     // 辅助函数：尝试激活浏览器的自动填充值
     // 很多现代浏览器在用户产生交互前，不会将密码填入 value 属性
     function tryActivateAutofill(input) {
@@ -36,6 +39,8 @@
     }
 
     function autoLogin() {
+        if (isSubmitting) return; // 如果正在提交中，不再重复执行
+
         try {
             // --- 场景 1: Coremail 风格登录窗口 ---
             // 特征: form action包含 coremail, 包含 uid 和 password 输入框
@@ -52,9 +57,20 @@
 
                 // 检查元素是否存在且输入框有值 (浏览器自动填充)
                 if (uidInput && uidInput.value && pwdInput && pwdInput.value && loginBtn) {
-                    console.log('检测到场景1 (Coremail): 账号密码已填充，执行登录');
-                    loginBtn.click();
-                    return; // 防止单次循环执行多个操作
+                    // 再次检查按钮是否可见且未被禁用
+                    if (loginBtn.offsetParent !== null && !loginBtn.disabled) {
+                        console.log('检测到场景1 (Coremail): 账号密码已填充，准备执行登录');
+                        isSubmitting = true;
+
+                        // 延迟点击，确保页面 JS 事件已绑定
+                        setTimeout(() => {
+                            loginBtn.click();
+                            // 5秒后重置锁，防止因网络慢或登录失败导致的脚本卡死
+                            setTimeout(() => { isSubmitting = false; }, 5000);
+                        }, 500);
+
+                        return;
+                    }
                 }
             }
 
@@ -89,7 +105,12 @@
                 if (userInput && userInput.value && pwdInput && pwdInput.value && submitBtn) {
                     if (!isVercodeVisible) {
                         console.log('检测到场景3 (集团认证): 账号密码已填充且无验证码，执行登录');
-                        submitBtn.click();
+                        isSubmitting = true;
+
+                        setTimeout(() => {
+                            submitBtn.click();
+                            setTimeout(() => { isSubmitting = false; }, 5000);
+                        }, 500);
                     } else {
                         // 如果有验证码，可以打印日志，但不自动点击
                         // console.log('检测到场景3: 需要验证码，等待用户操作');
