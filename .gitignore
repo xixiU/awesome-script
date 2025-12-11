@@ -11,3 +11,11 @@
 
 
 .vscode
+
+
+enetedu/chrome_extension/package-lock.json
+enetedu/chrome_extension/node_modules
+enetedu/chrome_extension/package.json
+enetedu/chrome_extension/admin/private_key.pem
+enetedu/chrome_extension/admin/public_key.pem
+enetedu/chrome_extension/extension/public_key.js
