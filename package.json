@@ -1,0 +1,20 @@
+{
+  "name": "awesome-script",
+  "version": "1.0.0",
+  "description": "这是一个包含各种实用脚本的集合，旨在帮助自动化日常任务和简化工作流程。",
+  "main": "removeXAd.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xixiU/awesome-script.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/xixiU/awesome-script/issues"
+  },
+  "homepage": "https://github.com/xixiU/awesome-script#readme"
+}

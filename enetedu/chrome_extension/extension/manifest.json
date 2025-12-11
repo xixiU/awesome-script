@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "教师网课助手 Pro",
+  "version": "1.0.0",
+  "description": "自动化网课学习助手，支持智能刷课、多开、学分管理。",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.enetedu.com/*",
+    "*://*.smartedu.cn/*",
+    "*://*.qchengkeji.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "打开网课助手"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://onlinenew.enetedu.com/*/MyTrainCourse/*",
+        "*://huiyi.enetedu.com/liveWacth/*",
+        "*://*.smartedu.cn/p/course/*",
+        "*://szh.enetedu.com/*",
+        "*://bwgl.qchengkeji.com/user/node?nodeId=*"
+      ],
+      "js": ["jquery.min.js", "public_key.js", "content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["*://szh.enetedu.com/*"]
+    }
+  ]
+}
+
