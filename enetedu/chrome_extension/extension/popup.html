@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <style>
@@ -10,6 +11,7 @@
             background-color: #f5f7fa;
             color: #333;
         }
+
         h2 {
             margin-top: 0;
             color: #2c3e50;
@@ -18,22 +20,32 @@
             border-bottom: 2px solid #3498db;
             padding-bottom: 10px;
         }
+
         .status-box {
             background: #fff;
             border-radius: 8px;
             padding: 10px;
             margin-bottom: 15px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
             font-size: 13px;
         }
-        .status-active { color: #27ae60; font-weight: bold; }
-        .status-expired { color: #e74c3c; font-weight: bold; }
-        
+
+        .status-active {
+            color: #27ae60;
+            font-weight: bold;
+        }
+
+        .status-expired {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
         .btn-group {
             display: flex;
             flex-direction: column;
             gap: 10px;
         }
+
         button {
             padding: 10px;
             border: none;
@@ -45,21 +57,47 @@
             align-items: center;
             justify-content: center;
         }
+
         button:disabled {
             opacity: 0.6;
             cursor: not-allowed;
         }
-        .btn-primary { background-color: #3498db; color: white; }
-        .btn-primary:hover:not(:disabled) { background-color: #2980b9; }
-        
-        .btn-success { background-color: #2ecc71; color: white; }
-        .btn-success:hover:not(:disabled) { background-color: #27ae60; }
-        
-        .btn-warning { background-color: #f39c12; color: white; }
-        .btn-warning:hover:not(:disabled) { background-color: #d35400; }
-        
-        .btn-info { background-color: #95a5a6; color: white; }
-        .btn-info:hover:not(:disabled) { background-color: #7f8c8d; }
+
+        .btn-primary {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background-color: #2980b9;
+        }
+
+        .btn-success {
+            background-color: #2ecc71;
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background-color: #27ae60;
+        }
+
+        .btn-warning {
+            background-color: #f39c12;
+            color: white;
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background-color: #d35400;
+        }
+
+        .btn-info {
+            background-color: #95a5a6;
+            color: white;
+        }
+
+        .btn-info:hover:not(:disabled) {
+            background-color: #7f8c8d;
+        }
 
         input[type="text"] {
             width: 100%;
@@ -69,16 +107,25 @@
             border: 1px solid #ddd;
             border-radius: 4px;
         }
-        .hidden { display: none; }
+
+        .hidden {
+            display: none;
+        }
+
         .footer {
             margin-top: 15px;
             text-align: center;
             font-size: 12px;
             color: #7f8c8d;
         }
-        a { color: #3498db; text-decoration: none; }
+
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
     </style>
 </head>
+
 <body>
     <h2>教师网课助手 Pro</h2>
 
@@ -93,16 +140,29 @@
         </div>
     </div>
 
+    <!-- 速度设置区域 -->
+    <div class="status-box" style="margin-bottom: 10px; padding: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label for="speed-range" style="font-weight: bold; font-size: 13px;">播放速度:</label>
+            <span id="speed-value" style="color: #3498db; font-weight: bold;">3.0x</span>
+        </div>
+        <input type="range" id="speed-range" min="1" max="5" step="0.5" value="3" style="width: 100%; margin-top: 5px;">
+    </div>
+
     <!-- 功能按钮区域 -->
     <div id="function-area" class="btn-group">
+        <button id="btn-find-next" class="btn-info" disabled>
+            <span>🔍 查找未学课程并进入</span>
+        </button>
+
         <button id="btn-start" class="btn-primary" disabled>
             <span>▶ 开始当前页学习</span>
         </button>
-        
+
         <button id="btn-multi-open" class="btn-success" disabled>
-            <span>📑 列表页一键多开 (推荐)</span>
+            <span>📑 课程一键多开 (推荐)</span>
         </button>
-        
+
         <button id="btn-credit" class="btn-warning" disabled>
             <span>💰 后台打开学分页面</span>
         </button>
@@ -120,5 +180,5 @@
     <script src="public_key.js"></script>
     <script src="popup.js"></script>
 </body>
-</html>
 
+</html>

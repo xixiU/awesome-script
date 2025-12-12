@@ -1,6 +1,41 @@
 # 教师网课助手 Pro - 开发者文档
 
-本文档包含插件的开发、混淆构建、打包发布以及授权管理流程。
+本文档包含插件的功能介绍、开发、混淆构建、打包发布以及授权管理流程。
+
+## 💡 功能特性
+
+本插件基于 Chrome 扩展架构开发，专为网课学习场景优化，提供商业级的稳定性和体验。
+
+### 1. 核心刷课能力
+*   **全自动学习**：进入视频页后自动播放、自动静音。
+*   **智能倍速**：
+    *   普通课程默认 3.0 倍速。
+    *   直播回放支持高达 5.0 倍速。
+    *   支持 SmartEdu 和 启城科技 平台的特定倍速策略。
+*   **无人值守**：
+    *   自动识别并关闭学习过程中的弹窗问题。
+    *   当前章节学习完成后，**自动跳转播放下一集**。
+    *   监测进度卡死（10分钟无变化）自动刷新页面。
+
+### 2. 高效多开模式
+*   **一键批量学习**：在“我的课程”列表页，点击插件面板的 **"列表页一键多开"**。
+*   **智能识别**：自动分析当前列表页中所有状态为“学习”的课程。
+*   **后台静默运行**：批量在后台打开标签页，互不干扰，配合 Tab 限制移除技术，实现多课程并行挂机。
+
+### 3. 技术黑科技
+*   **Tab 限制移除**：内置 Hook 脚本，解除浏览器对后台标签页的资源限制（Visibility API），确保页面在后台/最小化时依然正常计时，不暂停。
+*   **跨平台兼容**：
+    *   中国教育干部网络学院 (enetedu.com)
+    *   智慧教育平台 (smartedu.cn)
+    *   启城科技 (qchengkeji.com)
+
+### 4. 商业授权系统
+*   **RSA 安全验证**：采用非对称加密算法生成授权码，无需部署验证服务器，纯本地离线验证，低成本高安全。
+*   **有效期控制**：授权码包含过期时间，插件自动校验。
+*   **防篡改机制**：通过网络请求校验服务器时间，防止用户修改本地系统时间绕过验证。
+*   **用户标识**：支持在授权码中写入客户名称，激活后在界面显示“授权给：XXX”，提升尊享感。
+
+---
 
 ## 目录结构说明
 
@@ -53,44 +88,7 @@ chrome_extension/
 ### 1. 准备工作
 将现有的 `extension/content.js` 重命名为 `extension/content.src.js`，作为你的开发源码。
 
-### 2. 创建构建脚本
-在 `chrome_extension` 根目录下创建 `build.js` 文件，内容如下：
-
-```javascript
-const JavaScriptObfuscator = require('javascript-obfuscator');
-const fs = require('fs');
-const path = require('path');
-
-// 配置路径
-const srcPath = path.join(__dirname, 'extension', 'content.src.js');
-const distPath = path.join(__dirname, 'extension', 'content.js');
-
-console.log('正在读取源码:', srcPath);
-const code = fs.readFileSync(srcPath, 'utf8');
-
-console.log('正在进行混淆保护...');
-const obfuscationResult = JavaScriptObfuscator.obfuscate(code, {
-    compact: true,                      // 压缩代码
-    controlFlowFlattening: true,        // 控制流扁平化（核心保护）
-    controlFlowFlatteningThreshold: 0.75,
-    numbersToExpressions: true,         // 数字变表达式
-    simplify: true,                     // 简化
-    stringArray: true,                  // 字符串加密
-    stringArrayEncoding: ['base64'],    // 字符串编码方式
-    splitStrings: true,                 // 分割字符串
-    stringArrayThreshold: 0.75,
-    // debugProtection: true,           // 防调试（可选，会卡死开发者工具）
-    // disableConsoleOutput: true,      // 禁用控制台输出（如果需要看日志请关闭此项）
-    selfDefending: true                 // 自我保护
-});
-
-console.log('写入混淆代码:', distPath);
-fs.writeFileSync(distPath, obfuscationResult.getObfuscatedCode());
-
-console.log('✅ 构建完成！请发布 extension 目录。');
-```
-
-### 3. 运行构建
+### 2. 运行构建
 每次修改完源码后，运行以下命令生成混淆代码：
 
 ```bash
@@ -159,5 +157,4 @@ A: 每次修改 `content.src.js` 后，必须运行 `node build.js`，然后在 
 A: 混淆可能会破坏某些依赖特定变量名的逻辑。如果报错，请检查 `build.js` 中的混淆配置，尝试降低保护强度（例如关闭 `renameGlobals`）。
 
 **Q: 如何防止用户修改系统时间破解？**
-A: 代码中已经内置了 `fetch(window.location.origin)` 获取服务器时间头的逻辑。只要用户联网，修改本地时间是无效的。
-
+A: 代码中已经内置了 `fetch(window.location.href)` 获取服务器时间头的逻辑。只要用户联网，修改本地时间是无效的。

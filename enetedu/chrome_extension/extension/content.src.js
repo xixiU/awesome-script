@@ -98,14 +98,8 @@
 
     // ================== 2. 核心业务逻辑 (从 enetedu.js 移植) ==================
 
-    // 配置
-    const speed = 3.0;
-    const liveSpeed = 5.0;
-    const SPEEDS = {
-        normal: 2.0,
-        live: 4.0,
-        smartedu: 2.0
-    };
+    // 配置 (默认值，实际运行会从Storage读取)
+    let currentSpeed = 3.0;
 
     // 工具函数
     const utils = {
@@ -207,7 +201,14 @@
             this.progressCheckInterval = null;
         }
 
-        initVideoPlay() {
+        async initVideoPlay() {
+            // 初始化时读取配置的速度
+            const store = await chrome.storage.local.get(['playbackSpeed']);
+            if (store.playbackSpeed) {
+                currentSpeed = parseFloat(store.playbackSpeed);
+                utils.log(`已读取用户设置播放速度: ${currentSpeed}x`);
+            }
+
             // 注意：Chrome插件多开逻辑由Popup控制，这里不再强制检查缓存互斥，
             // 但保留记录缓存以便状态管理
             CourseCache.add(window.location.href);
@@ -238,9 +239,10 @@
                         videoElement.play();
                         videoElement.muted = true
                         try {
-                            videoElement.playbackRate = speed;
-                            // 减少日志频率
-                            // utils.log(`视频开始播放，音量设置为1%，播放速度${speed}倍`);
+                            if (videoElement.playbackRate !== currentSpeed) {
+                                videoElement.playbackRate = currentSpeed;
+                                // utils.log(`同步播放速度为: ${currentSpeed}倍`);
+                            }
                         } catch (err) {
                             utils.log(`设置播放速度失败: ${err.message}`);
                         }
@@ -286,8 +288,8 @@
             const duration = Math.ceil(video.duration);
 
             try {
-                if (video && video.playbackRate !== speed) {
-                    video.playbackRate = speed;
+                if (video && video.playbackRate !== currentSpeed) {
+                    video.playbackRate = currentSpeed;
                 }
             } catch (err) { }
 
@@ -513,10 +515,10 @@
 
     // 业务入口管理器
     const App = {
-        isRunning: false,
+        // isRunning: false, // 移除单次运行限制，允许重试
 
-        async start() {
-            if (this.isRunning) return;
+        async start(isManualTrigger = false) {
+            // if (this.isRunning) return;
 
             const isAuth = await Auth.check();
             if (!isAuth) {
@@ -525,9 +527,21 @@
                 return;
             }
 
-            this.isRunning = true;
+            // this.isRunning = true;
             this.removeAuthWarning();
-            utils.log("授权验证通过，引擎启动 🚀");
+            if (isManualTrigger) {
+                utils.log("用户手动触发启动 🚀");
+            } else {
+                utils.log("授权验证通过，引擎自动启动 🚀");
+            }
+
+            // 检查 jQuery
+            if (typeof jQuery === 'undefined' && typeof $ === 'undefined') {
+                utils.error("jQuery 未加载，等待页面加载...");
+                // 简单的重试机制
+                setTimeout(() => this.start(isManualTrigger), 1000);
+                return;
+            }
 
             if (utils.isChengKejiPage()) {
                 new QChengKejiController().startVideoTasks();
@@ -538,10 +552,25 @@
             } else if (utils.isEneteduPage()) {
                 if (utils.isOnlineNewListPage()) {
                     utils.log("位于课程列表页，等待指令...");
+                    if (isManualTrigger) {
+                        alert("当前是课程列表页，请点击插件面板上的【列表页一键多开】按钮来批量打开课程。\n\n或者请点击具体的课程进入视频页后，再点击此按钮开始自动播放。");
+                    }
                 } else {
-                    const controller = new VideoController();
-                    controller.initVideoPlay();
-                    controller.initProgressMonitor();
+                    // 只有在 VideoController 未初始化时才新建，或者设计成单例
+                    // 这里简化处理：VideoController 内部有 setInterval，重复初始化会导致多个定时器
+                    // 我们给 window 挂载一个标记
+                    if (!window._videoController) {
+                        window._videoController = new VideoController();
+                        window._videoController.initVideoPlay();
+                        window._videoController.initProgressMonitor();
+                    } else {
+                        utils.log("视频控制器已在运行中");
+                        if (isManualTrigger) {
+                            // 如果是手动触发，强制检查一次进度，给用户反馈
+                            utils.log("收到手动指令，强制检查当前进度...");
+                            window._videoController.checkCurrentProgress();
+                        }
+                    }
                 }
             }
         },
@@ -592,8 +621,13 @@
     // 消息监听
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.action === "start_learning") {
-            App.start();
+            App.start(true); // 标记为手动触发
             sendResponse({ status: "started" });
+        } else if (request.action === "update_speed") {
+            if (request.speed) {
+                currentSpeed = request.speed;
+                utils.log(`收到速度更新指令: ${currentSpeed}x`);
+            }
         } else if (request.action === "get_unlearned_courses") {
             Auth.check().then(isAuth => {
                 if (isAuth) {
@@ -602,6 +636,23 @@
                 } else {
                     App.showAuthWarning();
                     sendResponse({ courses: [] });
+                }
+            });
+            return true;
+        } else if (request.action === "find_and_enter_next_course") {
+            Auth.check().then(isAuth => {
+                if (isAuth) {
+                    const courses = App.getUnlearnedCourses();
+                    if (courses.length > 0) {
+                        utils.log(`找到 ${courses.length} 个未学课程，正在进入第一个: ${courses[0]}`);
+                        window.location.href = courses[0];
+                        sendResponse({ found: true });
+                    } else {
+                        sendResponse({ found: false });
+                    }
+                } else {
+                    App.showAuthWarning();
+                    sendResponse({ found: false });
                 }
             });
             return true;
