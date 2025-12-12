@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "教师网课助手 Pro",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "自动化网课学习助手，支持智能刷课、多开、学分管理。",
   "permissions": [
     "storage",
@@ -27,7 +27,11 @@
         "*://szh.enetedu.com/*",
         "*://bwgl.qchengkeji.com/user/node?nodeId=*"
       ],
-      "js": ["jquery.min.js", "public_key.js", "content.js"],
+      "js": [
+        "jquery.min.js",
+        "public_key.js",
+        "content.js"
+      ],
       "run_at": "document_end"
     }
   ],
@@ -38,9 +42,12 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["inject.js"],
-      "matches": ["*://szh.enetedu.com/*"]
+      "resources": [
+        "inject.js"
+      ],
+      "matches": [
+        "*://szh.enetedu.com/*"
+      ]
     }
   ]
 }
-
