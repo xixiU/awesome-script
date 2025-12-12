@@ -19,7 +19,7 @@ async function verifyLicense(inputKey) {
 
         const dataStr = atob(dataB64);
         const dataObj = JSON.parse(dataStr);
-        
+
         // 导入公钥 (PUBLIC_KEY_PEM 来自 public_key.js)
         if (typeof PUBLIC_KEY_PEM === 'undefined') {
             console.error("公钥未定义，请检查 public_key.js");
@@ -28,8 +28,8 @@ async function verifyLicense(inputKey) {
 
         const keyData = pemToArrayBuffer(PUBLIC_KEY_PEM);
         const key = await window.crypto.subtle.importKey(
-            "spki", keyData, 
-            { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, 
+            "spki", keyData,
+            { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
             false, ["verify"]
         );
 
@@ -107,8 +107,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             inputArea.classList.add('hidden');
             enableButtons();
             // 通知当前页面刷新状态
-            chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-                if(tabs[0]) chrome.tabs.sendMessage(tabs[0].id, {action: "auth_updated"});
+            chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+                if (tabs[0]) chrome.tabs.sendMessage(tabs[0].id, { action: "auth_updated" });
             });
         } else {
             alert('授权码无效或已过期！');
@@ -117,9 +117,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 3. 开始学习 (发消息给 content script)
     btnStart.addEventListener('click', () => {
-        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
             if (!tabs[0]) return;
-            chrome.tabs.sendMessage(tabs[0].id, {action: "start_learning"}, (response) => {
+            chrome.tabs.sendMessage(tabs[0].id, { action: "start_learning" }, (response) => {
                 if (chrome.runtime.lastError) {
                     // 如果脚本还没注入或出错
                     alert("请在网课页面点击此按钮。如果已在网课页面，请刷新后重试。");
@@ -132,17 +132,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 4. 多开按钮 (发消息获取链接 -> 打开Tab)
     btnMulti.addEventListener('click', () => {
-        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
             const tab = tabs[0];
             if (!tab || !tab.url.includes('/MyTrainCourse/Index')) {
                 alert("请先进入【我的课程 -> 课程列表】页面再使用此功能！");
                 return;
             }
 
-            chrome.tabs.sendMessage(tab.id, {action: "get_unlearned_courses"}, (response) => {
+            chrome.tabs.sendMessage(tab.id, { action: "get_unlearned_courses" }, (response) => {
                 if (response && response.courses && response.courses.length > 0) {
                     const count = response.courses.length;
-                    if(confirm(`检测到 ${count} 个未学习课程，是否全部后台打开？`)) {
+                    if (confirm(`检测到 ${count} 个未学习课程，是否全部后台打开？`)) {
                         response.courses.forEach(url => {
                             chrome.tabs.create({ url: url, active: false });
                         });
@@ -157,13 +157,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 5. 学分页面
     btnCredit.addEventListener('click', () => {
-        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
             const currentUrl = tabs[0].url;
             // 尝试从当前URL提取学校代码
             // 假设URL结构是 https://onlinenew.enetedu.com/schoolcode/...
             const match = currentUrl.match(/enetedu\.com\/([^\/]+)\//);
             let targetUrl = "https://onlinenew.enetedu.com/"; // 默认
-            
+
             if (match && match[1]) {
                 targetUrl = `https://onlinenew.enetedu.com/${match[1]}/MyCredit/Index`;
             } else {
@@ -180,7 +180,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 6. 帮助页面
     btnHelp.addEventListener('click', () => {
         // 这里替换为你实际维护的外部网页地址
-        chrome.tabs.create({ url: "https://your-help-page-url.com" }); 
+        chrome.tabs.create({ url: "https://ai.feishu.cn/wiki/PycvwFcdCiTPi0klV0qcfoWknKg?from=from_copylink" });
     });
 });
 
