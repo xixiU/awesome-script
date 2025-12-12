@@ -12,7 +12,7 @@ const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
 
 // === 配置区域 ===
 // 设置授权给谁（可选备注）
-const userNote = 'test_user';
+const userNote = 'hang';
 // 设置过期时间 (YYYY-MM-DD)
 const deadline = '2025-12-31';
 // ================

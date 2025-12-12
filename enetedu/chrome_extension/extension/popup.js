@@ -47,7 +47,7 @@ async function verifyLicense(inputKey) {
         const deadline = new Date(dataObj.deadline).getTime();
         if (Date.now() > deadline) return false;
 
-        return { valid: true, deadline: dataObj.deadline };
+        return { valid: true, deadline: dataObj.deadline, user: dataObj.user };
     } catch (e) {
         console.error("验证出错", e);
         return false;
@@ -72,7 +72,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const verifyResult = await verifyLicense(result.licenseKey);
         if (verifyResult && verifyResult.valid) {
             isAuthorized = true;
-            statusEl.textContent = `已授权 (有效期至 ${verifyResult.deadline})`;
+            const userName = verifyResult.user ? ` (${verifyResult.user})` : '';
+            statusEl.textContent = `已授权${userName} - 有效期至 ${verifyResult.deadline}`;
             statusEl.className = 'status-active';
             inputArea.classList.add('hidden');
             enableButtons();
@@ -100,7 +101,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const verifyResult = await verifyLicense(key);
         if (verifyResult && verifyResult.valid) {
             await chrome.storage.local.set({ licenseKey: key });
-            statusEl.textContent = `激活成功 (有效期至 ${verifyResult.deadline})`;
+            const userName = verifyResult.user ? ` (${verifyResult.user})` : '';
+            statusEl.textContent = `激活成功${userName} - 有效期至 ${verifyResult.deadline}`;
             statusEl.className = 'status-active';
             inputArea.classList.add('hidden');
             enableButtons();

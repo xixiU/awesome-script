@@ -1,0 +1,16 @@
+{
+  "name": "chrome_extension",
+  "version": "1.0.0",
+  "description": "本文档包含插件的开发、混淆构建、打包发布以及授权管理流程。",
+  "main": "build.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "fs-extra": "^11.3.2",
+    "javascript-obfuscator": "^5.0.1"
+  }
+}

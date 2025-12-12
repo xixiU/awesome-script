@@ -1,1 +1,619 @@
-function _0x34c0(_0x29d39d,_0x10d431){_0x29d39d=_0x29d39d-(0x12db+-0x167*0x5+-0xaa2*0x1);const _0x3eb40e=_0x3a13();let _0x3502a9=_0x3eb40e[_0x29d39d];if(_0x34c0['mIPODQ']===undefined){var _0x1a6d52=function(_0x5a97d1){const _0x3bdbed='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';let _0x4150c0='',_0x2568ac='',_0x74645b=_0x4150c0+_0x1a6d52;for(let _0x3d182b=-0x1*-0x19ef+0x14d7+-0x2ec6,_0x2475a9,_0x2652b0,_0x2712c3=0x2*-0xcca+-0x1*0x127+0x1abb;_0x2652b0=_0x5a97d1['charAt'](_0x2712c3++);~_0x2652b0&&(_0x2475a9=_0x3d182b%(-0x10b1+-0x4*0x33+-0x1181*-0x1)?_0x2475a9*(0x17f0+-0x2af+0x13*-0x11b)+_0x2652b0:_0x2652b0,_0x3d182b++%(0x16e5*-0x1+0x75b+0x16*0xb5))?_0x4150c0+=_0x74645b['charCodeAt'](_0x2712c3+(-0x648+-0x72f*0x2+-0x52c*-0x4))-(-0x1c67+0x29*0x15+0x1914)!==-0x1093*-0x1+-0x402*-0x1+-0x1495*0x1?String['fromCharCode'](0x18c0+-0x3*0xb90+0xaef&_0x2475a9>>(-(-0x683*0x1+0x1*-0xa63+-0x8*-0x21d)*_0x3d182b&0x17*0x1f+0x48e+-0x751)):_0x3d182b:-0x3d1+0x5ff*0x2+0x12b*-0x7){_0x2652b0=_0x3bdbed['indexOf'](_0x2652b0);}for(let _0x31f75b=0x9*0x265+-0x1bc6+-0x3b*-0x1b,_0x167611=_0x4150c0['length'];_0x31f75b<_0x167611;_0x31f75b++){_0x2568ac+='%'+('00'+_0x4150c0['charCodeAt'](_0x31f75b)['toString'](0xcc+0x20*-0xfe+0xa*0x31a))['slice'](-(-0x17*-0xcd+-0x5ef*-0x1+0x148*-0x13));}return decodeURIComponent(_0x2568ac);};_0x34c0['phjraX']=_0x1a6d52,_0x34c0['MzoEBj']={},_0x34c0['mIPODQ']=!![];}const _0x6bb063=_0x3eb40e[0x46*-0x9+-0x2594+0x280a],_0x5ae36b=_0x29d39d+_0x6bb063,_0x5671dc=_0x34c0['MzoEBj'][_0x5ae36b];if(!_0x5671dc){const _0xe3cf9e=function(_0x2fc367){this['TjWaDL']=_0x2fc367,this['VLsgVu']=[-0x4b*0x16+0x7*-0x1a0+-0x5f1*-0x3,-0x90b+-0x246c+0x2d77,-0x1*-0x263b+0x493+0x2ace*-0x1],this['gYaiYx']=function(){return'newState';},this['omYHSN']='\x5cw+\x20*\x5c(\x5c)\x20*{\x5cw+\x20*',this['GiRwky']='[\x27|\x22].+[\x27|\x22];?\x20*}';};_0xe3cf9e['prototype']['CHrjpe']=function(){const _0x484b80=new RegExp(this['omYHSN']+this['GiRwky']),_0x4a4ff1=_0x484b80['test'](this['gYaiYx']['toString']())?--this['VLsgVu'][0x162c+0x3*0x195+-0x35*0x82]:--this['VLsgVu'][-0x1*0x557+-0x166*0xc+0x161f];return this['fWkmUH'](_0x4a4ff1);},_0xe3cf9e['prototype']['fWkmUH']=function(_0x47ec58){if(!Boolean(~_0x47ec58))return _0x47ec58;return this['qjcwGa'](this['TjWaDL']);},_0xe3cf9e['prototype']['qjcwGa']=function(_0x22d64f){for(let _0x1658f6=0x2122*-0x1+0x1ab1+0x671*0x1,_0x2d1b5f=this['VLsgVu']['length'];_0x1658f6<_0x2d1b5f;_0x1658f6++){this['VLsgVu']['push'](Math['round'](Math['random']())),_0x2d1b5f=this['VLsgVu']['length'];}return _0x22d64f(this['VLsgVu'][-0x10f+0x21be+-0x20af]);},new _0xe3cf9e(_0x34c0)['CHrjpe'](),_0x3502a9=_0x34c0['phjraX'](_0x3502a9),_0x34c0['MzoEBj'][_0x5ae36b]=_0x3502a9;}else _0x3502a9=_0x5671dc;return _0x3502a9;}(function(_0x42320b,_0x3459a1){const _0x16c3dd=_0x34c0,_0x531b25=_0x42320b();while(!![]){try{const _0x9c1f0d=parseInt(_0x16c3dd(0x210))/(-0x85*-0x39+0x1c16+-0x39b2)+-parseInt(_0x16c3dd(0x17d))/(0x6d3*-0x4+0x1*0x2413+-0x8c5)+parseInt(_0x16c3dd(0x16c))/(-0x1*-0xbc9+-0x183a+0xc74)+parseInt(_0x16c3dd(0x1a7))/(0x1e79*0x1+0xb5d+-0x29d2)+parseInt(_0x16c3dd(0x196))/(-0xd*0x2a1+0x12bb+0xf77)*(parseInt(_0x16c3dd(0x13a))/(-0xcc4+-0x4de*0x1+0x11a8))+parseInt(_0x16c3dd(0x287))/(0x1533+0x2*-0xe9b+0x80a)+-parseInt(_0x16c3dd(0x246))/(0x360*0x4+0x386*0x4+0x54*-0x54);if(_0x9c1f0d===_0x3459a1)break;else _0x531b25['push'](_0x531b25['shift']());}catch(_0x463f6d){_0x531b25['push'](_0x531b25['shift']());}}}(_0x3a13,-0x16db1f+-0x77ac2*-0x1+0x1e7c5f),(function(){const _0x38de95=_0x34c0,_0x3bead8={'hCyTP':_0x38de95(0x1e9)+'+$','SdQcj':function(_0x3af9ec,_0x1c6a65,_0x10d7d3){return _0x3af9ec(_0x1c6a65,_0x10d7d3);},'tXmNA':_0x38de95(0x136),'AMoux':_0x38de95(0x218),'UQUOh':_0x38de95(0x1ea),'lAebO':_0x38de95(0x1a2),'yaPTi':function(_0x46897a,_0xfb99ee){return _0x46897a(_0xfb99ee);},'FiPDX':function(_0x4503c3,_0x1d2295){return _0x4503c3<_0x1d2295;},'zoYXO':'HEAD','FCNpw':_0x38de95(0x239),'RKVqC':_0x38de95(0x261)+_0x38de95(0x140),'odXVX':_0x38de95(0x198),'tuvBa':function(_0x16b344,_0xc64236){return _0x16b344||_0xc64236;},'ONbmy':function(_0x30f76b,_0x74f265){return _0x30f76b(_0x74f265);},'znIkp':function(_0x12e232,_0x1be7cd){return _0x12e232===_0x1be7cd;},'gJckd':'公钥丢失','kiaBr':_0x38de95(0x13c),'mzLqt':_0x38de95(0x18e)+_0x38de95(0x18f),'ZMqlU':function(_0x123208,_0x544b5f){return _0x123208>_0x544b5f;},'HSanH':'鉴权异常','zehaC':function(_0x7182d3,_0x48e4d1){return _0x7182d3+_0x48e4d1;},'GiNuQ':function(_0x59547c,_0x5da47d){return _0x59547c*_0x5da47d;},'ukTAf':function(_0x94aa51,_0x2a12ff){return _0x94aa51-_0x2a12ff;},'DSAaC':_0x38de95(0x1fa)+_0x38de95(0x1d5)+_0x38de95(0x17e),'mUlUf':_0x38de95(0x26b)+_0x38de95(0x23e),'pwflH':_0x38de95(0x1b5)+_0x38de95(0x143)+'user/node','AiqtA':'onlinenew.'+_0x38de95(0x22f)+'m','MdnpD':'/MyTrainCo'+_0x38de95(0x1cd),'szXKy':function(_0x3550fd,_0xd52bec,_0x2ab51b){return _0x3550fd(_0xd52bec,_0x2ab51b);},'qHxSW':_0x38de95(0x1df)+'w.enetedu.'+_0x38de95(0x28d)+'关闭','SEStv':function(_0x51733f,_0x3dab3a,_0x5df35a){return _0x51733f(_0x3dab3a,_0x5df35a);},'CrEpW':_0x38de95(0x23c)+_0x38de95(0x1a5)+_0x38de95(0x255),'xRVlh':_0x38de95(0x1d8)+_0x38de95(0x251)+'on','PcvvU':_0x38de95(0x1f9),'ukTTG':function(_0x2b9e01,_0xc58dbe){return _0x2b9e01(_0xc58dbe);},'lVmcQ':_0x38de95(0x179)+_0x38de95(0x147)+_0x38de95(0x1e7),'blQVB':function(_0x1b69fa,_0x5d9a69,_0x115558){return _0x1b69fa(_0x5d9a69,_0x115558);},'nTPcc':_0x38de95(0x1f4),'czVwv':'beforeunlo'+'ad','hwjrQ':function(_0x106e55,_0x3ecb15){return _0x106e55>=_0x3ecb15;},'NsqLw':function(_0x29750e,_0x275a72){return _0x29750e>_0x275a72;},'DoQWQ':_0x38de95(0x1dd),'duNkV':function(_0x326905,_0x230fa7,_0x1ba71e){return _0x326905(_0x230fa7,_0x1ba71e);},'nwjpO':function(_0x1fd980,_0x36a50e){return _0x1fd980!==_0x36a50e;},'WzQdM':function(_0x469ab2,_0x117c90){return _0x469ab2>=_0x117c90;},'iuPMo':'4|0|1|3|2','EDmTi':function(_0x3b2035,_0x285c76){return _0x3b2035>_0x285c76;},'GmdZS':_0x38de95(0x1ee),'cklyp':'courseware'+'id','QeAMb':'POST','cGWvP':_0x38de95(0x160)+_0x38de95(0x265),'SaqlZ':function(_0x46fba9,_0x747098){return _0x46fba9===_0x747098;},'qvjjI':_0x38de95(0x286),'LNAVB':_0x38de95(0x23f),'VjFpv':function(_0x350bee,_0x46d2d6){return _0x350bee===_0x46d2d6;},'twqsB':_0x38de95(0x1bb)+_0x38de95(0x183),'qfCeN':_0x38de95(0x282)+_0x38de95(0x167),'wtMrj':_0x38de95(0x1fd),'wLrJC':'location.h'+'ref=','knIDN':function(_0x30e108,_0x255984){return _0x30e108===_0x255984;},'QhJkN':_0x38de95(0x1a1),'CdTRM':_0x38de95(0x179)+'er-chapter'+_0x38de95(0x153),'gEWpA':function(_0x428e10,_0x132e53){return _0x428e10===_0x132e53;},'VhpRd':function(_0x18935a,_0x413545){return _0x18935a===_0x413545;},'PVris':_0x38de95(0x264),'kcxoV':function(_0x3d3688,_0x39d8c2){return _0x3d3688<_0x39d8c2;},'EVGgX':function(_0x50a9dd,_0x408d89){return _0x50a9dd===_0x408d89;},'hUqBs':function(_0x17dfc3,_0x587b25){return _0x17dfc3<_0x587b25;},'SNeiN':function(_0x3e3392,_0x3c6917){return _0x3e3392<_0x3c6917;},'cZGEz':function(_0x66919e,_0x310f5e){return _0x66919e!==_0x310f5e;},'DmlCB':_0x38de95(0x22a),'JFHlT':function(_0x1a4c2b,_0x436cbb,_0x332b9f){return _0x1a4c2b(_0x436cbb,_0x332b9f);},'QCFAp':_0x38de95(0x1c6)+'始化','vPZLZ':_0x38de95(0x1d6)+_0x38de95(0x171),'hghdA':_0x38de95(0x151)+_0x38de95(0x1c8),'VWXDo':_0x38de95(0x24f),'KvRyD':'position:f'+'ixed;top:0'+';left:0;wi'+_0x38de95(0x1d1)+_0x38de95(0x245)+'#e74c3c;co'+'lor:white;'+'text-align'+_0x38de95(0x200)+_0x38de95(0x150)+';z-index:9'+_0x38de95(0x173)+'-size:14px'+';','kqxuL':'网课助手未授权或已过'+_0x38de95(0x21b)+_0x38de95(0x1cb),'JbxXN':_0x38de95(0x163)+_0x38de95(0x203),'YdAmy':_0x38de95(0x242)+'1','qjOHX':function(_0x51bfb9,_0x45df6f){return _0x51bfb9>=_0x45df6f;},'QNGPE':_0x38de95(0x191),'mYzYH':_0x38de95(0x1c1)+_0x38de95(0x186),'UoeUg':_0x38de95(0x236)+_0x38de95(0x234),'PNdnM':_0x38de95(0x14e),'Gsxsj':function(_0x3c8d71,_0x43dedd){return _0x3c8d71===_0x43dedd;},'XOHNS':_0x38de95(0x14c)+'ned_course'+'s','WzVkj':function(_0x4f6578,_0x2bcd13){return _0x4f6578===_0x2bcd13;},'UXVqH':_0x38de95(0x168)+'ed','SSsrf':_0x38de95(0x280),'UgDQY':_0x38de95(0x1ba),'pszqU':_0x38de95(0x224)+_0x38de95(0x1b9)},_0x44e885=(function(){let _0xcbae0a=!![];return function(_0x1f83ee,_0x2a4c50){const _0x41cf39=_0xcbae0a?function(){const _0x4fa0ec=_0x34c0;if(_0x2a4c50){const _0x2fc926=_0x2a4c50[_0x4fa0ec(0x1db)](_0x1f83ee,arguments);return _0x2a4c50=null,_0x2fc926;}}:function(){};return _0xcbae0a=![],_0x41cf39;};}());'use strict';function _0x328236(_0x3a57fd){const _0x4a7818=_0x38de95,_0x183a8e=_0x3bead8['SdQcj'](_0x44e885,this,function(){const _0x313e12=_0x34c0;return _0x183a8e[_0x313e12(0x270)]()[_0x313e12(0x158)](_0x3bead8[_0x313e12(0x1f7)])['toString']()[_0x313e12(0x24a)+'r'](_0x183a8e)['search'](_0x3bead8[_0x313e12(0x1f7)]);});_0x183a8e();var _0x533ce6=document[_0x4a7818(0x1ca)+_0x4a7818(0x1a8)](_0x3bead8[_0x4a7818(0x229)])[-0x5*-0x13a+0x1*-0xc64+0x642],_0x58f7ad=document[_0x4a7818(0x1ec)+_0x4a7818(0x1fc)](_0x3bead8[_0x4a7818(0x27e)]);_0x58f7ad[_0x4a7818(0x1b7)+'te'](_0x3bead8[_0x4a7818(0x1c9)],_0x4a7818(0x148)+_0x4a7818(0x145)),_0x58f7ad['setAttribu'+'te'](_0x3bead8[_0x4a7818(0x240)],chrome['runtime'][_0x4a7818(0x199)](_0x3a57fd)),_0x533ce6[_0x4a7818(0x193)+'d'](_0x58f7ad);}window['location'][_0x38de95(0x191)][_0x38de95(0x220)]('szh.eneted'+_0x38de95(0x23e))&&_0x328236(_0x38de95(0x1b1));const _0x2789bd={'keyConfig':{'name':_0x3bead8[_0x38de95(0x23d)],'hash':_0x3bead8['SSsrf']},'pemToArrayBuffer'(_0x2950a5){const _0x202e64=_0x38de95,_0x3d3997=_0x2950a5[_0x202e64(0x1cc)](/(-----(BEGIN|END) PUBLIC KEY-----|\n)/g,''),_0x435e4=_0x3bead8['yaPTi'](atob,_0x3d3997),_0x1d86e5=new ArrayBuffer(_0x435e4[_0x202e64(0x1d2)]),_0x51b63b=new Uint8Array(_0x1d86e5);for(let _0x1be390=-0x9a9+0xe21*0x1+0x1*-0x478;_0x3bead8['FiPDX'](_0x1be390,_0x435e4[_0x202e64(0x1d2)]);_0x1be390++){_0x51b63b[_0x1be390]=_0x435e4[_0x202e64(0x225)](_0x1be390);}return _0x1d86e5;},async 'getNetworkTime'(){const _0x2e632b=_0x38de95;try{const _0x4c77e3=await fetch(window[_0x2e632b(0x20f)]['origin'],{'method':_0x3bead8[_0x2e632b(0x292)],'cache':_0x3bead8['FCNpw']}),_0x44b900=_0x4c77e3['headers'][_0x2e632b(0x21d)](_0x2e632b(0x201));if(_0x44b900)return new Date(_0x44b900)[_0x2e632b(0x22e)]();return Date[_0x2e632b(0x231)]();}catch(_0x42cfa1){return console['warn'](_0x3bead8[_0x2e632b(0x19d)],_0x42cfa1),Date[_0x2e632b(0x231)]();}},async 'check'(){const _0x56847f=_0x38de95;try{const _0x2a7b09=await chrome[_0x56847f(0x230)][_0x56847f(0x26f)][_0x56847f(0x21d)]([_0x3bead8['odXVX']]);if(!_0x2a7b09[_0x56847f(0x198)])return![];const [_0x23a200,_0xc5b7f4]=_0x2a7b09[_0x56847f(0x198)][_0x56847f(0x253)]('.');if(_0x3bead8[_0x56847f(0x22c)](!_0x23a200,!_0xc5b7f4))return![];const _0x29dc4b=_0x3bead8[_0x56847f(0x1b3)](atob,_0x23a200),_0x246844=JSON[_0x56847f(0x289)](_0x29dc4b);if(_0x3bead8['znIkp'](typeof PUBLIC_KEY_PEM,_0x56847f(0x16d)))return console[_0x56847f(0x268)](_0x3bead8[_0x56847f(0x1ed)]),![];const _0x4d0ddf=this[_0x56847f(0x18d)+_0x56847f(0x154)](PUBLIC_KEY_PEM),_0x30ae4e=await window['crypto']['subtle'][_0x56847f(0x170)](_0x3bead8['kiaBr'],_0x4d0ddf,this[_0x56847f(0x15a)],![],['verify']),_0x5007b1=Uint8Array[_0x56847f(0x1ac)](atob(_0xc5b7f4),_0x2f53df=>_0x2f53df[_0x56847f(0x225)](-0x244*-0x1+0x741+0x1*-0x985)),_0x13cdfb=new TextEncoder()[_0x56847f(0x1ff)](_0x29dc4b),_0x52d0c4=await window[_0x56847f(0x14b)][_0x56847f(0x281)][_0x56847f(0x288)](_0x3bead8['mzLqt'],_0x30ae4e,_0x5007b1,_0x13cdfb);if(!_0x52d0c4)return![];const _0x21e126=await this['getNetwork'+'Time'](),_0x3fa7e3=new Date(_0x246844[_0x56847f(0x1b2)])['getTime']();if(_0x3bead8[_0x56847f(0x1a4)](_0x21e126,_0x3fa7e3))return console[_0x56847f(0x27f)]('授权已过期:\x20'+_0x246844[_0x56847f(0x1b2)]),![];return!![];}catch(_0x63307e){return console[_0x56847f(0x268)](_0x3bead8['HSanH'],_0x63307e),![];}}},_0x185d14=-0x1bd1*0x1+0x2062+0x35*-0x16,_0xc415a0=0x182d+0x25f0+-0x3e18,_0x441529={'normal':0x2,'live':0x4,'smartedu':0x2},_0x4dca59={'randomNum'(_0x5e753c,_0xa358da){const _0x374c0d=_0x38de95;return Math[_0x374c0d(0x243)](_0x3bead8['zehaC'](_0x3bead8['GiNuQ'](Math[_0x374c0d(0x17a)](),_0x3bead8['ukTAf'](_0xa358da,_0x5e753c)+(0x23*0x2f+0x954*-0x2+-0x1b*-0x74)),_0x5e753c));},'log'(_0x38adaf){const _0x39ead9=_0x38de95;console[_0x39ead9(0x27f)](_0x39ead9(0x291)+new Date()['toLocaleTi'+_0x39ead9(0x1e6)]()+_0x39ead9(0x21a)+_0x38adaf);},'error'(_0x99c4d8){const _0x29a30f=_0x38de95;console[_0x29a30f(0x268)](_0x29a30f(0x291)+new Date()[_0x29a30f(0x222)+_0x29a30f(0x1e6)]()+_0x29a30f(0x21a)+_0x99c4d8);},'isLivePage'(){const _0x1cc4de=_0x38de95;return window[_0x1cc4de(0x20f)]['href']['includes'](_0x3bead8[_0x1cc4de(0x178)])||window[_0x1cc4de(0x20f)][_0x1cc4de(0x191)]['includes'](_0x3bead8[_0x1cc4de(0x26e)]);},'isSmartEduPage'(){const _0x2578bf=_0x38de95;return window['location'][_0x2578bf(0x191)][_0x2578bf(0x220)](_0x2578bf(0x1c7)+_0x2578bf(0x24e));},'isChengKejiPage'(){const _0x2aab80=_0x38de95;return window[_0x2aab80(0x20f)][_0x2aab80(0x191)][_0x2aab80(0x220)](_0x3bead8['pwflH']);},'isEneteduPage'(){const _0x4fb94e=_0x38de95;return window[_0x4fb94e(0x20f)][_0x4fb94e(0x191)][_0x4fb94e(0x220)](_0x3bead8['AiqtA']);},'isOnlineNewListPage'(){const _0x39a91f=_0x38de95;return window[_0x39a91f(0x20f)][_0x39a91f(0x191)][_0x39a91f(0x220)](_0x3bead8[_0x39a91f(0x204)])&&window[_0x39a91f(0x20f)][_0x39a91f(0x191)]['includes'](_0x3bead8[_0x39a91f(0x175)]);}},_0x1d2ca0={'key':_0x38de95(0x194)+_0x38de95(0x1eb)+'rses','getCourseId'(_0x899f06){const _0x5de69a=_0x38de95,_0x277220=_0x899f06[_0x5de69a(0x1ef)](/[?&]id=(\d+)/);return _0x277220?_0x277220[-0x1431+-0x467+0x1899]:null;},'getAll'(){const _0x3fb9cd=_0x38de95;try{return JSON[_0x3fb9cd(0x289)](localStorage[_0x3fb9cd(0x202)](this[_0x3fb9cd(0x20a)])||'[]');}catch(_0x48b181){return[];}},'add'(_0x3826ab){const _0x45c13c=_0x38de95,_0x57f240=this['getCourseI'+'d'](_0x3826ab)||_0x3826ab;if(!_0x57f240)return;const _0x573147=this[_0x45c13c(0x227)]();!_0x573147['includes'](_0x57f240)&&(_0x573147['push'](_0x57f240),localStorage[_0x45c13c(0x257)](this[_0x45c13c(0x20a)],JSON[_0x45c13c(0x28a)](_0x573147)),_0x4dca59[_0x45c13c(0x27f)](_0x45c13c(0x146)+_0x45c13c(0x16a)+_0x57f240));},'remove'(_0x52ced3){const _0x2e2a86=_0x38de95,_0xb67f17=this[_0x2e2a86(0x277)+'d'](_0x52ced3)||_0x52ced3;if(!_0xb67f17)return;const _0x4c3e33=this[_0x2e2a86(0x227)](),_0x30990c=_0x4c3e33['filter'](_0xaab87e=>_0xaab87e!==_0xb67f17);localStorage[_0x2e2a86(0x257)](this[_0x2e2a86(0x20a)],JSON[_0x2e2a86(0x28a)](_0x30990c)),_0x4dca59[_0x2e2a86(0x27f)]('[缓存]\x20移除课程I'+_0x2e2a86(0x16a)+_0xb67f17);},'has'(_0x1f3d75){const _0x2322a7=_0x38de95,_0x247da0=this['getCourseI'+'d'](_0x1f3d75)||_0x1f3d75;if(!_0x247da0)return![];return this[_0x2322a7(0x227)]()[_0x2322a7(0x220)](_0x247da0);}};function _0x24ce1c(_0x4c8a16=-0x27*0xb1+-0x16*-0x61+0x1e59,_0x42fd4f='返回课程列表页'){const _0x132d73=_0x38de95,_0x2ae048={'wziuF':function(_0x45f6bd,_0x38132b,_0x53458b){return _0x3bead8['szXKy'](_0x45f6bd,_0x38132b,_0x53458b);}};window['location'][_0x132d73(0x191)]['includes'](_0x3bead8[_0x132d73(0x204)])?(_0x4dca59[_0x132d73(0x27f)](_0x42fd4f),setTimeout(()=>{const _0x2bab52=_0x132d73,_0x44f109=window[_0x2bab52(0x20f)]['pathname'][_0x2bab52(0x253)]('/'),_0x203f63=_0x44f109[-0x16*0x4e+0x1*0x632+0x83];if(_0x203f63){const _0x5592ea=window[_0x2bab52(0x20f)][_0x2bab52(0x272)]+'/'+_0x203f63+(_0x2bab52(0x247)+_0x2bab52(0x1cd)+_0x2bab52(0x226)+_0x2bab52(0x232));_0x4dca59[_0x2bab52(0x27f)](_0x2bab52(0x1f0)+_0x5592ea),window[_0x2bab52(0x20f)][_0x2bab52(0x191)]=_0x5592ea;}else _0x4dca59[_0x2bab52(0x268)](_0x2bab52(0x221)+_0x2bab52(0x190)),_0x2ae048[_0x2bab52(0x28e)](setTimeout,()=>{const _0x194859=_0x2bab52;window[_0x194859(0x189)]();},-0x2540+-0x10c2+0x41ba);},_0x4c8a16)):(_0x4dca59[_0x132d73(0x27f)](_0x3bead8[_0x132d73(0x1da)]),_0x3bead8['SEStv'](setTimeout,()=>{window['close']();},0xb0+-0x1*0x242f+0x2f37));}class _0x24689a{constructor(){const _0x370802=_0x38de95,_0x76707=('1|4|2|3|0|'+'5')[_0x370802(0x253)]('|');let _0x49eeb8=-0x1619+0x1415*0x1+-0x81*-0x4;while(!![]){switch(_0x76707[_0x49eeb8++]){case'0':this[_0x370802(0x13d)+_0x370802(0x1a6)]=-0x3*0x605+-0x17cb+0x29da;continue;case'1':this[_0x370802(0x142)+'al']=null;continue;case'2':this[_0x370802(0x252)+'e']=0x4c0*-0x2+0x1*-0x277+0xbf7;continue;case'3':this[_0x370802(0x13d)+_0x370802(0x25f)+'me']=Date[_0x370802(0x231)]();continue;case'4':this[_0x370802(0x138)+'eportTime']=-0xc92+0x1*-0xa0a+0x169c;continue;case'5':this['progressCh'+_0x370802(0x248)+'l']=null;continue;}break;}}['initVideoP'+'lay'](){const _0x397d1a=_0x38de95,_0x3cb627={'QWdwv':_0x3bead8[_0x397d1a(0x1bc)],'oTNyh':_0x3bead8[_0x397d1a(0x219)],'uuZBJ':_0x3bead8[_0x397d1a(0x188)],'EeShq':function(_0x36c997,_0x3d064c){const _0xcd2140=_0x397d1a;return _0x3bead8[_0xcd2140(0x238)](_0x36c997,_0x3d064c);},'PMeqc':_0x3bead8[_0x397d1a(0x18a)],'TpNOj':function(_0x408dbe,_0x1e2bba){return _0x408dbe>_0x1e2bba;},'gIHFy':function(_0x4907eb,_0x2e75ff,_0x35e052){return _0x3bead8['blQVB'](_0x4907eb,_0x2e75ff,_0x35e052);},'FgbGE':function(_0x5dc327,_0x1c0815){return _0x5dc327*_0x1c0815;},'zHscB':_0x3bead8['nTPcc']};_0x1d2ca0[_0x397d1a(0x278)](window[_0x397d1a(0x20f)][_0x397d1a(0x191)]),_0x4dca59['log'](_0x397d1a(0x283)+':\x20'+window[_0x397d1a(0x20f)][_0x397d1a(0x191)]),window[_0x397d1a(0x21e)+_0x397d1a(0x162)](_0x3bead8[_0x397d1a(0x1cf)],()=>{const _0x52857c=_0x397d1a;_0x1d2ca0[_0x52857c(0x25b)](window['location']['href']);}),this[_0x397d1a(0x142)+'al']=_0x3bead8[_0x397d1a(0x1e0)](setInterval,()=>{const _0x22c5a7=_0x397d1a;try{const _0x3ec44f=_0x3cb627['EeShq']($,_0x3cb627[_0x22c5a7(0x1e2)])[_0x22c5a7(0x216)]();if(_0x3cb627[_0x22c5a7(0x26c)](_0x3ec44f[_0x22c5a7(0x275)](_0x3cb627[_0x22c5a7(0x1af)])[_0x22c5a7(0x1d2)],0x2b5*-0x4+0x23a9+-0x18d5)){_0x3cb627[_0x22c5a7(0x249)](setTimeout,()=>{const _0x2d2294=_0x22c5a7;_0x4dca59[_0x2d2294(0x27f)](_0x2d2294(0x155)),_0x3ec44f[_0x2d2294(0x275)](_0x3cb627[_0x2d2294(0x1af)])[_0x2d2294(0x216)]()['find'](_0x3cb627[_0x2d2294(0x20e)])[_0x2d2294(0x176)](_0x3cb627['uuZBJ']);},_0x3cb627[_0x22c5a7(0x1dc)](_0x4dca59['randomNum'](-0xdab+-0x8c3+0x1672,0x1a6e+-0x41b+0x23*-0xa3),0x196d*-0x1+0xbde*0x1+0xdf3));return;}const _0x33f8eb=_0x3ec44f[_0x22c5a7(0x275)](_0x3cb627[_0x22c5a7(0x273)]);if(_0x33f8eb[_0x22c5a7(0x1d2)]>0xe30+0xcaa+-0x1ada){const _0x37c462=_0x33f8eb[0x26*0x20+0xf*0xea+-0x1276];_0x37c462[_0x22c5a7(0x217)](),_0x37c462['muted']=!![];try{_0x37c462[_0x22c5a7(0x149)+'te']=_0x185d14;}catch(_0x2f5489){_0x4dca59['log'](_0x22c5a7(0x139)+_0x2f5489[_0x22c5a7(0x1c0)]);}}}catch(_0x37ddf4){}},0x14cf+0x1e17+-0x1f5e);}[_0x38de95(0x28f)+'ssMonitor'](){const _0x8d0d88=_0x38de95;this[_0x8d0d88(0x13d)+'ssUpdateTi'+'me']=Date[_0x8d0d88(0x231)](),this[_0x8d0d88(0x13d)+_0x8d0d88(0x1a6)]=0x25*-0xcb+0x10*0x1b1+0x247;const _0x260014=0x40ed9+0xc87fe+-0x76f17;this[_0x8d0d88(0x1aa)+_0x8d0d88(0x248)+'l']=setInterval(()=>{const _0x3237f7=_0x8d0d88,_0x9f0d42=Date[_0x3237f7(0x231)](),_0x5951e1=_0x3bead8[_0x3237f7(0x177)](_0x9f0d42,this['lastProgre'+_0x3237f7(0x25f)+'me']);_0x3bead8[_0x3237f7(0x267)](_0x5951e1,_0x260014)&&(_0x4dca59[_0x3237f7(0x27f)]('检测到10分钟内进度'+'无变化，刷新页面'),window[_0x3237f7(0x20f)]['reload']());},0x1*-0x151d1+-0x135f9+0x6*0x9307),_0x3bead8[_0x8d0d88(0x235)](setTimeout,()=>{const _0x331cf1=_0x8d0d88;try{const _0x39f3d7=_0x3bead8['ONbmy']($,_0x3bead8[_0x331cf1(0x18a)])['contents'](),_0x1e6e5a=_0x39f3d7[_0x331cf1(0x275)](_0x331cf1(0x1f4));_0x3bead8['NsqLw'](_0x1e6e5a[_0x331cf1(0x1d2)],0x2e*-0x5e+0x104d+0x97)&&_0x1e6e5a['on'](_0x3bead8['DoQWQ'],this[_0x331cf1(0x152)+_0x331cf1(0x276)][_0x331cf1(0x1d7)](this));}catch(_0x2d0860){_0x4dca59['log'](_0x331cf1(0x15d)+_0x331cf1(0x14d)+_0x2d0860[_0x331cf1(0x1c0)]);}},0x1*0x7db+0xd18*-0x4+-0xa3*-0x77);}[_0x38de95(0x152)+_0x38de95(0x276)](_0x1cfd26){const _0x15a699=_0x38de95,_0x42f745=_0x1cfd26[_0x15a699(0x244)],_0x54b06f=Math[_0x15a699(0x13f)](_0x42f745[_0x15a699(0x290)+'e']),_0x59eac9=Math['ceil'](_0x42f745[_0x15a699(0x1de)]);try{_0x42f745&&_0x3bead8['nwjpO'](_0x42f745[_0x15a699(0x149)+'te'],_0x185d14)&&(_0x42f745[_0x15a699(0x149)+'te']=_0x185d14);}catch(_0x22b457){}if(_0x3bead8[_0x15a699(0x18c)](Math[_0x15a699(0x187)](_0x54b06f-this[_0x15a699(0x252)+'e']),0x26da+0x1cd3+-0x43a7*0x1)){const _0x44afc8=_0x3bead8[_0x15a699(0x23a)][_0x15a699(0x253)]('|');let _0x13a73c=-0x1*-0x149d+0x267a+-0x3b17;while(!![]){switch(_0x44afc8[_0x13a73c++]){case'0':this[_0x15a699(0x252)+'e']=_0x54b06f;continue;case'1':this[_0x15a699(0x13d)+_0x15a699(0x25f)+'me']=Date[_0x15a699(0x231)]();continue;case'2':this[_0x15a699(0x205)+'ntProgress']();continue;case'3':this['lastProgre'+'ssValue']=_0x54b06f;continue;case'4':_0x4dca59[_0x15a699(0x27f)](_0x15a699(0x197)+_0x54b06f+'s/'+_0x59eac9+_0x15a699(0x237)+_0x42f745[_0x15a699(0x149)+'te']+'倍');continue;}break;}}}['checkCurre'+_0x38de95(0x212)](){const _0x36ac0d=_0x38de95,_0x55e514={'sIMyM':function(_0x2b34a5,_0x53e87b){return _0x2b34a5!==_0x53e87b;}};this[_0x36ac0d(0x213)+_0x36ac0d(0x1ae)]()[_0x36ac0d(0x1a0)](_0x3336b0=>{const _0x48c30b=_0x36ac0d;_0x55e514[_0x48c30b(0x184)](_0x3336b0,null)?this['handleProg'+'ressResult'](_0x3336b0):this['checkProgr'+'essByEleme'+'nt']();})[_0x36ac0d(0x25c)](_0x4be14d=>{const _0xa0dbd3=_0x36ac0d;_0x4dca59[_0xa0dbd3(0x27f)]('接口检测失败:\x20'+_0x4be14d['message']+_0xa0dbd3(0x17b)),this[_0xa0dbd3(0x213)+_0xa0dbd3(0x228)+'nt']();});}[_0x38de95(0x1fb)+_0x38de95(0x1b6)+_0x38de95(0x1be)](_0x24c786){const _0x5d496d=_0x38de95;try{const _0x47ebee=new URL(_0x24c786),_0x43490f=_0x47ebee[_0x5d496d(0x1ad)],_0x18cc39=_0x43490f[_0x5d496d(0x253)]('/')[_0x5d496d(0x15b)](_0x2e580e=>_0x2e580e[_0x5d496d(0x1d2)]>0x21ff+-0x22aa+0xab),_0x331625=_0x47ebee[_0x5d496d(0x263)]+'//'+_0x47ebee['host'];if(_0x3bead8[_0x5d496d(0x215)](_0x18cc39[_0x5d496d(0x1d2)],-0x13c2+-0x1bce+-0x1*-0x2f90))return _0x331625+'/'+_0x18cc39[0x698+-0x249c+0x22*0xe2];return _0x331625;}catch(_0x4444ea){return null;}}async[_0x38de95(0x213)+'essByAPI'](){const _0x2ad78c=_0x38de95;try{const _0x1cfa77=window[_0x2ad78c(0x20f)]['href'],_0x2f60dc=new URLSearchParams(window['location'][_0x2ad78c(0x158)]),_0x3e3c4c=_0x2f60dc[_0x2ad78c(0x21d)](_0x3bead8[_0x2ad78c(0x165)])||this[_0x2ad78c(0x17c)+'rseIdFromU'+'rl'](_0x1cfa77)||0x2*-0x33+-0x19cd+-0x1*-0x1a35,_0x39dd65=_0x2f60dc[_0x2ad78c(0x21d)](_0x3bead8['cklyp'])||this[_0x2ad78c(0x17c)+_0x2ad78c(0x1e1)+_0x2ad78c(0x207)](_0x1cfa77);if(_0x3bead8[_0x2ad78c(0x22c)](!_0x3e3c4c,!_0x39dd65))return null;const _0xe18c9c=_0x3bead8['zehaC'](this[_0x2ad78c(0x1fb)+'ainWithFir'+_0x2ad78c(0x1be)](_0x1cfa77),_0x2ad78c(0x247)+_0x2ad78c(0x25a)+'ntageCours'+'e'),_0x19cffa=await _0x3bead8[_0x2ad78c(0x294)](fetch,_0xe18c9c,{'method':_0x3bead8[_0x2ad78c(0x233)],'headers':{'Content-Type':'applicatio'+_0x2ad78c(0x266)+_0x2ad78c(0x16e)+_0x2ad78c(0x23b),'Accept':_0x2ad78c(0x1f1),'x-requested-with':_0x2ad78c(0x211)+'uest'},'body':_0x2ad78c(0x1ee)+'='+_0x3e3c4c+(_0x2ad78c(0x159)+_0x2ad78c(0x19e))+_0x39dd65});if(!_0x19cffa['ok'])throw new Error(_0x3bead8[_0x2ad78c(0x1e8)]);const _0x42688d=await _0x19cffa[_0x2ad78c(0x17f)](),_0x4ba744=_0x3bead8[_0x2ad78c(0x260)](parseFloat,_0x42688d[_0x2ad78c(0x1cc)]('%',''));return{'percentage':_0x4ba744,'isComplete':_0x3bead8['hwjrQ'](_0x4ba744,-0x43*0x25+0x18b*0x4+0x3e7),'source':_0x2ad78c(0x286)};}catch(_0x5cc341){return _0x4dca59['log'](_0x2ad78c(0x166)+_0x5cc341[_0x2ad78c(0x1c0)]),null;}}['extractCou'+_0x38de95(0x250)+'rl'](_0x51dcb4){let _0x54cfb7=_0x51dcb4['match'](/coursetype=(\d+)/);if(_0x54cfb7)return _0x54cfb7[-0x8e*0x4+-0x905*0x3+0x1d48*0x1];return _0x54cfb7=_0x51dcb4['match'](/id=(\d+)/),_0x54cfb7?_0x54cfb7[0x239a+-0x5*-0x169+-0x1*0x2aa6]:null;}[_0x38de95(0x17c)+'rsewareIdF'+_0x38de95(0x207)](_0xb26fc){const _0xd741b0=_0x38de95,_0x28b0b5=_0xb26fc[_0xd741b0(0x1ef)](/coursewareid=(\d+)/);return _0x28b0b5?_0x28b0b5[0x1*0x46a+0x15a2+-0x1a0b]:null;}['handleProg'+'ressResult'](_0x222e70){const _0x22d4c0=_0x38de95;_0x3bead8['SaqlZ'](_0x222e70[_0x22d4c0(0x256)],_0x3bead8[_0x22d4c0(0x180)])&&(_0x222e70['isComplete']&&(_0x4dca59[_0x22d4c0(0x27f)](_0x22d4c0(0x206)+_0x22d4c0(0x144)+_0x222e70[_0x22d4c0(0x27a)]+_0x22d4c0(0x1e4)),this['switchToNe'+_0x22d4c0(0x1d3)]()));}[_0x38de95(0x1f8)+_0x38de95(0x1b0)](){const _0x353037=_0x38de95,_0x4a4494=window['location'][_0x353037(0x191)],_0x21cfdb=[];let _0x11725a=-(0x121c+0x2270+-0x348b),_0x24d0b8=![];return _0x3bead8[_0x353037(0x1b3)]($,_0x3bead8[_0x353037(0x1b4)])[_0x353037(0x174)](function(_0x277203){const _0xd2c95d=_0x353037,_0x15a3f9=_0x3bead8[_0xd2c95d(0x260)]($,this),_0x50a18f=_0x15a3f9[_0xd2c95d(0x19a)](_0x3bead8['LNAVB']);let _0x597e8c=_0x3bead8[_0xd2c95d(0x293)](_0x15a3f9['css'](_0x3bead8[_0xd2c95d(0x20b)]),_0x3bead8[_0xd2c95d(0x16b)])||_0x15a3f9[_0xd2c95d(0x164)](_0x3bead8['twqsB'])===_0x3bead8['wtMrj'];if(_0x50a18f&&_0x50a18f[_0xd2c95d(0x220)](_0x3bead8[_0xd2c95d(0x19b)])){const _0x2fd389=_0x50a18f[_0xd2c95d(0x1ef)](/location\.href='([^']+)'/);if(_0x2fd389&&_0x2fd389[0x83f*-0x3+0x622+-0x4*-0x4a7]){const _0x337eeb=_0x2fd389[-0x12*-0x178+-0x5*-0x62f+0x6*-0x98f][_0xd2c95d(0x1cc)](/&/g,'&');_0x4a4494[_0xd2c95d(0x220)](_0x337eeb)&&(_0x597e8c=!![]);}}const _0x36b144=_0x3bead8['knIDN'](_0x15a3f9['find'](_0xd2c95d(0x15f))[_0xd2c95d(0x17f)](),_0x3bead8[_0xd2c95d(0x1f3)]);_0x21cfdb['push']({'element':_0x15a3f9,'isCurrent':_0x597e8c,'isComplete':_0x36b144,'index':_0x277203}),_0x597e8c&&(_0x11725a=_0x277203,_0x24d0b8=_0x36b144);}),{'videoElements':_0x21cfdb,'currentVideoIndex':_0x11725a,'currentVideoComplete':_0x24d0b8};}[_0x38de95(0x152)+_0x38de95(0x137)](_0x4ec08d=_0x38de95(0x27c)){const _0x3b10ff=_0x38de95,{videoElements:_0x37dd36,currentVideoIndex:_0x245591,currentVideoComplete:_0x5b74c0}=this[_0x3b10ff(0x1f8)+_0x3b10ff(0x1b0)]();if(_0x3bead8['gEWpA'](_0x245591,-(0x1e99+-0x1b4*0x8+0x21f*-0x8)))return;if(_0x3bead8[_0x3b10ff(0x209)](_0x4ec08d,_0x3b10ff(0x22a))&&!_0x5b74c0)return;let _0x34b3c5=-(-0x1*0x1891+0x1040+0x852);if(_0x3bead8['znIkp'](_0x4ec08d,_0x3bead8['PVris'])){for(let _0x1bf3b6=_0x245591+(-0x2042*0x1+0x6bd*0x1+-0x36*-0x79);_0x3bead8['kcxoV'](_0x1bf3b6,_0x37dd36[_0x3b10ff(0x1d2)]);_0x1bf3b6++){if(!_0x37dd36[_0x1bf3b6][_0x3b10ff(0x1c3)]){_0x34b3c5=_0x1bf3b6;break;}}if(_0x3bead8[_0x3b10ff(0x13b)](_0x34b3c5,-(-0x1e0d+-0x1*0x1157+0x2f65)))for(let _0x5a9c66=-0x1*-0xc98+-0x1a1f+0x1*0xd87;_0x3bead8[_0x3b10ff(0x1c2)](_0x5a9c66,_0x245591);_0x5a9c66++){if(!_0x37dd36[_0x5a9c66][_0x3b10ff(0x1c3)]){_0x34b3c5=_0x5a9c66;break;}}}else for(let _0x179885=0x6fe+0x7*0x79+0x9*-0x125;_0x3bead8[_0x3b10ff(0x1c5)](_0x179885,_0x37dd36['length']);_0x179885++){if(!_0x37dd36[_0x179885][_0x3b10ff(0x1c3)]){_0x34b3c5=_0x179885;break;}}if(_0x3bead8['cZGEz'](_0x34b3c5,-(-0x844+0x15*0xb7+-0x6be))){const _0x55156f=_0x37dd36[_0x34b3c5];_0x55156f[_0x3b10ff(0x21f)][_0x3b10ff(0x176)](_0x3bead8[_0x3b10ff(0x188)]),_0x4dca59[_0x3b10ff(0x27f)]('切换到下一个视频\x20('+_0x3b10ff(0x284)+_0x34b3c5+')');}else _0x4dca59['log'](_0x3b10ff(0x259)),_0x1d2ca0[_0x3b10ff(0x25b)](window[_0x3b10ff(0x20f)]['href']),_0x3bead8[_0x3b10ff(0x235)](setTimeout,()=>{const _0x324efb=_0x3b10ff;window[_0x324efb(0x189)]();},0x120b*0x1+0x27*-0x96+0x1087);}['checkProgr'+_0x38de95(0x228)+'nt'](){const _0x2221f1=_0x38de95;this['handleVide'+'oSwitch'](_0x3bead8[_0x2221f1(0x157)]);}[_0x38de95(0x1ce)+'xtVideo'](){const _0x292b64=_0x38de95;this[_0x292b64(0x152)+'oSwitch'](_0x3bead8[_0x292b64(0x181)]);}}class _0x4a8b5b{[_0x38de95(0x28c)](){const _0x3bf926=_0x38de95;_0x4dca59['log']('直播页面\x20-\x20逻辑初'+'始化'),_0x3bead8[_0x3bf926(0x1f2)](setInterval,()=>{const _0x467f91=_0x3bf926,_0xecd02=document['querySelec'+_0x467f91(0x223)](_0x3bead8[_0x467f91(0x13e)]);if(_0xecd02&&_0xecd02[_0x467f91(0x22d)])_0xecd02[_0x467f91(0x217)]();},-0x683*-0x3+0x3*-0xb0b+0x1950);}}class _0x569903{[_0x38de95(0x28c)](){const _0x23cd05=_0x38de95;_0x4dca59['log']('SmartEdu\x20页'+_0x23cd05(0x1c4));}}class _0x12d73e{[_0x38de95(0x262)+_0x38de95(0x208)](){const _0x422315=_0x38de95;_0x4dca59[_0x422315(0x27f)](_0x3bead8[_0x422315(0x25e)]);}}const _0x5116ca={'isRunning':![],async 'start'(){const _0x4bb840=_0x38de95;if(this['isRunning'])return;const _0xc1503f=await _0x2789bd['check']();if(!_0xc1503f){console[_0x4bb840(0x27f)](_0x3bead8['vPZLZ']),this[_0x4bb840(0x269)+'rning']();return;}this[_0x4bb840(0x1ab)]=!![],this['removeAuth'+_0x4bb840(0x28b)](),_0x4dca59['log'](_0x4bb840(0x14f)+_0x4bb840(0x27d));if(_0x4dca59[_0x4bb840(0x20c)+_0x4bb840(0x172)]())new _0x12d73e()[_0x4bb840(0x262)+_0x4bb840(0x208)]();else{if(_0x4dca59[_0x4bb840(0x25d)+_0x4bb840(0x1bd)]())new _0x569903()[_0x4bb840(0x28c)]();else{if(_0x4dca59[_0x4bb840(0x185)]())new _0x4a8b5b()[_0x4bb840(0x28c)]();else{if(_0x4dca59[_0x4bb840(0x254)+'age']()){if(_0x4dca59['isOnlineNe'+_0x4bb840(0x27b)]())_0x4dca59[_0x4bb840(0x27f)](_0x3bead8[_0x4bb840(0x15c)]);else{const _0xd36ceb=new _0x24689a();_0xd36ceb[_0x4bb840(0x24c)+_0x4bb840(0x258)](),_0xd36ceb[_0x4bb840(0x28f)+'ssMonitor']();}}}}}},'showAuthWarning'(){const _0x2c61d2=_0x38de95;if(document[_0x2c61d2(0x1ca)+_0x2c61d2(0x21c)]('auth-warni'+'ng-banner'))return;const _0x4dd53d=document[_0x2c61d2(0x1ec)+_0x2c61d2(0x1fc)](_0x3bead8[_0x2c61d2(0x1a3)]);_0x4dd53d['id']='auth-warni'+_0x2c61d2(0x203),_0x4dd53d['style'][_0x2c61d2(0x169)]=_0x3bead8[_0x2c61d2(0x141)],_0x4dd53d['innerHTML']=_0x3bead8[_0x2c61d2(0x195)],document['body'][_0x2c61d2(0x193)+'d'](_0x4dd53d);},'removeAuthWarning'(){const _0x439bbb=_0x38de95,_0x408e8e=document['getElement'+'ById'](_0x3bead8[_0x439bbb(0x22b)]);if(_0x408e8e)_0x408e8e[_0x439bbb(0x25b)]();},'getUnlearnedCourses'(){const _0x3b57f1=_0x38de95,_0x3a843f={'szEgE':function(_0x5d5800,_0x1ad67a){const _0x55a5dd=_0x34c0;return _0x3bead8[_0x55a5dd(0x238)](_0x5d5800,_0x1ad67a);},'UcMBN':function(_0x150660,_0x4c5e2d){return _0x150660===_0x4c5e2d;},'WtBmZ':function(_0x2eb103,_0x51f31c){const _0x2a2682=_0x34c0;return _0x3bead8[_0x2a2682(0x238)](_0x2eb103,_0x51f31c);},'muuHM':_0x3bead8[_0x3b57f1(0x156)]},_0x14fc53=[],_0x4b2177=window[_0x3b57f1(0x274)]||window['$'];if(_0x4b2177)_0x3bead8[_0x3b57f1(0x260)](_0x4b2177,_0x3bead8[_0x3b57f1(0x1d9)])[_0x3b57f1(0x174)](function(){const _0x4cd841=_0x3b57f1,_0x24fbe0=_0x4b2177(_0x3a843f[_0x4cd841(0x1d4)](_0x4b2177,this)[_0x4cd841(0x275)](_0x4cd841(0x242)+'1')[-0x1b*-0x6b+0xd0d+-0x1*0x1853]);if(_0x24fbe0&&_0x3a843f[_0x4cd841(0x1bf)](_0x24fbe0['text']()[_0x4cd841(0x16f)](),'学习')){const _0x147d1e=_0x3a843f[_0x4cd841(0x24d)](_0x4b2177,_0x3a843f[_0x4cd841(0x1d4)](_0x4b2177,this)[_0x4cd841(0x275)]('a')[0xed6+0x15d*0x1b+0x153*-0x27])[_0x4cd841(0x19a)](_0x3a843f[_0x4cd841(0x19c)]);if(_0x147d1e){const _0x5a9d91=new URL(_0x147d1e,window[_0x4cd841(0x20f)][_0x4cd841(0x191)])[_0x4cd841(0x191)];_0x14fc53[_0x4cd841(0x1a9)](_0x5a9d91);}}});else{const _0x5aeb05=document[_0x3b57f1(0x1f5)+_0x3b57f1(0x285)](_0x3bead8[_0x3b57f1(0x1d9)]);_0x5aeb05[_0x3b57f1(0x182)](_0x1e5e29=>{const _0x57f0fc=_0x3b57f1,_0x1522c2=_0x1e5e29['querySelec'+_0x57f0fc(0x285)](_0x3bead8[_0x57f0fc(0x26d)]);if(_0x3bead8[_0x57f0fc(0x14a)](_0x1522c2[_0x57f0fc(0x1d2)],-0x6d1*-0x1+0x17b*-0x9+0x686)&&_0x3bead8[_0x57f0fc(0x241)](_0x1522c2[-0x2d*-0x52+-0x35*0x27+-0x51*0x14][_0x57f0fc(0x279)+'t'][_0x57f0fc(0x16f)](),'学习')){const _0x63ec50=_0x1e5e29['querySelec'+_0x57f0fc(0x223)]('a');if(_0x63ec50)_0x14fc53[_0x57f0fc(0x1a9)](_0x63ec50[_0x57f0fc(0x191)]);}});}return _0x14fc53;}};chrome[_0x38de95(0x19f)]['onMessage'][_0x38de95(0x18b)+'r']((_0x7fd1d8,_0x59c3e0,_0x3ae2f3)=>{const _0x262b22=_0x38de95,_0x36afe0={'gmGax':function(_0x221939,_0x51ea04){const _0x11e3ad=_0x34c0;return _0x3bead8[_0x11e3ad(0x238)](_0x221939,_0x51ea04);}};if(_0x7fd1d8[_0x262b22(0x214)]===_0x3bead8[_0x262b22(0x20d)])_0x5116ca[_0x262b22(0x1f6)](),_0x3bead8[_0x262b22(0x260)](_0x3ae2f3,{'status':_0x3bead8[_0x262b22(0x1b8)]});else{if(_0x3bead8[_0x262b22(0x1fe)](_0x7fd1d8[_0x262b22(0x214)],_0x3bead8[_0x262b22(0x192)]))return _0x2789bd[_0x262b22(0x1e3)]()[_0x262b22(0x1a0)](_0x9dfcb4=>{const _0x4b2779=_0x262b22;if(_0x9dfcb4){const _0xbc2869=_0x5116ca['getUnlearn'+_0x4b2779(0x161)]();_0x36afe0[_0x4b2779(0x1d0)](_0x3ae2f3,{'courses':_0xbc2869});}else _0x5116ca[_0x4b2779(0x269)+_0x4b2779(0x24b)](),_0x36afe0[_0x4b2779(0x1d0)](_0x3ae2f3,{'courses':[]});}),!![];else _0x3bead8['WzVkj'](_0x7fd1d8[_0x262b22(0x214)],_0x3bead8['UXVqH'])&&_0x5116ca['start']();}}),_0x3bead8[_0x38de95(0x26a)](document[_0x38de95(0x271)],_0x3bead8[_0x38de95(0x1e5)])?document[_0x38de95(0x21e)+'stener'](_0x3bead8[_0x38de95(0x15e)],()=>_0x5116ca['start']()):_0x5116ca[_0x38de95(0x1f6)]();}()));function _0x3a13(){const _0x1fbb5c=['BMCTyMfUBMvY','qwLXDee','y2HLy2TdDxjYzq','5O6L5y+J5Qoa5Rwl77YA5B2t5yMn56UG6iQc5BEY','CM9TvxjS','vgfZA3m','vMHWuMq','A2v5','DhDXC0i','AxndAgvUz0TLAG','vw9LvwC','B1roEwG','Bg9JyxrPB24','mtG4ndG3m1jXBuLItq','we1mshr0CfjLCq','BNrqCM9NCMvZCW','y2HLy2TqCM9NCG','ywn0Aw9U','rurTvgK','y29UDgvUDhm','CgXHEq','C2nYAxb0','EfjwBgG','ic0G','5PYF77Ym6k+354k55yE75O+s5lU25zU+5Qch6l+B','qNLjza','z2v0','ywrKrxzLBNrmAq','zwXLBwvUDa','Aw5JBhvKzxm','5PEG5Rov5O+q5y+w6zMI5QcH5lUJ56cb77Ym5OMN','Dg9mB2nHBgvuAq','Dg9Y','re9nq29UDgvUDa','y2HHCKnVzgvbDa','p25LD1nLyxjJAa','z2v0qwXS','zxnZqNLfBgvTzq','DfHTtKe','6Ag16z2I5ywd57sG5Qoa5Rwl','sMj4we4','Dhv2qMe','Cgf1C2vK','z2v0vgLTzq','zw5LDgvKDs5JBW','C3rVCMfNzq','BM93','rMXHzZ10CNvL','uwvbtwi','BMLUzW','zhvoA1y','C3rHCNrFBgvHCG','C++8JoAsREAuVUMaN+w6PJOG','DwTuveC','BM8TC3rVCMu','Axvqtw8','zgvK','lMXHExvPlwXHEq','BxPmCxq','Ds5JB20','B25JBgLJAW','BefLyK8','EM5jA3a','C3bHBI5YAwDODa','zMXVB3i','DgfYz2v0','ywnRz3jVDw5KoG','mJCXnZq4ndbLy2D1uwe','l015vhjHAw5dBW','zwnRsw50zxj2yq','z0LirNK','y29UC3rYDwn0BW','CM5PBMC','Aw5PDfzPzgvVua','v3rcBvO','BI9Wl2nVDxjZzq','zgL2','CNnLswrgCM9Tvq','zh5KAxyGyNv0Da','BgfZDeXVz1rPBq','C3bSAxq','AxnfBMv0zwr1ua','igLMCMfTzq','C291CMnL','C2v0sxrLBq','Bgf5','5OMa5PYj6kEg6Akr5PkT5Ps+5A6m5OIq','DxjZzs9qzxjJzq','CMvTB3zL','y2f0y2G','AxntBwfYDevKDq','uungqxa','C3nvCgrHDgvuAq','EwfqvgK','5PEG5Rov6i635y+w572r57UC5PE26zE077Ym5l2/','C3rHCNrwAwrLBW','ChjVDg9JB2W','5O6L5y+J5Qoa5Rwl','DcbMywLSzwq','BI94lxD3DY1MBW','AhDQCLe','zxjYB3i','C2HVD0f1DgHxyq','u2fXBfO','C3POlMvUzxrLza','vhbot2O','wwrbBxK','BvvSvwy','Bg9JywW','Dg9tDhjPBMC','CMvHzhLtDgf0zq','B3jPz2LU','EKHZy0i','ALf1zxj5','zMLUza','B1bYB2DYzxnZ','z2v0q291CNnLsq','ywrK','Dgv4DenVBNrLBG','CgvYy2vUDgfNzq','D0XPC3rqywDL','Dw5RBM93BG','5yQOipcFMOa','qu1VDxG','Bg9N','u0Hblti1nG','C3vIDgXL','CMDIkdiWncWGmq','6k++56Il5BEY5RE75yQG5yIW5A2M5lMG57Yt5A2y','57sI5BYvoIa','Dg9YqwXS','yxbP','ntiZnZC4nwLhy3jQsa','DMvYAwz5','CgfYC2u','C3rYAw5NAwz5','v2fYBMLUzW','Aw5PDa','y29TioMHTEMDOU+8JdpNP5lLKi4','D3PPDuy','Aw5PDfbYB2DYzq','y3vYCMvUDfrPBq','w+E9KEIVVUwkQEAjI10G','EM9zwe8','vMPgChy','u0vtDhy','yM9KEq','B1n3AxrJAa','BgfZDezVCMnLuG','6k6+572U5PkT5Ps+6ycF5BQM5AsX6lsLoIa','ndi0mNzvELjTtG','rvzhz1G','C3bRAq','BgfZDfbYB2DYzq','BLrqy2m','y2vPBa','55sO5PYS5zYW5PE26zE0','s3zsEuq','CgXHEuLUDgvYDG','z2TLAMKUy29TlW','5A6m5OIqicG','y3jPChq','w+E8K+wTMf0G5RE75yQG6k++56Ilsq','zxiTy2HHChrLCG','Dgv4Dc9QyxzHCW','CgXHEwjHy2Tsyq','CwPpsfG','y3j5ChrV','z2v0x3vUBgvHCG','5AsX6lsLoIa','C3rHCNrLza','5O6i5P2d6AQm6k+b6ycA6l+h77Ym5BYv5Poo5zcV','zgrPBMC6mtbWEa','5l2n5lQo6k++56Il5yIx6kgO6Ag177Ym562j5B6f','AgfUzgXLvMLKzq','mIb1BcbSAq','qNvMzMvY','54k55yE756gU5A6A5OYj6zkU','uu5hueu','rg1Sq0i','C2vHCMnO','jMnVDxjZzxDHCG','A2v5q29UzMLN','zMLSDgvY','AgDOzee','5lI76kEg6Akr6l+B5BQM55Ur5O6N5yID5AEl5yYw','Chn6Cvu','C3bHBG','qvbjihjLCxvLCW','zwrdB3vYC2vZ','C3rLBMvY','yxv0Ac13yxjUAq','y3nZ','r21KwLm','5O6L5y+J5Qoa5Rwl5BYc5BI4oIa','otCSide5nYK','yxv0Af91CgrHDa','y3nZvgv4Da','rdOG','Cwzdzu4','mJKXmZKWmhvmALPmta','Dw5KzwzPBMvK','CM0TDxjSzw5JBW','DhjPBq','Aw1WB3j0s2v5','5PYS5B6f5PY65lITlI4U','AvbHz2u','otK5otK7zM9UDa','zwfJAa','twrUCeq','DhjPz2DLCG','DwTuqwy','rfnbyum','lMnSyxnZy2vUDa','CMfUzg9T','77Ym5l2/55sO6Ag16z2I5ywd57sG5Qoa5Rwl','zxH0CMfJDenVDq','mJi4mtC5ogvLu1bZyq','DMvxywn0Aa','Dgv4Da','CxzQAKK','ufzYAxm','zM9YrwfJAa','lwnVBg9Y','C0LnEu0','AxnmAxzLugfNzq','DdiGBgK','ywjZ','ugn2DLu','y2XVC2u','BfzTy1e','ywrKtgLZDgvUzq','v3Prze0','CgvTvg9bCNjHEq','uLnbu1nblvblqW','uZeTDJfFnq','6kgm6BUy6k6K5ywZ6zET5Pon5l2C','AhjLzG','we9itLm','yxbWzw5Kq2HPBa','zw5LDgvKDv9Szq','A3f4DuW','mJC1y01uvvPf','5B2t5yMn6kEg6Akr6l+B5BQMoIa','BgLJzw5ZzuTLEq','z2v0vvjm','yxr0CG','D0XYsKm','Bxv1se0','uKTwCum','zwLKpq','CNvUDgLTzq','DgHLBG','wZeWmcvD','C3jJ','vLDyrg8','wK1XBfu','zxiTy29UDgvUDa','C3nwywX1zq','nZuZodyWngjqCK5NuW','C0j5vgfNtMfTzq','ChvZAa','ChjVz3jLC3ndAa','AxnsDw5UAw5N','zNjVBq','Cgf0Ag5HBwu','zxnZqNLbueK','uvDKD3y','zw9fBgvTzw50CW','Aw5Qzwn0lMPZ','zgvHzgXPBMu','t05IBxK','q2ruuK0','yNDNBc5Xy2HLBG','ywLUv2L0AezPCG','C2v0qxr0CMLIDq','ue5KBK0','tg9HzgvK','Bg9HzgLUzW','yMfJA2DYB3vUza','q3jfCfC','ugfNzq','C3rqyxrO','vwnnqK4','BwvZC2fNzq','lMrLDgfPBc1HyW','AfvXqNm','AxndB21WBgv0zq','6z2Iic0G6yc76l6r5yID5AEl5yYw','u05LAu4','5zcV5z+o56Er5OQaic0G6yc76l6r5yID','C21HCNrLzhuUyW','5OYh5lUKlI4U','vvfvt2G','z2v0rwXLBwvUDa','6kgm5R+a5Rs744cc','CMvWBgfJzq','DxjZzs9jBMrLEa','C3DPDgnOvg9ozq','y3PwD3y','z21hyxG','zhrOoJeWmcu7yG','BgvUz3rO','EhrwAwrLBW','C3Pfz0u','zwr1lMnVBs9SAq','5PYQ5Qoa5Rwl5yIW5PYj5Pwi5O6i5P2d77Ym6isA','yMLUza','i3f1zxn0Aw9UAq','BvL6wuG','CuH4u1C','yxbWBhK','rMDIr0u','DgLTzxvWzgf0zq','zhvYyxrPB24','6z2Eig9UBgLUzw5L','yMXrvKi','CNnLD2fYzuLKrG','ue1LCwm','y2HLy2S','jsNVViZLH4BLPiFLIiFMJAi','vwDeuvK','BwvtDhjPBMC','msbPzNjHBwu','y0DxDLa','kcGOlISPkYKRkq','DhLWzq','yxjUAw5Nx2nVDq','y3jLyxrLrwXLBq','z0PJA2q','y291CNnLDhLWzq','Bwf0y2G','6lEZ6l2S5zUE5yIx6kgOoIa','kI8Q','sKziBfq','uwHkA04','DMLKzw8','CxvLCNLtzwXLyW','C3rHCNq','Aen5vfa','y29SBgvJDfzPza','y2XPy2S','AhvPEwKUzw5LDa','zxH0CMfJDerVBq','zw50','i2nJyZvJnq','r3n4C2O','zw5JB2rL','oMnLBNrLCJTWyq','rgf0zq','z2v0sxrLBq'];_0x3a13=function(){return _0x1fbb5c;};return _0x3a13();}
+// 教师网课助手 Pro - Content Script
+
+(function () {
+    'use strict';
+
+    // 注入页面脚本 (inject.js)
+    function injectScript(file) {
+        var th = document.getElementsByTagName('body')[0];
+        var s = document.createElement('script');
+        s.setAttribute('type', 'text/javascript');
+        s.setAttribute('src', chrome.runtime.getURL(file));
+        th.appendChild(s);
+    }
+    // 针对特定域名注入
+    if (window.location.href.includes('szh.enetedu.com')) {
+        injectScript('inject.js');
+    }
+
+    // ================== 1. 鉴权模块 ==================
+    const Auth = {
+        keyConfig: {
+            name: "RSASSA-PKCS1-v1_5",
+            hash: "SHA-256"
+        },
+
+        pemToArrayBuffer(pem) {
+            const b64 = pem.replace(/(-----(BEGIN|END) PUBLIC KEY-----|\n)/g, '');
+            const binary = atob(b64);
+            const buffer = new ArrayBuffer(binary.length);
+            const view = new Uint8Array(buffer);
+            for (let i = 0; i < binary.length; i++) {
+                view[i] = binary.charCodeAt(i);
+            }
+            return buffer;
+        },
+
+        async getNetworkTime() {
+            try {
+                // 修改：请求当前页面的完整 URL，避免根域名重定向导致的 CORS 问题
+                // 使用 cache: 'no-store' 确保获取服务器最新时间
+                const response = await fetch(window.location.href, { method: 'HEAD', cache: 'no-store' });
+                const dateHeader = response.headers.get('Date');
+                if (dateHeader) {
+                    return new Date(dateHeader).getTime();
+                }
+                return Date.now();
+            } catch (e) {
+                console.warn("无法获取网络时间，使用本地时间", e);
+                return Date.now();
+            }
+        },
+
+        async check() {
+            try {
+                const result = await chrome.storage.local.get(['licenseKey']);
+                if (!result.licenseKey) return false;
+
+                const [dataB64, signatureB64] = result.licenseKey.split('.');
+                if (!dataB64 || !signatureB64) return false;
+
+                const dataStr = atob(dataB64);
+                const dataObj = JSON.parse(dataStr);
+
+                if (typeof PUBLIC_KEY_PEM === 'undefined') {
+                    console.error("公钥丢失");
+                    return false;
+                }
+
+                const keyData = this.pemToArrayBuffer(PUBLIC_KEY_PEM);
+                const key = await window.crypto.subtle.importKey(
+                    "spki", keyData, this.keyConfig, false, ["verify"]
+                );
+
+                const signature = Uint8Array.from(atob(signatureB64), c => c.charCodeAt(0));
+                const data = new TextEncoder().encode(dataStr);
+
+                const isValid = await window.crypto.subtle.verify(
+                    "RSASSA-PKCS1-v1_5", key, signature, data
+                );
+
+                if (!isValid) return false;
+
+                const now = await this.getNetworkTime();
+                const deadline = new Date(dataObj.deadline).getTime();
+
+                if (now > deadline) {
+                    console.log(`授权已过期: ${dataObj.deadline}`);
+                    return false;
+                }
+
+                return true;
+            } catch (e) {
+                console.error("鉴权异常", e);
+                return false;
+            }
+        }
+    };
+
+    // ================== 2. 核心业务逻辑 (从 enetedu.js 移植) ==================
+
+    // 配置
+    const speed = 3.0;
+    const liveSpeed = 5.0;
+    const SPEEDS = {
+        normal: 2.0,
+        live: 4.0,
+        smartedu: 2.0
+    };
+
+    // 工具函数
+    const utils = {
+        randomNum(minNum, maxNum) {
+            return Math.floor(Math.random() * (maxNum - minNum + 1) + minNum);
+        },
+        log(message) {
+            console.log(`[网课助手] ${new Date().toLocaleTimeString()} - ${message}`);
+        },
+        error(message) {
+            console.error(`[网课助手] ${new Date().toLocaleTimeString()} - ${message}`);
+        },
+        isLivePage() {
+            return window.location.href.includes('huiyi.enetedu.com/liveWacth') || window.location.href.includes('szh.enetedu.com');
+        },
+        isSmartEduPage() {
+            return window.location.href.includes('smartedu.cn/p/course');
+        },
+        isChengKejiPage() {
+            return window.location.href.includes("bwgl.qchengkeji.com/user/node");
+        },
+        isEneteduPage() {
+            return window.location.href.includes('onlinenew.enetedu.com');
+        },
+        isOnlineNewListPage() {
+            return window.location.href.includes('onlinenew.enetedu.com') && window.location.href.includes('/MyTrainCourse/Index');
+        }
+    };
+
+    // 课程缓存管理
+    const CourseCache = {
+        key: 'enetedu_learning_courses',
+        getCourseId(url) {
+            const match = url.match(/[?&]id=(\d+)/);
+            return match ? match[1] : null;
+        },
+        getAll() {
+            try {
+                return JSON.parse(localStorage.getItem(this.key) || '[]');
+            } catch (e) {
+                return [];
+            }
+        },
+        add(urlOrId) {
+            const id = this.getCourseId(urlOrId) || urlOrId;
+            if (!id) return;
+            const list = this.getAll();
+            if (!list.includes(id)) {
+                list.push(id);
+                localStorage.setItem(this.key, JSON.stringify(list));
+                utils.log(`[缓存] 添加课程ID: ${id}`);
+            }
+        },
+        remove(urlOrId) {
+            const id = this.getCourseId(urlOrId) || urlOrId;
+            if (!id) return;
+            const list = this.getAll();
+            const newList = list.filter(item => item !== id);
+            localStorage.setItem(this.key, JSON.stringify(newList));
+            utils.log(`[缓存] 移除课程ID: ${id}`);
+        },
+        has(urlOrId) {
+            const id = this.getCourseId(urlOrId) || urlOrId;
+            if (!id) return false;
+            return this.getAll().includes(id);
+        }
+    };
+
+    // 返回课程列表页的通用函数
+    function returnToCourseList(delay = 3000, logMessage = '返回课程列表页') {
+        if (window.location.href.includes('onlinenew.enetedu.com')) {
+            utils.log(logMessage);
+            setTimeout(() => {
+                const pathParts = window.location.pathname.split('/');
+                const schoolCode = pathParts[1];
+                if (schoolCode) {
+                    const listUrl = `${window.location.origin}/${schoolCode}/MyTrainCourse/Index?newSearchFlag=true`;
+                    utils.log(`跳转回列表: ${listUrl}`);
+                    window.location.href = listUrl;
+                } else {
+                    utils.error('无法提取院校代码，执行默认关闭操作');
+                    setTimeout(() => { window.close(); }, 3000);
+                }
+            }, delay);
+        } else {
+            utils.log('非 onlinenew.enetedu.com 页面，3秒后关闭');
+            setTimeout(() => { window.close(); }, 3000);
+        }
+    }
+
+    // 视频控制器
+    class VideoController {
+        constructor() {
+            this.playInterval = null;
+            this.lastForceReportTime = 0;
+            this.lastLogTime = 0;
+            this.lastProgressUpdateTime = Date.now();
+            this.lastProgressValue = 0;
+            this.progressCheckInterval = null;
+        }
+
+        initVideoPlay() {
+            // 注意：Chrome插件多开逻辑由Popup控制，这里不再强制检查缓存互斥，
+            // 但保留记录缓存以便状态管理
+            CourseCache.add(window.location.href);
+            utils.log(`课程已添加到学习缓存: ${window.location.href}`);
+
+            window.addEventListener('beforeunload', () => {
+                CourseCache.remove(window.location.href);
+            });
+
+            this.playInterval = setInterval(() => {
+                try {
+                    const iframe = $(".classcenter-chapter1 iframe").contents();
+
+                    // 处理弹窗
+                    if (iframe.find(".layui-layer-content iframe").length > 0) {
+                        setTimeout(() => {
+                            utils.log("点击确定按钮");
+                            iframe.find(".layui-layer-content iframe").contents()
+                                .find("#questionid~div button").trigger("click");
+                        }, utils.randomNum(4, 10) * 100);
+                        return;
+                    }
+
+                    // 播放视频并设置倍速
+                    const video = iframe.find("video");
+                    if (video.length > 0) {
+                        const videoElement = video[0];
+                        videoElement.play();
+                        videoElement.muted = true
+                        try {
+                            videoElement.playbackRate = speed;
+                            // 减少日志频率
+                            // utils.log(`视频开始播放，音量设置为1%，播放速度${speed}倍`);
+                        } catch (err) {
+                            utils.log(`设置播放速度失败: ${err.message}`);
+                        }
+                    }
+                } catch (err) {
+                    // utils.log(`播放出错: ${err.message}`);
+                }
+            }, 5000);
+        }
+
+        initProgressMonitor() {
+            this.lastProgressUpdateTime = Date.now();
+            this.lastProgressValue = 0;
+
+            const STUCK_CHECK_INTERVAL = 600000;
+            this.progressCheckInterval = setInterval(() => {
+                const now = Date.now();
+                const timeSinceLastUpdate = now - this.lastProgressUpdateTime;
+
+                if (timeSinceLastUpdate >= STUCK_CHECK_INTERVAL) {
+                    utils.log(`检测到10分钟内进度无变化，刷新页面`);
+                    window.location.reload();
+                }
+            }, 60000);
+
+            // 原始的视频进度监听逻辑
+            setTimeout(() => {
+                try {
+                    const iframe = $(".classcenter-chapter1 iframe").contents();
+                    const video = iframe.find("video");
+                    if (video.length > 0) {
+                        video.on("timeupdate", this.handleVideoProgress.bind(this));
+                    }
+                } catch (err) {
+                    utils.log(`主视频进度监控初始化失败: ${err.message}`);
+                }
+            }, 8000);
+        }
+
+        handleVideoProgress(event) {
+            const video = event.target;
+            const currentTime = Math.ceil(video.currentTime);
+            const duration = Math.ceil(video.duration);
+
+            try {
+                if (video && video.playbackRate !== speed) {
+                    video.playbackRate = speed;
+                }
+            } catch (err) { }
+
+            if (Math.abs(currentTime - this.lastLogTime) >= 6) {
+                utils.log(`当前视频进度: ${currentTime}s/${duration}s，播放速度: ${video.playbackRate}倍`);
+                this.lastLogTime = currentTime;
+                this.lastProgressUpdateTime = Date.now();
+                this.lastProgressValue = currentTime;
+                this.checkCurrentProgress();
+            }
+        }
+
+        checkCurrentProgress() {
+            this.checkProgressByAPI().then((apiResult) => {
+                if (apiResult !== null) {
+                    this.handleProgressResult(apiResult);
+                } else {
+                    this.checkProgressByElement();
+                }
+            }).catch((error) => {
+                utils.log(`接口检测失败: ${error.message}，使用页面元素检测`);
+                this.checkProgressByElement();
+            });
+        }
+
+        extractDomainWithFirstPath(url) {
+            try {
+                const urlObj = new URL(url);
+                const pathname = urlObj.pathname;
+                const pathSegments = pathname.split('/').filter(segment => segment.length > 0);
+                const baseUrl = `${urlObj.protocol}//${urlObj.host}`;
+                if (pathSegments.length > 0) {
+                    return `${baseUrl}/${pathSegments[0]}`;
+                }
+                return baseUrl;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        async checkProgressByAPI() {
+            try {
+                const currentUrl = window.location.href;
+                const urlParams = new URLSearchParams(window.location.search);
+                const coursetype = urlParams.get('coursetype') || this.extractCourseIdFromUrl(currentUrl) || 2;
+                const coursewareId = urlParams.get('coursewareid') || this.extractCoursewareIdFromUrl(currentUrl);
+
+                if (!coursetype || !coursewareId) {
+                    return null;
+                }
+
+                const apiUrl = this.extractDomainWithFirstPath(currentUrl) + "/MyTrainCourse/PercentageCourse";
+
+                // 使用 fetch 替代 GM.xmlHttpRequest
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept': '*/*',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: `coursetype=${coursetype}&coursewareid=${coursewareId}`
+                });
+
+                if (!response.ok) throw new Error('API request failed');
+
+                const data = await response.text();
+                const percentage = parseFloat(data.replace('%', ''));
+
+                return {
+                    percentage: percentage,
+                    isComplete: percentage >= 100,
+                    source: 'api'
+                };
+            } catch (error) {
+                utils.log(`接口检测异常: ${error.message}`);
+                return null;
+            }
+        }
+
+        extractCourseIdFromUrl(url) {
+            let match = url.match(/coursetype=(\d+)/);
+            if (match) return match[1];
+            match = url.match(/id=(\d+)/);
+            return match ? match[1] : null;
+        }
+
+        extractCoursewareIdFromUrl(url) {
+            const match = url.match(/coursewareid=(\d+)/);
+            return match ? match[1] : null;
+        }
+
+        handleProgressResult(result) {
+            if (result.source === 'api') {
+                if (result.isComplete) {
+                    utils.log(`接口检测：当前章节已完成 (${result.percentage}%)，准备切换`);
+                    this.switchToNextVideo();
+                }
+            }
+        }
+
+        collectVideoElements() {
+            const currentFullUrl = window.location.href;
+            const videoElements = [];
+            let currentVideoIndex = -1;
+            let currentVideoComplete = false;
+
+            $(".classcenter-chapter2 ul li").each(function (index) {
+                const $this = $(this);
+                const onclickAttr = $this.attr('onclick');
+                let isCurrentVideo = $this.css("background-color") === "rgb(204, 197, 197)" || $this.css("background-color") === "#ccc5c5";
+
+                if (onclickAttr && onclickAttr.includes('location.href=')) {
+                    const onclickUrlPart = onclickAttr.match(/location\.href='([^']+)'/);
+                    if (onclickUrlPart && onclickUrlPart[1]) {
+                        const relativePath = onclickUrlPart[1].replace(/&/g, '&');
+                        if (currentFullUrl.includes(relativePath)) {
+                            isCurrentVideo = true;
+                        }
+                    }
+                }
+                const isComplete = $this.find("span").text() === "[100%]";
+
+                videoElements.push({
+                    element: $this,
+                    isCurrent: isCurrentVideo,
+                    isComplete: isComplete,
+                    index: index
+                });
+
+                if (isCurrentVideo) {
+                    currentVideoIndex = index;
+                    currentVideoComplete = isComplete;
+                }
+            });
+
+            return {
+                videoElements: videoElements,
+                currentVideoIndex: currentVideoIndex,
+                currentVideoComplete: currentVideoComplete
+            };
+        }
+
+        handleVideoSwitch(source = 'unknown') {
+            const { videoElements, currentVideoIndex, currentVideoComplete } = this.collectVideoElements();
+
+            if (currentVideoIndex === -1) return;
+
+            if (source === '页面元素检测' && !currentVideoComplete) return;
+
+            let nextIncompleteVideoIndex = -1;
+
+            if (source === '接口检测') {
+                for (let i = currentVideoIndex + 1; i < videoElements.length; i++) {
+                    if (!videoElements[i].isComplete) {
+                        nextIncompleteVideoIndex = i;
+                        break;
+                    }
+                }
+                if (nextIncompleteVideoIndex === -1) {
+                    for (let i = 0; i < currentVideoIndex; i++) {
+                        if (!videoElements[i].isComplete) {
+                            nextIncompleteVideoIndex = i;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                for (let i = 0; i < videoElements.length; i++) {
+                    if (!videoElements[i].isComplete) {
+                        nextIncompleteVideoIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if (nextIncompleteVideoIndex !== -1) {
+                const nextVideo = videoElements[nextIncompleteVideoIndex];
+                nextVideo.element.trigger("click");
+                utils.log(`切换到下一个视频 (索引: ${nextIncompleteVideoIndex})`);
+            } else {
+                utils.log(`所有视频播放完成`);
+                CourseCache.remove(window.location.href);
+                // 自动关闭页面
+                setTimeout(() => { window.close(); }, 3000);
+            }
+        }
+
+        checkProgressByElement() {
+            this.handleVideoSwitch('页面元素检测');
+        }
+
+        switchToNextVideo() {
+            this.handleVideoSwitch('接口检测');
+        }
+    }
+
+    // (简化版) 直播控制器 - 如需完整功能需补全
+    class LiveController {
+        init() {
+            utils.log("直播页面 - 逻辑初始化");
+            setInterval(() => {
+                const video = document.querySelector('video');
+                if (video && video.paused) video.play();
+            }, 3000);
+        }
+    }
+
+    // (简化版) SmartEduController
+    class SmartEduController {
+        init() {
+            utils.log("SmartEdu 页面 - 逻辑初始化");
+        }
+    }
+
+    // (简化版) QChengKejiController
+    class QChengKejiController {
+        startVideoTasks() {
+            utils.log("启城科技 - 逻辑初始化");
+        }
+    }
+
+
+    // 业务入口管理器
+    const App = {
+        isRunning: false,
+
+        async start() {
+            if (this.isRunning) return;
+
+            const isAuth = await Auth.check();
+            if (!isAuth) {
+                console.log("未检测到有效授权，脚本待机中...");
+                this.showAuthWarning();
+                return;
+            }
+
+            this.isRunning = true;
+            this.removeAuthWarning();
+            utils.log("授权验证通过，引擎启动 🚀");
+
+            if (utils.isChengKejiPage()) {
+                new QChengKejiController().startVideoTasks();
+            } else if (utils.isSmartEduPage()) {
+                new SmartEduController().init();
+            } else if (utils.isLivePage()) {
+                new LiveController().init();
+            } else if (utils.isEneteduPage()) {
+                if (utils.isOnlineNewListPage()) {
+                    utils.log("位于课程列表页，等待指令...");
+                } else {
+                    const controller = new VideoController();
+                    controller.initVideoPlay();
+                    controller.initProgressMonitor();
+                }
+            }
+        },
+
+        showAuthWarning() {
+            if (document.getElementById('auth-warning-banner')) return;
+            const div = document.createElement('div');
+            div.id = 'auth-warning-banner';
+            div.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#e74c3c;color:white;text-align:center;padding:10px;z-index:999999;font-size:14px;';
+            div.innerHTML = '网课助手未授权或已过期，请点击插件图标进行激活。';
+            document.body.appendChild(div);
+        },
+
+        removeAuthWarning() {
+            const div = document.getElementById('auth-warning-banner');
+            if (div) div.remove();
+        },
+
+        getUnlearnedCourses() {
+            const urls = [];
+            const $ = window.jQuery || window.$;
+
+            if ($) {
+                $(".detail-act2 li").each(function () {
+                    const statusSpan = $($(this).find("span.right1")[3]);
+                    if (statusSpan && statusSpan.text().trim() === "学习") {
+                        const relativeLink = $($(this).find("a")[0]).attr("href");
+                        if (relativeLink) {
+                            const fullUrl = new URL(relativeLink, window.location.href).href;
+                            urls.push(fullUrl);
+                        }
+                    }
+                });
+            } else {
+                const items = document.querySelectorAll(".detail-act2 li");
+                items.forEach(li => {
+                    const spans = li.querySelectorAll("span.right1");
+                    if (spans.length >= 4 && spans[3].textContent.trim() === "学习") {
+                        const a = li.querySelector("a");
+                        if (a) urls.push(a.href);
+                    }
+                });
+            }
+            return urls;
+        }
+    };
+
+    // 消息监听
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        if (request.action === "start_learning") {
+            App.start();
+            sendResponse({ status: "started" });
+        } else if (request.action === "get_unlearned_courses") {
+            Auth.check().then(isAuth => {
+                if (isAuth) {
+                    const courses = App.getUnlearnedCourses();
+                    sendResponse({ courses: courses });
+                } else {
+                    App.showAuthWarning();
+                    sendResponse({ courses: [] });
+                }
+            });
+            return true;
+        } else if (request.action === "auth_updated") {
+            App.start();
+        }
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => App.start());
+    } else {
+        App.start();
+    }
+
+})();

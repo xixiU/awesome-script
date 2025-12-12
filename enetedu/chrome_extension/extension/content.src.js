@@ -36,7 +36,9 @@
 
         async getNetworkTime() {
             try {
-                const response = await fetch(window.location.origin, { method: 'HEAD', cache: 'no-store' });
+                // 修改：请求当前页面的完整 URL，避免根域名重定向导致的 CORS 问题
+                // 使用 cache: 'no-store' 确保获取服务器最新时间
+                const response = await fetch(window.location.href, { method: 'HEAD', cache: 'no-store' });
                 const dateHeader = response.headers.get('Date');
                 if (dateHeader) {
                     return new Date(dateHeader).getTime();
