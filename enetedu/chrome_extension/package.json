@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "archiver": "^7.0.1",
     "fs-extra": "^11.3.2",
     "javascript-obfuscator": "^5.0.1"
   }
