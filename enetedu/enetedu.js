@@ -1889,16 +1889,28 @@
         // pathParts[0] is empty string, pathParts[1] is 'nnsy'
         const schoolCode = pathParts[1];
 
-        // 后台打开学分页面
+        // 后台打开学分页面（防止重复打开）
         if (schoolCode) {
             const creditUrl = `https://onlinenew.enetedu.com/${schoolCode}/MyCredit/Index`;
-            const creditWindow = window.open(creditUrl, '_blank');
-            if (creditWindow) {
-                creditWindow.blur(); // 将新窗口置于后台
-                window.focus(); // 保持当前窗口焦点
-                utils.log(`已在后台打开学分页面: ${creditUrl}`);
+            // 使用 sessionStorage 记录是否已打开过学分页面，避免重复打开
+            const creditPageKey = `creditPageOpened_${schoolCode}`;
+            const hasOpenedCreditPage = sessionStorage.getItem(creditPageKey);
+
+            if (!hasOpenedCreditPage) {
+                // 使用固定窗口名称打开，如果窗口已存在则复用该窗口
+                const creditWindow = window.open(creditUrl, 'creditPageWindow');
+                if (creditWindow) {
+                    creditWindow.blur(); // 将新窗口置于后台
+                    window.focus(); // 保持当前窗口焦点
+                    // 标记已打开，避免重复打开
+                    sessionStorage.setItem(creditPageKey, 'true');
+                    utils.log(`已在后台打开学分页面: ${creditUrl}`);
+                } else {
+                    utils.error(`无法打开学分页面: ${creditUrl}`);
+                }
             } else {
-                utils.error(`无法打开学分页面: ${creditUrl}`);
+                // 已打开过，跳过重复打开
+                utils.log(`学分页面已打开过，跳过重复打开: ${creditUrl}`);
             }
         } else {
             utils.error('无法从地址栏提取院校代码，跳过学分页面打开');
