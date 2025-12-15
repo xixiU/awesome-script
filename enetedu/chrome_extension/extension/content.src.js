@@ -473,8 +473,13 @@
             } else {
                 utils.log(`所有视频播放完成`);
                 CourseCache.remove(window.location.href);
-                // 自动关闭页面
-                setTimeout(() => { window.close(); }, 3000);
+
+                if (window.location.href.includes('onlinenew.enetedu.com')) {
+                    returnToCourseList(3000, '当前课程已完成，3秒后返回课程列表继续处理下一个课程...');
+                } else {
+                    // 自动关闭页面
+                    setTimeout(() => { window.close(); }, 3000);
+                }
             }
         }
 
@@ -517,6 +522,76 @@
     const App = {
         // isRunning: false, // 移除单次运行限制，允许重试
 
+        // 处理课程列表页面，自动寻找下一个未完成的课程
+        handleOnlineNewListPage() {
+            utils.log("进入课程列表处理逻辑");
+
+            // 从地址栏动态获取院校代码
+            const pathParts = window.location.pathname.split('/');
+            // url like /nnsy/MyTrainCourse/Index
+            const schoolCode = pathParts[1];
+
+            // 后台打开学分页面（防止重复打开）
+            if (schoolCode) {
+                const creditUrl = `https://onlinenew.enetedu.com/${schoolCode}/MyCredit/Index`;
+                const creditPageKey = `creditPageOpened_${schoolCode}`;
+                const hasOpenedCreditPage = sessionStorage.getItem(creditPageKey);
+
+                if (!hasOpenedCreditPage) {
+                    try {
+                        const creditWindow = window.open(creditUrl, 'creditPageWindow');
+                        if (creditWindow) {
+                            creditWindow.blur();
+                            window.focus();
+                            sessionStorage.setItem(creditPageKey, 'true');
+                            utils.log(`已在后台打开学分页面: ${creditUrl}`);
+                        }
+                    } catch (e) {
+                        utils.log(`尝试打开学分页面失败: ${e.message}`);
+                    }
+                }
+            }
+
+            let hasOpened = false;
+            const availableCourses = [];
+            const $ = window.jQuery || window.$;
+
+            if ($) {
+                $(".detail-act2 li").each(function () {
+                    const statusSpan = $($(this).find("span.right1")[3]);
+                    if (statusSpan.text().trim() === "学习") {
+                        const relativeLink = $($(this).find("a")[0]).attr("href");
+                        // 构造完整 URL 以匹配缓存键
+                        const classLink = new URL(relativeLink, "https://onlinenew.enetedu.com").href;
+
+                        // 检查是否已在学习列表中
+                        if (CourseCache.has(classLink)) {
+                            utils.log(`课程已在学习中，跳过: ${classLink}`);
+                            return true; // continue
+                        }
+                        availableCourses.push(classLink);
+                    }
+                });
+            }
+
+            // 如果有可用课程，随机选择一个打开
+            if (availableCourses.length > 0) {
+                const randomIndex = Math.floor(Math.random() * availableCourses.length);
+                const selectedCourse = availableCourses[randomIndex];
+
+                utils.log(`已随机选择课程，正在打开: ${selectedCourse} `);
+                window.location.href = selectedCourse;
+                hasOpened = true;
+            }
+
+            if (!hasOpened) {
+                utils.log("没有找到需要学习的课程，准备关闭页面");
+                setTimeout(() => {
+                    window.close();
+                }, 3000);
+            }
+        },
+
         async start(isManualTrigger = false) {
             // if (this.isRunning) return;
 
@@ -551,10 +626,8 @@
                 new LiveController().init();
             } else if (utils.isEneteduPage()) {
                 if (utils.isOnlineNewListPage()) {
-                    utils.log("位于课程列表页，等待指令...");
-                    if (isManualTrigger) {
-                        alert("当前是课程列表页，请点击插件面板上的【列表页一键多开】按钮来批量打开课程。\n\n或者请点击具体的课程进入视频页后，再点击此按钮开始自动播放。");
-                    }
+                    utils.log("位于课程列表页，正在检测未完成课程...");
+                    this.handleOnlineNewListPage();
                 } else {
                     // 只有在 VideoController 未初始化时才新建，或者设计成单例
                     // 这里简化处理：VideoController 内部有 setInterval，重复初始化会导致多个定时器
