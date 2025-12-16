@@ -99,7 +99,7 @@
     // ================== 2. 核心业务逻辑 (从 enetedu.js 移植) ==================
 
     // 配置 (默认值，实际运行会从Storage读取)
-    let currentSpeed = 3.0;
+    let currentSpeed = 2.0;
 
     // 工具函数
     const utils = {
