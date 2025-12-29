@@ -555,9 +555,65 @@ function removePauseBlur() {
             e.stopImmediatePropagation();
             e.stopPropagation();
             console.log("阻止了 paused 消息");
+
+            // 尝试发送 playing 消息，保持原有数据结构
+            try {
+                if (window.postMessage) {
+                    if (typeof e.data === 'string') {
+                        window.postMessage('playing', '*');
+                    } else {
+                        let newData = JSON.parse(JSON.stringify(e.data));
+                        if (newData.data === 'paused') {
+                            newData.data = 'playing';
+                        }
+                        window.postMessage(newData, '*');
+                    }
+                }
+            } catch (err) { }
         }
     }, true);
 
+    // 移植自 another.js 的反调试和跨域通讯逻辑
+    try {
+        const iframeWindow = unsafeWindow || window;
+        const oldConstructor = Function.prototype.constructor;
+        Function.prototype.constructor = function (...args) {
+            if (args[0] === 'debugger') {
+                return function () { };
+            }
+            return oldConstructor.apply(this, args);
+        };
+        iframeWindow.check = function () { };
+        console.log('反调试绕过成功！');
+
+        // 监听跨域消息，处理 play/pause 动作
+        window.addEventListener('message', async (e) => {
+            // if (e.origin !== 'https://gp.chinahrt.com') return;
+            if (e.data?.type === 'LOCALSTORAGE_DATA') {
+                console.log('Received:', e.data.value);
+                window.bindInfo = e.data.value;
+            }
+        });
+    } catch (err) {
+        console.error('绕过失败：', err);
+    }
+
+    // 定时发送 playing 消息，防止长时间未操作导致的自动暂停
+    setInterval(function () {
+        try {
+            if (window.postMessage) {
+                window.postMessage('playing', '*');
+                window.postMessage({ data: 'playing' }, '*');
+            }
+            // 移植自 another.js: 检测视频暂停并自动播放
+            const video = document.querySelector('video');
+            if (video && video.paused) {
+                console.log("检测到视频暂停，尝试自动播放...");
+                video.play();
+                video.muted = true; // 静音以防自动播放策略限制
+            }
+        } catch (err) { }
+    }, 1000);
 
     try {
         Object.defineProperty(document, 'hidden', {
