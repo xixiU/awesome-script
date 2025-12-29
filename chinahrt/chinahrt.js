@@ -22,7 +22,7 @@
 
 (function initStyles() {
     let style = document.createElement("style");
-    style.appendChild(document.createTextNode(`.autoPlayBox {    padding: 5px 10px;}.autoPlayBox .title {    color: blue;}.autoPlayBox label {    margin-right: 6px;}.autoPlayBox label input {    margin-left: 4px;}.canPlaylist {    width: 300px;    height: 500px;    position: fixed;    top: 100px;    background: rgba(255, 255, 255, 1);    right: 80px;    border: 1px solid #c1c1c1;    overflow-y: auto;}.canPlaylist .oneClick {    margin: 0 auto;    width: 100%;    border: none;    padding: 6px 0;    background: linear-gradient(180deg, #4BCE31, #4bccf2);    height: 50px;    border-radius: 5px;    color: #FFF;    font-weight: bold;    letter-spacing: 4px;    font-size: 18px;}.canPlaylist .item {    border-bottom: 1px solid #c1c1c1;    padding: 8px;    line-height: 150%;    border-bottom: 1px solid #c1c1c1;    margin-bottom: 3px;}.canPlaylist .item .title {    font-size: 13px;    white-space: nowrap;    overflow: hidden;    text-overflow: ellipsis;}.canPlaylist .item .status {    font-size: 12px;    white-space: nowrap;    overflow: hidden;    text-overflow: ellipsis;    color: #c90000;}.canPlaylist .item .addBtn {    color: #FFF;    background-color: #4bccf2;    border: none;    padding: 5px 10px;    margin-top: 4px;}.canPlaylist .item .addBtn.remove {    background-color: #fd1952;}.dragBox {    padding: 5px 10px;}.dragBox .title {    color: blue;}.dragBox .remark {    font-size: 12px;    color: #fc1818;}.dragBox label {    margin-right: 6px;}.dragBox label input {    margin-left: 4px;}.multiSegmentBox {    position: fixed;    right: 255px;    top: 0;    width: 250px;    height: 280px;    background-color: #FFF;    z-index: 9999;    border: 1px solid #ccc;    font-size: 12px;}.multiSegmentBox .tip {    border-bottom: 1px solid #ccc;    padding: 5px;    font-weight: bold;    color: red;}.multiSegmentBox .item {    font-size: 14px;}.multiSegmentBox label {    margin-right: 3px;}.multiSegmentBox label input {    margin-left: 2px;}.muteBox {    padding: 5px 10px;}.muteBox .title {    color: blue;}.muteBox .remark {    font-size: 12px;    color: #fc1818;}.muteBox label {    margin-right: 6px;}.muteBox label input {    margin-left: 4px;}.controllerBox {    position: fixed;    right: 0;    top: 0;    width: 250px;    height: 280px;    background-color: #FFF;    z-index: 9999;    border: 1px solid #ccc;    overflow-y: auto;    font-size: 12px;}.controllerBox .linksBox {    display: flex;    flex-wrap: wrap;    justify-content: space-between;    height: 30px;    line-height: 30px;    font-weight: bold;    border-bottom: 1px dotted;}.playlistBox {    position: fixed;    right: 0;    top: 290px;    width: 250px;    height: 450px;    background-color: #FFF;    z-index: 9999;    border: 1px solid #ccc;    overflow-y: auto;}.playlistBox .oneClear {    width: 100%;    border: none;    padding: 6px 0;    background: linear-gradient(180deg, #4BCE31, #4bccf2);    height: 50px;    border-radius: 5px;    color: #FFF;    font-weight: bold;    letter-spacing: 4px;    font-size: 18px;    cursor: pointer;    margin-bottom: 5px;}.playlistBox .playlistItem {    display: flex;    justify-content: space-between;    align-items: center;    margin-bottom: 5px;}.playlistBox .playlistItem .child_title {    font-size: 13px;    white-space: nowrap;    overflow: hidden;    text-overflow: ellipsis;    width: 180px;}.playlistBox .playlistItem .child_remove {    color: #FFF;    background-color: #fd1952;    border: none;    padding: 5px 10px;    cursor: pointer;}.speedBox {    padding: 5px 10px;}.speedBox .title {    color: blue;}.speedBox .remark {    font-size: 12px;    color: #fc1818;}.speedBox label {    margin-right: 6px;}.speedBox label input {    margin-left: 4px;}`));
+    style.appendChild(document.createTextNode(`.autoPlayBox {    padding: 5px 10px;}.autoPlayBox .title {    color: blue;}.autoPlayBox label {    margin-right: 6px;}.autoPlayBox label input {    margin-left: 4px;}.canPlaylist {    width: 300px;    height: 500px;    position: fixed;    top: 100px;    background: rgba(255, 255, 255, 1);    right: 80px;    border: 1px solid #c1c1c1;    overflow-y: auto;}.canPlaylist .oneClick {    margin: 0 auto;    width: 100%;    border: none;    padding: 6px 0;    background: linear-gradient(180deg, #4BCE31, #4bccf2);    height: 50px;    border-radius: 5px;    color: #FFF;    font-weight: bold;    letter-spacing: 4px;    font-size: 18px;}.canPlaylist .item {    border-bottom: 1px solid #c1c1c1;    padding: 8px;    line-height: 150%;    border-bottom: 1px solid #c1c1c1;    margin-bottom: 3px;}.canPlaylist .item .title {    font-size: 13px;    white-space: nowrap;    overflow: hidden;    text-overflow: ellipsis;}.canPlaylist .item .status {    font-size: 12px;    white-space: nowrap;    overflow: hidden;    text-overflow: ellipsis;    color: #c90000;}.canPlaylist .item .addBtn {    color: #FFF;    background-color: #4bccf2;    border: none;    padding: 5px 10px;    margin-top: 4px;}.canPlaylist .item .addBtn.remove {    background-color: #fd1952;}.dragBox {    padding: 5px 10px;}.dragBox .title {    color: blue;}.dragBox .remark {    font-size: 12px;    color: #fc1818;}.dragBox label {    margin-right: 6px;}.dragBox label input {    margin-left: 4px;}.multiSegmentBox {    position: fixed;    right: 360px;    top: 0;    width: 250px;    height: 280px;    background-color: #FFF;    z-index: 9999;    border: 1px solid #ccc;    font-size: 12px;}.multiSegmentBox .tip {    border-bottom: 1px solid #ccc;    padding: 5px;    font-weight: bold;    color: red;}.multiSegmentBox .item {    font-size: 14px;}.multiSegmentBox label {    margin-right: 3px;}.multiSegmentBox label input {    margin-left: 2px;}.muteBox {    padding: 5px 10px;}.muteBox .title {    color: blue;}.muteBox .remark {    font-size: 12px;    color: #fc1818;}.muteBox label {    margin-right: 6px;}.muteBox label input {    margin-left: 4px;}.controllerBox {    position: fixed;    right: 0;    top: 0;    width: 350px;    height: auto !important;    max-height: none !important;    background-color: #FFF;    z-index: 9999;    border: 1px solid #ccc;    overflow-y: visible !important;    font-size: 12px;    padding-bottom: 10px;}.controllerBox .linksBox {    display: flex;    flex-wrap: wrap;    justify-content: space-between;    height: 30px;    line-height: 30px;    font-weight: bold;    border-bottom: 1px dotted;}.playlistBox {    position: fixed;    right: 0;    top: 530px;    width: 350px;    height: 280px;    background-color: #FFF;    z-index: 9999;    border: 1px solid #ccc;    overflow-y: auto !important;    overflow-x: hidden;    padding: 5px;    box-sizing: border-box;}.playlistBox::-webkit-scrollbar {    width: 10px;}.playlistBox::-webkit-scrollbar-track {    background: #f1f1f1;    border-radius: 10px;}.playlistBox::-webkit-scrollbar-thumb {    background: #888;    border-radius: 10px;}.playlistBox::-webkit-scrollbar-thumb:hover {    background: #555;}.playlistBox .oneClear {    width: 100%;    border: none;    padding: 6px 0;    background: linear-gradient(180deg, #4BCE31, #4bccf2);    height: 50px;    border-radius: 5px;    color: #FFF;    font-weight: bold;    letter-spacing: 4px;    font-size: 18px;    cursor: pointer;    margin-bottom: 5px;}.playlistBox .playlistItem {    display: flex;    justify-content: space-between;    align-items: center;    margin-bottom: 5px;    padding: 5px;    background: #f9f9f9;    border-radius: 3px;}.playlistBox .playlistItem .child_title {    font-size: 13px;    white-space: nowrap;    overflow: hidden;    text-overflow: ellipsis;    width: 260px;    flex: 1;    margin-right: 10px;}.playlistBox .playlistItem .child_remove {    color: #FFF;    background-color: #fd1952;    border: none;    padding: 5px 10px;    cursor: pointer;    border-radius: 3px;    flex-shrink: 0;}.speedBox {    padding: 5px 10px;}.speedBox .title {    color: blue;}.speedBox .remark {    font-size: 12px;    color: #fc1818;}.speedBox label {    margin-right: 6px;}.speedBox label input {    margin-left: 4px;}`));
     document.head.appendChild(style);
 })();
 
@@ -45,6 +45,7 @@ function mute(value) {
 }
 
 function drag(value) {
+    const attrset = unsafeWindow.attrset || window.attrset;
     if (attrset !== undefined) {
         attrset.ifCanDrag = 1;
     }
@@ -58,6 +59,7 @@ function drag(value) {
 }
 
 function speed(value) {
+    const attrset = unsafeWindow.attrset || window.attrset;
     if (attrset !== undefined) {
         attrset.playbackRate = 1;
     }
@@ -169,9 +171,6 @@ function currentPageType() {
 }
 
 function preventEventPropagation(element) {
-    element.addEventListener('click', function (e) {
-        e.stopPropagation();
-    });
     element.addEventListener('mousedown', function (e) {
         e.stopPropagation();
     });
@@ -366,6 +365,8 @@ function createMultiSegmentBox() {
 }
 
 function timeHandler(t) {
+    const player = unsafeWindow.player || window.player;
+    if (!player) return;
     let videoDuration = parseInt(player.getMetaDate().duration);
     if (playMode() === 1) {
         if (videoDuration <= 270) {
@@ -440,48 +441,179 @@ function createControllerBox() {
     controllerBox.id = 'controllerBox';
     controllerBox.className = 'controllerBox';
 
-    preventEventPropagation(controllerBox);
+    controllerBox.addEventListener('blur', function (e) {
+        e.stopPropagation();
+    }, true);
+    controllerBox.addEventListener('focusout', function (e) {
+        e.stopPropagation();
+    }, true);
 
     document.body.appendChild(controllerBox);
 
-    let linksBox = document.createElement('div');
-    linksBox.className = 'linksBox';
-    controllerBox.appendChild(linksBox);
+    // let linksBox = document.createElement('div');
+    // linksBox.className = 'linksBox';
+    // controllerBox.appendChild(linksBox);
 
-    const links = [
-        {
-            title: '使用教程',
-            link: 'https://yikuaibaiban.github.io/chinahrt-autoplay-docs/',
-        },
-        { title: '留言', link: 'https://msg.cnblogs.com/send/ykbb' },
-        { title: '博客园', link: 'https://www.cnblogs.com/ykbb/' },
-        {
-            title: 'Gitee',
-            link: 'https://gitee.com/yikuaibaiban/chinahrt-autoplay/issues',
-        },
-        {
-            title: 'GitHub',
-            link: 'https://github.com/yikuaibaiban/chinahrt-autoplay/issues',
-        },
-    ];
+    // const links = [
+    //     {
+    //         title: '使用教程',
+    //         link: 'https://yikuaibaiban.github.io/chinahrt-autoplay-docs/',
+    //     },
+    //     { title: '留言', link: 'https://msg.cnblogs.com/send/ykbb' },
+    //     { title: '博客园', link: 'https://www.cnblogs.com/ykbb/' },
+    //     {
+    //         title: 'Gitee',
+    //         link: 'https://gitee.com/yikuaibaiban/chinahrt-autoplay/issues',
+    //     },
+    //     {
+    //         title: 'GitHub',
+    //         link: 'https://github.com/yikuaibaiban/chinahrt-autoplay/issues',
+    //     },
+    // ];
 
-    for (const link of links) {
-        let a = document.createElement('a');
-        a.innerText = link.title;
-        a.target = '_blank';
-        a.href = link.link;
-        linksBox.appendChild(a);
+    // for (const link of links) {
+    //     let a = document.createElement('a');
+    //     a.innerText = link.title;
+    //     a.target = '_blank';
+    //     a.href = link.link;
+    //     linksBox.appendChild(a);
+    // }
+
+    try {
+        controllerBox.appendChild(createAutoPlayOption());
+    } catch (e) {
+        console.error('创建自动播放选项失败:', e);
     }
 
-    controllerBox.appendChild(createAutoPlayOption());
-    controllerBox.appendChild(createDragOption());
-    controllerBox.appendChild(createMuteOption());
-    controllerBox.appendChild(createSpeedOption());
+    try {
+        controllerBox.appendChild(createDragOption());
+    } catch (e) {
+        console.error('创建拖动选项失败:', e);
+    }
 
+    try {
+        controllerBox.appendChild(createMuteOption());
+    } catch (e) {
+        console.error('创建静音选项失败:', e);
+    }
+
+    try {
+        controllerBox.appendChild(createSpeedOption());
+    } catch (e) {
+        console.error('创建速度选项失败:', e);
+    }
+
+    try {
+        let oneClickFinish = document.createElement("button");
+        oneClickFinish.innerText = "⚡ 一键秒刷";
+        oneClickFinish.style.cssText = `
+            width: calc(100% - 20px);
+            margin: 10px 10px 5px 10px;
+            background: linear-gradient(135deg, #FF4136 0%, #FF851B 100%);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+        `;
+        oneClickFinish.onmouseover = function () {
+            this.style.transform = 'translateY(-2px)';
+            this.style.boxShadow = '0 6px 12px rgba(0,0,0,0.4)';
+        };
+        oneClickFinish.onmouseout = function () {
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
+        };
+        oneClickFinish.onclick = function (e) {
+            e.stopPropagation();
+            console.log('一键秒刷按钮被点击');
+            if (confirm("⚠️ 确定要秒刷当前视频吗？\n\n注意：\n1. 此操作会立即标记课程为已完成\n2. 可能存在风险，请谨慎使用\n3. 建议先正常播放一段时间后再使用")) {
+                finishCurrentCourse();
+            }
+        };
+        controllerBox.appendChild(oneClickFinish);
+        console.log('秒刷按钮已创建');
+    } catch (e) {
+        console.error('创建秒刷按钮失败:', e);
+    }
+
+    try {
+        let tipBox = document.createElement("div");
+        tipBox.style.cssText = `
+            padding: 8px 10px;
+            margin: 5px 10px;
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 5px;
+            font-size: 11px;
+            color: #856404;
+            line-height: 1.4;
+        `;
+        tipBox.innerHTML = "💡 <b>秒刷说明：</b><br/>点击后会立即完成当前课程，并自动播放下一个。建议正常观看一段时间后再使用。";
+        controllerBox.appendChild(tipBox);
+        console.log('提示框已创建');
+    } catch (e) {
+        console.error('创建提示框失败:', e);
+    }
+
+    console.log('控制面板创建完成，子元素数量:', controllerBox.children.length);
     return controllerBox;
 }
 
+function finishCurrentCourse() {
+    const attrset = unsafeWindow.attrset || window.attrset;
+    const $ = unsafeWindow.$ || unsafeWindow.jQuery || window.$ || window.jQuery;
+    if (!attrset) {
+        notification('无法获取课程信息，请稍后再试');
+        return;
+    }
+    if (!$) {
+        notification('jQuery未加载，无法提交记录');
+        return;
+    }
+    $.ajax({
+        url: '/videoPlay/takeRecord',
+        data: {
+            studyCode: attrset.studyCode,
+            recordUrl: attrset.recordUrl,
+            updateRedisMap: attrset.updateRedisMap,
+            recordId: attrset.recordId,
+            sectionId: attrset.sectionId,
+            signId: attrset.signId,
+            isEnd: true,
+            businessId: attrset.businessId,
+        },
+        dataType: 'json',
+        type: 'post',
+        success: function (data) {
+            console.log('手动提交学习记录', data);
+            removeCourse(attrset.sectionId);
+            let courses = coursesList();
+            if (courses.length === 0) {
+                notification('秒刷成功，所有视频已经播放完毕');
+            } else {
+                notification('秒刷成功，即将播放下一个视频:' + courses[0].sectionName);
+                window.top.location.href = courses[0].url;
+            }
+        },
+        error: function (err) {
+            console.error('秒刷失败', err);
+            notification('秒刷请求失败，请检查网络或刷新页面');
+        }
+    });
+}
+
 function playerInit() {
+    const player = unsafeWindow.player || window.player;
+    if (!player) {
+        return;
+    }
+
     if (player.V.ended || (!player.V.ended && !player.V.paused)) {
         return;
     }
@@ -498,10 +630,23 @@ function playerInit() {
         player.videoPlay();
     }
 
-    player.removeListener('ended', endedHandler);
+    const endedHandler = unsafeWindow.endedHandler || window.endedHandler;
+    const courseyunRecord = unsafeWindow.courseyunRecord || window.courseyunRecord;
+    const attrset = unsafeWindow.attrset || window.attrset;
+    const $ = unsafeWindow.$ || unsafeWindow.jQuery || window.$ || window.jQuery;
+
+    if (endedHandler) {
+        player.removeListener('ended', endedHandler);
+    }
     player.addListener('ended', function (event) {
-        courseyunRecord();
+        if (courseyunRecord) {
+            courseyunRecord();
+        }
         player.videoClear();
+        if (!attrset || !$) {
+            notification('无法获取课程信息或jQuery未加载');
+            return;
+        }
         $.ajax({
             url: '/videoPlay/takeRecord',
             data: {
@@ -652,13 +797,15 @@ function playInit() {
     );
 
     let checkPlayerTimer = setInterval(function () {
+        const player = unsafeWindow.player || window.player;
         if (!player) return;
         clearInterval(checkPlayerTimer);
         setTimeout(function () {
             GM_addValueChangeListener(
                 'autoPlay',
                 function (name, oldValue, newValue, remote) {
-                    if (newValue) {
+                    const player = unsafeWindow.player || window.player;
+                    if (newValue && player) {
                         player.videoPlay();
                     }
                 }
@@ -666,23 +813,32 @@ function playInit() {
             GM_addValueChangeListener(
                 'mute',
                 function (name, oldValue, newValue, remote) {
-                    if (newValue) {
-                        player.videoMute();
-                    } else {
-                        player.videoEscMute();
+                    const player = unsafeWindow.player || window.player;
+                    if (player) {
+                        if (newValue) {
+                            player.videoMute();
+                        } else {
+                            player.videoEscMute();
+                        }
                     }
                 }
             );
             GM_addValueChangeListener(
                 'drag',
                 function (name, oldValue, newValue, remote) {
-                    player.changeConfig('config', 'timeScheduleAdjust', newValue);
+                    const player = unsafeWindow.player || window.player;
+                    if (player) {
+                        player.changeConfig('config', 'timeScheduleAdjust', newValue);
+                    }
                 }
             );
             GM_addValueChangeListener(
                 'speed',
                 function (name, oldValue, newValue, remote) {
-                    player.changePlaybackRate(newValue);
+                    const player = unsafeWindow.player || window.player;
+                    if (player) {
+                        player.changePlaybackRate(newValue);
+                    }
                 }
             );
 
@@ -698,14 +854,20 @@ function createPlaylistBox() {
     playlistBox.id = "playlistBox";
     playlistBox.className = "playlistBox";
 
-    preventEventPropagation(playlistBox);
+    playlistBox.addEventListener('blur', function (e) {
+        e.stopPropagation();
+    }, true);
+    playlistBox.addEventListener('focusout', function (e) {
+        e.stopPropagation();
+    }, true);
 
     document.body.appendChild(playlistBox);
 
     let oneClear = document.createElement("button");
     oneClear.innerText = "一键清空";
     oneClear.className = "oneClear";
-    oneClear.onclick = function () {
+    oneClear.onclick = function (e) {
+        e.stopPropagation();
         if (confirm("确定要清空播放列表么？")) {
             coursesList([]);
         }
@@ -729,7 +891,8 @@ function createPlaylistBox() {
         childBtn.innerText = "移除";
         childBtn.type = "button";
         childBtn.className = "child_remove";
-        childBtn.onclick = function () {
+        childBtn.onclick = function (e) {
+            e.stopPropagation();
             if (confirm("确定要删除这个视频任务么？")) {
                 removeCourse(course.sectionId);
             }
