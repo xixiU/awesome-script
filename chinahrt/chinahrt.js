@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         chinahrt继续教育；chinahrt全自动刷课；解除系统限制；
-// @version      2024.06.21.01
+// @version      2025.12.29.01
 // @license      Apache-2.0
 // @namespace    https://github.com/yikuaibaiban/chinahrt
 // @description  【❤全自动刷课❤】功能可自由配置，只需将视频添加到播放列表，后续刷课由系统自动完成；使用教程：https://yikuaibaiban.github.io/chinahrt-autoplay-docs/
@@ -16,8 +16,8 @@
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
 // @grant        GM_notification
-// @downloadURL https://update.greasyfork.org/scripts/400775/chinahrt%E7%BB%A7%E7%BB%AD%E6%95%99%E8%82%B2%EF%BC%9Bchinahrt%E5%85%A8%E8%87%AA%E5%8A%A8%E5%88%B7%E8%AF%BE%EF%BC%9B%E8%A7%A3%E9%99%A4%E7%B3%BB%E7%BB%9F%E9%99%90%E5%88%B6%EF%BC%9B.user.js
-// @updateURL https://update.greasyfork.org/scripts/400775/chinahrt%E7%BB%A7%E7%BB%AD%E6%95%99%E8%82%B2%EF%BC%9Bchinahrt%E5%85%A8%E8%87%AA%E5%8A%A8%E5%88%B7%E8%AF%BE%EF%BC%9B%E8%A7%A3%E9%99%A4%E7%B3%BB%E7%BB%9F%E9%99%90%E5%88%B6%EF%BC%9B.meta.js
+// @downloadURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/chinahrt/chinahrt.js
+// @updateURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/chinahrt/chinahrt.js
 // ==/UserScript==
 
 (function initStyles() {
