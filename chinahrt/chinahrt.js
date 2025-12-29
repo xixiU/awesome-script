@@ -167,9 +167,27 @@ function currentPageType() {
             return 0;
     }
 }
+
+function preventEventPropagation(element) {
+    element.addEventListener('click', function (e) {
+        e.stopPropagation();
+    });
+    element.addEventListener('mousedown', function (e) {
+        e.stopPropagation();
+    });
+    element.addEventListener('mouseup', function (e) {
+        e.stopPropagation();
+    });
+    element.addEventListener('dblclick', function (e) {
+        e.stopPropagation();
+    });
+}
+
 function createAutoPlayOption() {
     let box = document.createElement('div');
     box.classList.add('autoPlayBox');
+
+    preventEventPropagation(box);
 
     let title = document.createElement('p');
     title.classList.add('title');
@@ -202,6 +220,8 @@ function createCanPlaylist() {
     let playlist = document.createElement("div");
     playlist.id = "canPlaylist";
     playlist.className = "canPlaylist";
+
+    preventEventPropagation(playlist);
 
     let oneClick = document.createElement("button");
     oneClick.innerText = "一键添加";
@@ -312,6 +332,9 @@ function createDragOption() {
 function createMultiSegmentBox() {
     let box = document.createElement("div");
     box.className = "multiSegmentBox";
+
+    preventEventPropagation(box);
+
     document.body.appendChild(box);
 
     let tip = document.createElement("div");
@@ -416,6 +439,9 @@ function createControllerBox() {
     let controllerBox = document.createElement('div');
     controllerBox.id = 'controllerBox';
     controllerBox.className = 'controllerBox';
+
+    preventEventPropagation(controllerBox);
+
     document.body.appendChild(controllerBox);
 
     let linksBox = document.createElement('div');
@@ -507,6 +533,54 @@ function playerInit() {
     player.addListener('time', timeHandler);
 }
 
+
+function removePauseBlur() {
+    const blockEvents = ['blur', 'visibilitychange', 'focusout', 'mouseleave', 'mouseout', 'pagehide'];
+
+    blockEvents.forEach(type => {
+        window.addEventListener(type, function (e) {
+            e.stopImmediatePropagation();
+            e.stopPropagation();
+            console.log("阻止了 " + type + " 事件");
+        }, true);
+        document.addEventListener(type, function (e) {
+            e.stopImmediatePropagation();
+            e.stopPropagation();
+            console.log("阻止了 " + type + " 事件");
+        }, true);
+    });
+
+    window.addEventListener("message", function (e) {
+        if (e.data === 'paused' || (e.data && e.data.data && e.data.data === 'paused')) {
+            e.stopImmediatePropagation();
+            e.stopPropagation();
+            console.log("阻止了 paused 消息");
+        }
+    }, true);
+
+
+    try {
+        Object.defineProperty(document, 'hidden', {
+            get: function () { return false; },
+            configurable: true
+        });
+        Object.defineProperty(document, 'visibilityState', {
+            get: function () { return 'visible'; },
+            configurable: true
+        });
+        Object.defineProperty(document, 'hasFocus', {
+            value: function () { return true; },
+            configurable: true,
+            writable: true
+        });
+
+        window.onblur = null;
+        document.onblur = null;
+        window.onpagehide = null;
+        document.onvisibilitychange = null;
+    } catch (e) { }
+}
+
 function playInit() {
     removePauseBlur();
     createPlaylistBox();
@@ -567,6 +641,9 @@ function createPlaylistBox() {
     let playlistBox = document.createElement("div");
     playlistBox.id = "playlistBox";
     playlistBox.className = "playlistBox";
+
+    preventEventPropagation(playlistBox);
+
     document.body.appendChild(playlistBox);
 
     let oneClear = document.createElement("button");
@@ -721,5 +798,6 @@ class CourseDetail {
 
 
 (async function () {
+    removePauseBlur();
     initRouter()
 })();

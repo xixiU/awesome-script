@@ -504,7 +504,21 @@ const adjustRate = n => {
 };
 const adjustVolume = n => {
     n += v.volume;
-    if (inRange(n, 0, 1)) v.volume = +n.toFixed(2);
+    if (inRange(n, 0, 1)) {
+        v.volume = +n.toFixed(2);
+        // 1. 通用方案：触发标准事件，通知大多数播放器更新 UI
+        v.dispatchEvent(new Event('volumechange'));
+
+        // 2. 特殊适配：针对 DPlayer 等不完全遵循事件驱动更新 UI 的播放器进行补充
+        // 这种“渐进增强”的方式既保留了通用性，又解决了特定站点的兼容问题
+        const dp = v.closest('.dplayer');
+        if (dp) {
+            const bar = q('.dplayer-volume-bar-inner', dp);
+            if (bar) bar.style.width = (v.volume * 100) + '%';
+            const wrap = q('.dplayer-volume-bar-wrap', dp);
+            if (wrap) wrap.setAttribute('data-balloon', Math.round(v.volume * 100) + '%');
+        }
+    }
 };
 const tip = (msg) => {
     if (!$msg?.get(0)?.offsetHeight) {
@@ -972,7 +986,8 @@ const app = {
             this.checkMV();
             bus.$emit('canplay');
         });
-        $(by).keydown(this.hotKey.bind(this));
+        // $(by).keydown(this.hotKey.bind(this));
+        window.addEventListener('keydown', this.hotKey.bind(this), true);
 
         cfg.mvShell ? this.shellEvent() : this.setShell();
         this.checkUI();
