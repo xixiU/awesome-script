@@ -1,5 +1,5 @@
 {
-  "name": "developJar",
+  "name": "develop",
   "nodes": [
     {
       "parameters": {
@@ -9,46 +9,29 @@
           "binaryData": true
         }
       },
-      "id": "3f3ad7e9-9188-4502-aa8f-03310648aef5",
+      "id": "c9a715ac-8250-4b40-97da-00ca33c7070d",
       "name": "Webhook Upload",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        -20,
-        100
+        -1100,
+        -40
       ],
       "webhookId": "71112d55-f154-4229-ba8a-144381526f0e"
     },
     {
       "parameters": {
-        "requestMethod": "POST",
-        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
-        "jsonParameters": true,
-        "options": {},
-        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署中\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/FUNh5Z4LCzTJPHP6/304fdd\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
-      },
-      "id": "304fdd6e-2715-4349-8182-8bc5f81949fc",
-      "name": "飞书通知",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 1,
-      "position": [
-        900,
-        100
-      ]
-    },
-    {
-      "parameters": {
         "mode": "runOnceForEachItem",
         "language": "python",
-        "pythonCode": "# 从 URL query 参数中获取我们自己传递的 \"fileName\" 字段\nquery_params = item.get(\"json\", {}).get(\"query\")\nfile_name = query_params.get(\"fileName\")\n\n# 新的、更清晰的错误检查\nif not file_name:\n    raise ValueError(f\"无法从 URL Query 参数中找到 fileName 字段。收到的 Query 为: {query_params}\")\n\n# 检查二进制数据是否存在，如果不存在也给出警告（但流程继续）\nbinary_data = item.get(\"binary\")\nif not binary_data:\n    raise ValueError(\"警告: 未在输入中找到二进制文件数据(binary property)。后续文件操作节点可能会失败。\")\n\n\n# 定义你的文件部署映射\nfile_map = {\n    \"ts-service-5.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/ts-service-inner/ts-service-5.0\",\n        \"port\":9191,\n    },\n    \"aicourt-monitor-service-1.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-monitor-service-1.0\",\n        \"port\":7901,\n    },\n    \"aicourt-video-service-1.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-video-service-1.0\",\n        \"port\":7902,\n    }\n}\n\nif file_name not in file_map:\n    raise ValueError(f\"不支持的文件名: {file_name}。请在 Code 节点的 file_map 中添加配置。\")\n\nconfig = file_map[file_name]\ntarget_dir = config[\"targetDir\"]\nservice_port = config[\"port\"] \nrestart_script = f\"{target_dir}/restartup.sh\"\n\ntempFileName = binary_data.get(\"data\",{}).get(\"fileName\")\nreturn {\n    \"fileName\": file_name,\n    \"targetDir\": target_dir,\n    \"restartScript\": restart_script,\n    \"tempFilePath\": f\"/tmp/{tempFileName}\",\n    \"tempFileName\" :tempFileName,\n    \"port\": service_port,\n    \"binary\": binary_data\n}"
+        "pythonCode": "# 从 URL query 参数中获取我们自己传递的 \"fileName\" 字段\nquery_params = item.get(\"json\", {}).get(\"query\")\nfile_name = query_params.get(\"fileName\")\n\n# 新的、更清晰的错误检查\nif not file_name:\n    raise ValueError(f\"无法从 URL Query 参数中找到 fileName 字段。收到的 Query 为: {query_params}\")\n\n# 检查二进制数据是否存在，如果不存在也给出警告（但流程继续）\nbinary_data = item.get(\"binary\")\nif not binary_data:\n    raise ValueError(\"警告: 未在输入中找到二进制文件数据(binary property)。后续文件操作节点可能会失败。\")\n\n\n# 定义你的文件部署映射\nfile_map = {\n    \"ts-service-5.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/ts-service-inner/ts-service-5.0/ts-service-5.0\",\n        \"port\":9191,\n    },\n    \"aicourt-monitor-service-1.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-monitor-service-1.0\",\n        \"port\":7901,\n    },\n    \"aicourt-video-service-1.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-video-service-1.0\",\n        \"port\":7902,\n    },\n    \"aicourt-assistant-service.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-assistant-service\",\n        \"port\":7100,\n    }\n}\n\nif file_name not in file_map:\n    raise ValueError(f\"不支持的文件名: {file_name}。请在 Code 节点的 file_map 中添加配置。\")\n\nconfig = file_map[file_name]\ntarget_dir = config[\"targetDir\"]\nservice_port = config[\"port\"] \nrestart_script = f\"{target_dir}/restartup.sh\"\n\ntempFileName = binary_data.get(\"data\",{}).get(\"fileName\")\nreturn {\n    \"fileName\": file_name,\n    \"targetDir\": target_dir,\n    \"restartScript\": restart_script,\n    \"tempFilePath\": f\"/tmp/{tempFileName}\",\n    \"tempFileName\" :tempFileName,\n    \"port\": service_port,\n    \"binary\": binary_data\n}"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        180,
-        100
+        -920,
+        -40
       ],
-      "id": "8f9ce983-32f8-4e96-9e9e-f2669738f43c",
+      "id": "ca6351d8-2b3d-474c-9e0e-fa2b41f117fe",
       "name": "路径转换",
       "alwaysOutputData": true
     },
@@ -61,14 +44,14 @@
       "type": "n8n-nodes-base.ssh",
       "typeVersion": 1,
       "position": [
-        360,
-        100
+        -760,
+        -40
       ],
-      "id": "10f7a99a-11b6-4da3-9c96-d94abb1fc8aa",
+      "id": "216b459a-1354-44c6-b1cb-0fc16b21f9df",
       "name": "上传到服务器",
       "credentials": {
         "sshPassword": {
-          "id": "UKxFN3HfhhfB4p2G",
+          "id": "MMYDXQ2EN5R5CeZM",
           "name": "SSH Password account"
         }
       }
@@ -80,14 +63,14 @@
       "type": "n8n-nodes-base.ssh",
       "typeVersion": 1,
       "position": [
-        540,
-        100
+        -580,
+        -40
       ],
-      "id": "c0d21d6d-b34e-43e3-905d-a4a3f86501bf",
+      "id": "89dc83a9-9b75-4650-a1d7-e04a2d6e2545",
       "name": "ssh备份并替换",
       "credentials": {
         "sshPassword": {
-          "id": "UKxFN3HfhhfB4p2G",
+          "id": "MMYDXQ2EN5R5CeZM",
           "name": "SSH Password account"
         }
       }
@@ -99,32 +82,17 @@
       "type": "n8n-nodes-base.ssh",
       "typeVersion": 1,
       "position": [
-        720,
-        100
+        -400,
+        -40
       ],
-      "id": "5ee19807-521c-4a9a-bf38-4cd11cb6c23b",
+      "id": "5dc7a719-8f0e-4abb-97a1-92fe4cb819e3",
       "name": "重启服务",
       "credentials": {
         "sshPassword": {
-          "id": "UKxFN3HfhhfB4p2G",
+          "id": "MMYDXQ2EN5R5CeZM",
           "name": "SSH Password account"
         }
       }
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "language": "python",
-        "pythonCode": "import socket\nimport time\n\n# 配置项\nhost = \"host.docker.internal\"  # 部署目标主机，内网情况多数为 localhost\nport = _(\"路径转换\").item.json.port\n\ntimeout_seconds = 1 * 10  # 最长探活时间（5分钟）\ninterval_seconds = 3  # 探活轮询间隔\n\ndef check_port(host, port, timeout=2):\n    try:\n        with socket.create_connection((host, port), timeout=timeout):\n            return True\n    except Exception:\n        return False\n\nstart_time = time.time()\nconnected = False\n\nwhile time.time() - start_time < timeout_seconds:\n    if check_port(host, port):\n        connected = True\n        break\n    time.sleep(interval_seconds)\n\nif connected:\n    return {\n        \"json\": {\n            \"status\": \"ok\",\n            \"port\": port,\n            \"message\": f\"{host}:{port} 探活成功\"\n        }\n    }\nelse:\n    return {\n        \"json\": {\n            \"status\": \"fail\",\n            \"port\": port,\n            \"message\": f\"{host}:{port} 在 {timeout_seconds} 秒内无法连接\"\n        }\n    }"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1060,
-        100
-      ],
-      "id": "8cd155aa-94d0-49a8-abca-3f48d94596d4",
-      "name": "部署探活"
     },
     {
       "parameters": {
@@ -138,12 +106,11 @@
           "conditions": [
             {
               "id": "ffa7cd60-4918-467a-afb3-d6e30b96bf0c",
-              "leftValue": "status ",
-              "rightValue": "\"ok\"",
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": 0,
               "operator": {
-                "type": "string",
-                "operation": "equals",
-                "name": "filter.operator.equals"
+                "type": "number",
+                "operation": "equals"
               }
             }
           ],
@@ -154,44 +121,125 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1230,
-        100
+        260,
+        -40
       ],
-      "id": "4c1060c7-2079-451f-93e2-946368a3125f",
+      "id": "06a2dbe8-4617-4973-80c8-2789a498d0af",
       "name": "If"
     },
     {
       "parameters": {
         "requestMethod": "POST",
-        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/93a8d243-6f8f-4b4c-9ab6-3ac2d9f7acda",
         "jsonParameters": true,
         "options": {},
-        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署成功\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/FUNh5Z4LCzTJPHP6/304fdd\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
+        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署成功\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
       },
-      "id": "cd3cfcb2-3b82-4dc8-b3d8-5325fabe8ddf",
+      "id": "9f104972-9eda-4b43-98b3-e41f1f4ac69a",
       "name": "探活成功通知",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
-        1480,
-        60
+        480,
+        -140
       ]
     },
     {
       "parameters": {
         "requestMethod": "POST",
-        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/93a8d243-6f8f-4b4c-9ab6-3ac2d9f7acda",
         "jsonParameters": true,
         "options": {},
-        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署失败，请手动检查\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/FUNh5Z4LCzTJPHP6/304fdd\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
+        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署失败，请手动检查\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
       },
-      "id": "72c69bd7-8cc6-40cd-88e9-6ce8e19823c9",
+      "id": "cbae3212-60d7-4b10-b050-d3ad6541af2d",
       "name": "探活失败通知",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
-        1480,
-        220
+        480,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=host=172.31.160.184;port={{ $('路径转换').item.json.port }};for i in $(seq 1 360);do nc -z -w 2 $host $port && echo open && exit 0;sleep 1;done;echo closed;exit 1"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        100,
+        -40
+      ],
+      "id": "58587020-a7dd-4312-a56e-6708183ca08b",
+      "name": "探活"
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/93a8d243-6f8f-4b4c-9ab6-3ac2d9f7acda",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署中\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
+      },
+      "id": "106f73f9-9fef-42d0-aafe-f1f86fb41b8a",
+      "name": "飞书通知产研测",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/dae1964d-21be-43e3-b9e0-f74dbf1fb30a",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署中\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
+      },
+      "id": "7b0df2a9-056c-4025-80bb-062d44128888",
+      "name": "飞书通知自动部署",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/dae1964d-21be-43e3-b9e0-f74dbf1fb30a",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署成功\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
+      },
+      "id": "37e3061d-e12e-46d3-9981-7336b1b7c508",
+      "name": "探活成功通知-自动部署",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        480,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/93a8d243-6f8f-4b4c-9ab6-3ac2d9f7acda",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署失败，请手动检查\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
+      },
+      "id": "00316dd5-dc02-4afd-b6a5-d96e8b8d9044",
+      "name": "探活失败通知-自动部署",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        480,
+        260
       ]
     }
   ],
@@ -245,29 +293,7 @@
       "main": [
         [
           {
-            "node": "飞书通知",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "飞书通知": {
-      "main": [
-        [
-          {
-            "node": "部署探活",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "部署探活": {
-      "main": [
-        [
-          {
-            "node": "If",
+            "node": "飞书通知自动部署",
             "type": "main",
             "index": 0
           }
@@ -281,11 +307,54 @@
             "node": "探活成功通知",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "探活成功通知-自动部署",
+            "type": "main",
+            "index": 0
           }
         ],
         [
           {
             "node": "探活失败通知",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "探活失败通知-自动部署",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "探活": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "飞书通知产研测": {
+      "main": [
+        [
+          {
+            "node": "探活",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "飞书通知自动部署": {
+      "main": [
+        [
+          {
+            "node": "飞书通知产研测",
             "type": "main",
             "index": 0
           }
@@ -297,11 +366,11 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "cda361eb-1a97-4675-9f0a-56f5c8957d27",
+  "versionId": "5831d0b1-9839-47a7-b552-c0df93859260",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "951f0a4d6734d3561dee532781de3d1e6cf9fcf2d87e4e086789513737936e65"
+    "instanceId": "7267b1d1c6953306c4553ebb6242f052f9cc1942983e463158d66b219426e6e0"
   },
-  "id": "FUNh5Z4LCzTJPHP6",
+  "id": "CCuqWj9nv9ucjsIM",
   "tags": []
 }
