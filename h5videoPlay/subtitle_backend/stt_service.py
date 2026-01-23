@@ -80,7 +80,7 @@ class STTService:
         if "device" not in model_config or model_config["device"] == "auto":
             if system == "Darwin":
                 logger.info("💻 系统: macOS (Apple Silicon)")
-                model_config["device"] = "cpu"
+                model_config["device"] = "mps"
                 model_config["compute_type"] = "int8"
                 model_config["cpu_threads"] = 4
             elif system == "Windows":

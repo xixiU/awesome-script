@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class SystemAudioSubtitleService:
     """系统音频实时字幕服务"""
     
-    def __init__(self, model_size="small", device="cpu", target_lang="zh-CN", source_lang=None, 
+    def __init__(self, model_size="small", target_lang="zh-CN", source_lang=None, 
                  sample_rate=16000, chunk_duration=2.0, config_file="model_config.json",
                  min_rms_for_stt: float = 1e-3,
                  silence_duration_for_sentence_end: float = 1.5,
@@ -39,7 +39,6 @@ class SystemAudioSubtitleService:
         
         Args:
             model_size: 模型大小（保留兼容性，实际从配置文件读取）
-            device: 设备（保留兼容性，实际从配置文件读取）
             target_lang: 目标语言，默认"zh-CN"
             source_lang: 源语言，None表示自动检测
             sample_rate: 采样率，默认16000Hz
@@ -557,7 +556,6 @@ def main():
     
     service = SystemAudioSubtitleService(
         model_size=args.model,
-        device=args.device,
         target_lang=args.target_lang,
         source_lang=args.source_lang,
         chunk_duration=args.chunk_duration,
