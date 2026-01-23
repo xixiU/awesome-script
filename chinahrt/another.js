@@ -74,18 +74,7 @@ class ScriptCore {
         // ============================================
         // 👑 本地VIP版启动
         // ============================================
-        console.log('%c╔══════════════════════════════════════════════════════════╗', 'color: #667eea; font-weight: bold; font-size: 14px;');
-        console.log('%c║          👑 本地VIP版 - 已启动           ║', 'color: #764ba2; font-weight: bold; font-size: 16px;');
-        console.log('%c╠══════════════════════════════════════════════════════════╣', 'color: #667eea; font-weight: bold; font-size: 14px;');
-        console.log('%c║  ✅ 所有高级功能已解锁                    ║', 'color: #667eea; font-size: 14px;');
-        console.log('%c║  ✅ 无需授权码验证                        ║', 'color: #667eea; font-size: 14px;');
-        console.log('%c║  ✅ 自动播放、自动下一课程                ║', 'color: #667eea; font-size: 14px;');
-        console.log('%c║  ✅ 自动填写验证码                        ║', 'color: #667eea; font-size: 14px;');
-        console.log('%c║  ✅ 倍速播放、秒刷课程                    ║', 'color: #667eea; font-size: 14px;');
-        console.log('%c║  ✅ 永久有效，无限制使用                  ║', 'color: #667eea; font-size: 14px;');
-        console.log('%c╚══════════════════════════════════════════════════════════╝', 'color: #667eea; font-weight: bold; font-size: 14px;');
-        console.log('%c🎯 提示：所有需要授权码的功能已自动绕过，尽情使用！', 'color: #764ba2; font-size: 14px; font-weight: bold;');
-        console.log('%c════════════════════════════════════════════════════════════', 'color: #667eea; font-weight: bold;');
+        console.log('Script loaded.');
 
         this.modules = new Map();
         this.initModules();
@@ -356,21 +345,7 @@ class ScriptCore {
 
     }
     execute() {
-        // 本地VIP启动通知
-        try {
-            if (typeof GM_notification !== 'undefined') {
-                GM_notification({
-                    text: '👑 本地VIP已启用\n✨ 所有高级功能已解锁\n🎯 无需授权码，永久有效',
-                    title: '本地VIP版 - 自动学习助手',
-                    timeout: 5000,
-                    onclick: () => {
-                        console.log('👑 本地VIP功能列表：\n✅ 自动播放\n✅ 自动下一课程\n✅ 自动填写验证码\n✅ 倍速播放\n✅ 秒刷课程\n✅ 无限制使用');
-                    }
-                });
-            }
-        } catch (e) {
-            console.log('通知功能未启用，继续执行...');
-        }
+        // 通知功能未启用
 
         const currentUrl = new URL(window.location.href);
 
@@ -492,35 +467,7 @@ class SmartEduModule {
                 };
             }
         });
-        const renderQQGroups = () => {
-            try {
-                const activeGroups = qqGroup
-                    .filter(group => {
-                        // 添加数据校验
-                        if (!group.customName || !group.id) {
-                            console.warn('Invalid group:', group);
-                            return false;
-                        }
-                        return !group.isFull;
-                    })
-                    .sort((a, b) => a.priority - b.priority);
-
-                // 添加空状态提示
-                if (activeGroups.length === 0) {
-                    return `<div style="color: #ff9999; text-align:center; margin:12px 0">
-              所有群组已开放，欢迎直接加入
-            </div>`;
-                }
-                const title = `<div style="background: linear-gradient(135deg, #FF4DAF 0%, #FF6B6B 100%);display: flex; align-items: center; gap:15px;"> <img src="https://qzonestyle.gtimg.cn/qzone/qzact/act/external/tiqq/logo.png" style="height:36px; border-radius:6px;"> <div> <div style="font-size:16px; font-weight:bold; margin-bottom:4px;">教师交流群(请优先选择未满群加入)</div> <div style="font-size:12px; opacity:0.9;">获取实时支持 | 最新功能优先体验</div> </div> </div>`
-                let content = title + activeGroups.map(group => ` <a href="${group.link}" target="_blank" style="display: block; margin-top: 12px; padding: 10px; background: rgba(255,255,255,0.2); border-radius: 6px; text-align: center; text-decoration: none; color: white !important; transition: 0.3s; font-weight: 500; cursor: pointer;" aria-label="加入QQ群${group.customName}（群号：${group.id}）"> 🎯 点击加入${group.customName}:${group.id} <!-- 移除群号显示 --> </a> `).join('');
-                return `<div style="background: linear-gradient(135deg, #FF4DAF 0%, #FF6B6B 100%); padding:15px; border-radius:8px; color:white;">
-                                    ${content}
-                                </div>`
-            } catch (error) {
-                console.error('QQ群渲染错误:', error);
-                return ''; // 静默失败
-            }
-        };
+        const renderQQGroups = () => '';
         let requestObj = {
             fullsData: {
                 url: "https://s-file-2.ykt.cbern.com.cn/teach/s_course/v2/activity_sets/3efdb592-138e-4854-8964-5e10f6011f33/fulls.json",
@@ -726,66 +673,10 @@ class SmartEduModule {
         /********************************************************
          * 打赏
          *******************************************************/
-        GM_addStyle(`.donate-panel { position: fixed; left: 30%; top:50%; background: linear-gradient(135deg, #fff5f5 0%, #fff0f7 100%); border-radius: 16px; box-shadow: 0 8px 32px rgba(255, 77, 175, 0.2); padding: 24px; width: 520px; z-index: 2147483647; transform: translateY(-100); /* 初始隐藏位置 */ opacity: 1; /* 确保初始可见性 */ border: 1px solid #ffe6f0; backdrop-filter: blur(8px); transition: none; /* 禁用transition改用animation */ }.donate-header { position: relative; font-size: 18px; color: #ff4daf; margin-bottom: 20px; font-weight: 600; display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 2px solid rgba(255, 77, 175, 0.1); } .donate-header::after { content: "✨"; position: absolute; right: 0; top: -8px; font-size: 24px; animation: sparkle 2s infinite; } .motivation-text { font-size: 13px; color: #666; line-height: 1.6; margin: 12px 0; background: rgba(255, 255, 255, 0.9); padding: 12px; border-radius: 8px; border: 1px solid #ffebf3; } @keyframes heartbeat { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } } @keyframes sparkle { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } } @keyframes panelSlideIn { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(-50%); opacity: 1; } } @keyframes panelSlideOut { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%); opacity: 0; } } @keyframes heartbeat { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } } .qr-grid { display: grid; grid-template-columns: 1fr; /* 改为单列布局 */ gap: 24px; margin: 24px auto; max-width: 300px; /* 增大容器宽度 */ } .qr-item { position: relative; overflow: hidden; border-radius: 12px; transition: 0.3s; padding: 12px; /* 增加内边距 */ background: #fff; box-shadow: 0 4px 12px rgba(255, 77, 175, 0.1); } .qr-item:hover { transform: translateY(-4px); box-shadow: 0 6px 16px rgba(255, 77, 175, 0.2); } .qr-item img { width: 100%; height: auto; /* 保持比例 */ border-radius: 8px; border: 1px solid #ffe5f0; min-height: 280px; /* 最小高度保证 */ } .qr-item p { text-align: center; margin: 16px 0 8px; font-size: 16px; /* 增大文字 */ color: #ff4daf; font-weight: 600; } /* 新增文字样式 */ .qr-tips { text-align: center; margin: 8px 0; font-size: 14px; color: #ff7ab8; /* 更柔和的粉色 */ } .qr-proverb { font-style: italic; color: #ff9ec7; /* 更浅的粉色 */ font-size: 13px; margin-top: 4px; } /* 修改原有.qr-item p样式 */ .qr-item p { margin: 12px 0 4px; /* 减小下边距 */ /* 其他样式保持不变 */ } /* 手机横屏/平板适配 */ @media (min-width: 600px) { .qr-grid { grid-template-columns: 1fr 1fr; /* 大屏幕恢复双列 */ max-width: 600px; } .qr-item img { min-height: 240px; } } .third-party { margin-top: 20px; } .platform-btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; background: linear-gradient(135deg, #fff0f5 0%, #fff8fb 100%); border-radius: 8px; text-decoration: none; color: #ff6699 !important; font-size: 14px; margin: 8px 0; transition: 0.3s; border: 1px solid #ffe6ee; } .donate-panel.active { animation: panelSlideIn 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; } .donate-panel.exit { animation: panelSlideOut 0.3s ease forwards; } /* 触发按钮动画 */ #donate-trigger { animation: heartbeat 1.8s ease-in-out infinite; } .platform-btn:hover { background: linear-gradient(135deg, #ffe6ee 0%, #fff1f7 100%); box-shadow: 0 4px 12px rgba(255, 77, 175, 0.1); } .close-btn { /* 保持原有样式 */ }`);
 
-        // 激励文案库
-        const motivationTexts = ["您的每一份支持都将转化为：", "❤️ 服务器续费 ", "🛠️ 持续开发维护 ", "☕ 深夜码农的咖啡燃料", "🐈 小猫最爱的水煮鸡胸肉",];
 
-        // 动态生成激励文案
-        function generateMotivation() {
-            const fragments = ['<div class="motivation-text">', '🌟 <strong>感谢使用本脚本！</strong>', ...motivationTexts.map(t => `• ${t}`), '</div>'].join('<br>');
-            return fragments
-                .replace('${donateCount}', '1,234')
-                .replace('${updateDays}', '365');
-        }
-        // 打赏面板HTML结构
-        const donateHTML = `
-<div  id="donate-panel"> ${generateMotivation()} <div class="donate-header"> <svg viewBox="0 0 24 24" width="20" height="20" fill="#1e62ec"> <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/> </svg> 支持开发者 </div> <div class="qr-grid"> <div class="qr-item"> <p>微信扫码支持</p> <img style="width: 200px;height: 266px" src="https://mp-8ba0e2a3-d9c9-45a0-a902-d3bde09f5afd.cdn.bspapp.com/monkey-pic/wechat2.jpg" alt="微信赞赏码"> <div class="qr-tips"> <p>❤️持续创作需要您的支持</p> <p class="qr-proverb">星火相聚，终成光芒</p> </div> </div> <div class="qr-item"> <p>支付宝扫码支持</p> <img style="width: 200px;height: 266px" src="https://mp-8ba0e2a3-d9c9-45a0-a902-d3bde09f5afd.cdn.bspapp.com/monkey-pic/alipay2.jpg" alt="支付宝收款码"> <div class="qr-tips"> <p>🌸每一份心意都值得珍惜</p> <p class="qr-proverb">不啻微芒，造矩成阳</p> </div> </div> </div> <div class="donate-header"> <svg viewBox="0 0 24 24" width="20" height="20" fill="#1e62ec"> <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/> </svg> 感谢您的支持！ </div> <div class="third-party"> <!--<a href="https://afdian.net/@yourid" class="platform-btn" target="_blank"> <svg viewBox="0 0 1024 1024" width="14" height="14" style="vertical-align:-2px;"> <path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372zm218-572.1h-50.4c-4.4 0-8 3.6-8 8v384.2c0 4.4 3.6 8 8 8h145.7c4.4 0 8-3.6 8-8V319.9c0-4.4-3.6-8-8-8h-50.4c-4.4 0-8 3.6-8 8v151.7H730V319.9c0-4.4-3.6-8-8-8zM328.1 703.9c-4.4 0-8-3.6-8-8v-384c0-4.4 3.6-8 8-8h50.4c4.4 0 8 3.6 8 8v151.7h116.7V319.9c0-4.4 3.6-8 8-8h50.4c4.4 0 8 3.6 8 8v384.2c0 4.4-3.6 8-8 8h-145c-4.4 0-8-3.6-8-8v-151H344v151c0 4.4-3.6 8-8 8H328.1z"/> </svg> 爱发电支持 </a>--> <div class="platform-btn" id="donate-panel-close">感谢开发者，已支持~</div> </div> </div>
-`;
+        // 打赏功能已移除
 
-        // 初始化打赏面板
-        function initDonate() {
-            if (document.getElementById('donate-panel')) return;
-            const panel = document.createElement('div');
-            panel.innerHTML = donateHTML;
-            panel.className = 'donate-panel';
-            document.body.appendChild(panel);
-            // 强制重排触发动画
-            void panel.offsetWidth; // 触发CSS重绘
-            panel.classList.add('active');
-            // 关闭按钮事件
-            panel.querySelector('#donate-panel-close').addEventListener('click', () => {
-                panel.classList.remove('active');
-                panel.classList.add('exit');
-                panel.addEventListener('animationend', () => {
-                    panel.remove();
-                }, { once: true });
-            });
-            // 点击外部关闭
-            const clickHandler = (e) => {
-                if (!panel.contains(e.target) && e.target.id !== 'donate-trigger') {
-                    panel.classList.add('exit');
-                    panel.addEventListener('animationend', () => {
-                        panel.remove();
-                    }, { once: true });
-                    document.removeEventListener('click', clickHandler);
-                }
-            };
-            setTimeout(() => document.addEventListener('click', clickHandler), 100);
-        }
-
-        // 显示触发按钮
-        const trigger = document.createElement('div');
-        trigger.innerHTML = '❤️ 打赏支持';
-        Object.assign(trigger.style, {
-            position: 'fixed', left: '10px', top: '415px', background: '#ff6b6b', color: 'white', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer', zIndex: '999999999999999', boxShadow: '0 2px 8px rgba(0,0,0,0.2)', fontSize: '14px'
-        });
-        // 触发按钮增强
-        Object.assign(trigger.style, {
-            background: 'linear-gradient(135deg, #ff4daf 0%, #ff6b6b 100%)', fontWeight: '600', padding: '12px 24px', boxShadow: '0 4px 24px rgba(255, 77, 175, 0.3)', animation: 'heartbeat 1.5s ease-in-out infinite', border: '1px solid #ffb3d9'
-        });
-        trigger.addEventListener('click', initDonate);
-        document.body.appendChild(trigger);
         /********************************************************
          * 中小学智慧教育平台 * 寒假研修
          *******************************************************/
@@ -1343,38 +1234,41 @@ class TeacherModule {
             // 初始化状态面板
             initPanel() {
                 if (!document.getElementById(this.panelId)) {
-                    const template = ` <div id="${this.panelId}"  class="automation-panel"> <div class="panel-header"> <h2>🤖 自动化运行脚本</h2> <label>v${GM_info.script.version}</label> <!--                        <button class="close-btn">&times;</button>--> </div> <div class="metrics-container"> <div class="metric-item"> <span class="label">🕒 运行时长：</span> <span class="value" id="run-time">0m 0s</span> </div> <div class="metric-item"> <span class="label">📌 当前任务：</span> <span class="value" id="current-task">空闲</span> </div> <div class="metric-grid"> <!--                            <div class="metric-box success">--> <!--                                <div class="title">✅ 成功</div>--> <!--                                <div class="count" id="success-count">0</div>--> <!--                            </div>--> <!--                            <div class="metric-box error">--> <!--                                <div class="title">❌ 失败</div>--> <!--                                <div class="count" id="error-count">0</div>--> <!--                            </div>--> <!--                            <div class="metric-box speed">--> <!--                                <div class="title">⚡ 速度</div>--> <!--                                <div class="count" id="speed">常速</div>--> <!--                            </div>--> </div> <div class="metric-box config-item"> <div class="title">⏳ 单个课程最大等待时间（分钟）(授权码使用时有效)</div> <input type="number" id="max-wait-time" class="config-input" min="1" max="300" step="1" value="150" data-preset="advanced"> </div> <div class="metric-box config-item"> <div class="title">🔑 验证码功能</div> <div class="config-group"> <input type="text" id="auth-code" class="config-input code-input" placeholder="输入授权码" maxlength="16" data-preset="advanced"> <button class="verify-btn">✅ 验证</button> </div> </div> <div> <li>前往购买链接：</li> ${this.linkHtml()} </div> </div> </div> `;
+                    const template = `
+<div id="${this.panelId}" class="automation-panel">
+    <div class="panel-header">
+        <h2>🤖 自动化运行脚本</h2>
+        <label>v${GM_info.script.version}</label>
+    </div>
+    <div class="metrics-container">
+        <div class="metric-item">
+            <span class="label">🕒 运行时长：</span>
+            <span class="value" id="run-time">0m 0s</span>
+        </div>
+        <div class="metric-item">
+            <span class="label">📌 当前任务：</span>
+            <span class="value" id="current-task">空闲</span>
+        </div>
+        <div class="metric-box config-item">
+            <div class="title">⏳ 单个课程最大等待时间（分钟）</div>
+            <input type="number" id="max-wait-time" class="config-input" min="1" max="300" step="1" value="150" data-preset="advanced">
+        </div>
+    </div>
+</div>`;
                     document.body.insertAdjacentHTML('beforeend', template);
                     this.bindEvents();
                     // 绑定配置输入事件
-                    document.getElementById('max-wait-time').addEventListener('change', (e) => {
-                        this.config.maxWaitTime = Math.min(300, Math.max(1, e.target.valueAsNumber));
-                        this.saveConfig();
-                    });
-                    document.getElementById('auth-code').addEventListener('input', (e) => {
-                        if (e.target.value.length === 16) {
-                            this.config.authCode = e.target.value;
+                    const waitTimeInput = document.getElementById('max-wait-time');
+                    if (waitTimeInput) {
+                        waitTimeInput.addEventListener('change', (e) => {
+                            this.config.maxWaitTime = Math.min(300, Math.max(1, e.target.valueAsNumber));
                             this.saveConfig();
-                        }
-                    });
-                    document.querySelector('.verify-btn').addEventListener('click', () => {
-                        this.validateAuthCode().then(r => { });
-                    });
+                        });
+                    }
                     this.loadConfig();  // 加载保存的配置
-                    // this.loadStyles();
                 }
             }
-            linkHtml() {
-                const link = [
-                    "https://68n.cn/IJ8QB",
-                    "https://68n.cn/RM9ob",
-                ]
-                let list = ''
-                for (let i = 0; i < link.length; i++) {
-                    list += ` <li class="purchase-item"> 前往<a href="${link[i]}" target="_blank" class="purchase-link" data-track="purchase_click"> 授权码获取页面${i + 1} </a> <span class="price-tag">（不定时放出免费/优惠授权码）</span> </li> `
-                }
-                return list
-            }
+            linkHtml() { return ''; }
             // 绑定交互事件
             bindEvents() {
                 const panel = document.getElementById(this.panelId);
@@ -1460,97 +1354,8 @@ class TeacherModule {
             }
             // 验证码校验方法
             async validateAuthCode() {
-                // ============================================
-                // 🔓 本地VIP版 - 始终返回验证通过
-                // ============================================
-                console.log("👑 本地VIP模式：跳过授权验证，直接启用所有高级功能");
-
-                // 强制设置为已验证状态
                 this.config.isVerified = true;
-                this.saveConfig();
-
-                try {
-                    Swal.fire({
-                        title: "👑 本地VIP已启用！",
-                        html: `<div style="text-align:center">
-                            <p style="margin:10px 0; font-size:16px; color:#667eea;">
-                                🎉 所有高级功能已解锁
-                            </p>
-                            <ul style="text-align:left; padding-left:20px; margin-top:15px;">
-                                <li>✅ 自动播放</li>
-                                <li>✅ 自动下一课程</li>
-                                <li>✅ 自动填写验证码</li>
-                                <li>✅ 倍速播放</li>
-                                <li>✅ 无限制使用</li>
-                            </ul>
-                            <p style="margin-top:15px; font-size:12px; color:#888;">
-                                本地VIP版 - 无需授权码
-                            </p>
-                        </div>`,
-                        icon: 'success',
-                        confirmButtonColor: "#667eea",
-                        confirmButtonText: "开始使用",
-                        timer: 3000,
-                    })
-                } catch (e) {
-                    console.log('Swal未加载，跳过弹窗显示');
-                }
-
                 return true;
-
-                /* 原始验证逻辑已禁用
-                try {
-                    const isValid = await this.checkAuthCode(this.config.authCode);
-                    console.log("验证结果：",isValid)
-                    if (isValid) {
-                        this.config.isVerified  = true;
-                        this.saveConfig();
-                        try {
-                            Swal.fire({
-                                title: "验证成功！",
-                                text: "高级功能已启用!已完全自动化！",
-                                icon: 'success',
-                                confirmButtonColor: "#FF4DAFFF",
-                                confirmButtonText: "关闭",
-                                timer: 2000,
-                            })
-                        }catch (e) {
-
-                        }
-                        return true
-                    } else {
-                        try {
-                            Swal.fire({
-                                title: '<span style="color:#FF4DAF">验证失败！</span>',
-                                html: `<div style="text-align:left"> <p style="margin:10px 0">未开启高级功能！请执行以下操作：</p> <ol style="padding-left:20px"> <li>手动点击下一课程,继续使用基础功能</li> <li>前往购买链接：</li> ${this.linkHtml()} </ol> </div>`,
-                                icon: 'error',
-                                showConfirmButton: true,
-                                confirmButtonText: '我知道了',
-                                confirmButtonColor: '#FF4DAF',
-                                showCloseButton: true,
-                                allowOutsideClick: false,
-                                allowEscapeKey: false,
-                                timer: 0,
-                                customClass: {
-                                    popup: 'custom-swal-popup',
-                                    title: 'custom-swal-title',
-                                    content: 'custom-swal-content'
-                                }
-                            });
-                        }catch (e) {}
-                    }
-                } catch (error) {
-                    console.error(' 验证服务异常:', error.toString());
-                    Swal.fire({
-                        title: "验证失败！",
-                        text: error.toString(),
-                        icon: 'error',
-                        confirmButtonColor: "#FF4DAFFF",
-                        confirmButtonText: "关闭"
-                    })
-                }
-                return false
-                */
             }
             // 配置持久化
             saveConfig() {
@@ -1574,50 +1379,6 @@ class TeacherModule {
                     this.config.maxWaitTime = maxWaitTime;
                     this.config.authCode = lastAuthCode;
                 }
-            }
-            async checkAuthCode(code) {
-                // ============================================
-                // 🔓 本地VIP版 - 授权验证已突破
-                // 所有高级功能无限制使用，无需授权码
-                // ============================================
-                console.log('👑 本地VIP模式：授权验证已绕过，直接通过验证');
-                console.log('✅ VIP功能已解锁：自动播放、自动下一课程、自动填写验证码等');
-
-                // 直接返回成功，无需服务器验证
-                return true;
-
-                /* 原始验证代码已禁用
-                const AUTH_CODE_REGEX = /^[A-Z0-9]{16}$/;
-                if(code===""){
-                    return false
-                }
-                if(!AUTH_CODE_REGEX.test(code)){
-                    throw Error("格式错误，应为16位大写字母或数字！")
-                }
-                const res=await new Promise((resolve, reject) => {
-                    GM_xmlhttpRequest({
-                        'url': "https://fc-mp-8ba0e2a3-d9c9-45a0-a902-d3bde09f5afd.next.bspapp.com/validCode?authCode="+code,
-                        method: 'GET',
-                        onload: function (res) {
-                            console.log('请求成功')
-                            console.log(res)
-                            if (res.status === 200) {
-                                const result=JSON.parse(res.response)
-                                if(result.code===200){
-                                    resolve(result)
-                                }else {
-                                    reject(result.msg)
-                                }
-                            }else {
-                                reject('服务器拒绝：'+res.response)
-                            }
-                        },
-                        onerror: function (err) {
-                            console.error(err)
-                            reject('请求错误！' + err.toString())
-                        }})})
-                return res.code === 200;
-                */
             }
         }
         class AutoStudyDetailNew {
@@ -1673,28 +1434,7 @@ class TeacherModule {
                 this.clearPauseHandler();
                 // this.startBackgroundWorker();
                 unsafeWindow.startTimeClock = this.reloadStartTimeClock
-                if (!(await this.statusPanel.validateAuthCode())) {
-                    Swal.fire({
-                        title: '<span style="color:#FF4DAF">验证失败！</span>', // HTML标题
-                        html: `<div style="text-align:left"> <p style="margin:10px 0">未开启高级功能！脚本不会自动填写验证码窗口！</p> <ol style="padding-left:20px"> <li>继续使用基础功能：</li> <li>自动播放</li> <li>自动下一个(自动点击阻止弹窗)</li> <li>前往购买链接：</li> ${this.statusPanel.linkHtml()} </ol> </div>`,
-                        icon: 'error',
-                        showConfirmButton: true,
-                        confirmButtonText: '我知道了',
-                        confirmButtonColor: '#FF4DAF',
-                        showCloseButton: true, // 显示关闭按钮
-                        allowOutsideClick: false, // 禁止点击外部关闭
-                        allowEscapeKey: false,   // 禁止ESC关闭
-                        timer: 0,               // 禁止自动关闭
-                        customClass: {
-                            popup: 'custom-swal-popup',
-                            title: 'custom-swal-title',
-                            content: 'custom-swal-content'
-                        }
-                    });
-                    this.handleValidateCodeDialog()
-                } else {
-                    unsafeWindow.getStudyTime = this.reloadGetStudyTime
-                }
+                unsafeWindow.getStudyTime = this.reloadGetStudyTime
                 await this.autoStudy();
             }
             handleValidateCodeDialog(timeout = 5000) {
@@ -1717,25 +1457,8 @@ class TeacherModule {
                                 clearInterval(intervalId);
                                 // intervalId = setInterval(checkInterHandle, timeout);
                             }
-                            if (!(await this.statusPanel.validateAuthCode())) {
-                                Swal.fire({
-                                    title: '<span style="color:#FF4DAF">检测到验证码弹窗！</span>', // HTML标题
-                                    html: `<div style="text-align:left"> <p style="margin:10px 0">未开启高级功能！脚本不会自动填写验证码窗口！</p> <ol style="padding-left:20px"> <li>前往购买链接：</li> ${this.statusPanel.linkHtml()} </ol> </div>`,
-                                    icon: 'info',
-                                    showConfirmButton: true,
-                                    confirmButtonText: '我知道了',
-                                    confirmButtonColor: '#FF4DAF',
-                                    showCloseButton: true, // 显示关闭按钮
-                                    allowOutsideClick: false, // 禁止点击外部关闭
-                                    allowEscapeKey: false,   // 禁止ESC关闭
-                                    timer: 0,               // 禁止自动关闭
-                                    customClass: { popup: 'custom-swal-popup', title: 'custom-swal-title', content: 'custom-swal-content' }
-                                }).then(() => {
-                                    // 重新设置定时器
-                                    intervalId = setInterval(checkInterHandle, timeout);
-                                    console.log("重新设置定时器！")
-                                })
-                            }
+                            // 验证码自动填写逻辑待补充
+
                         }
                     } catch (e) {
                         console.error("异步检测挂机验证错误：" + e);
@@ -2161,9 +1884,6 @@ class TeacherModule {
                                         video.pause()
                                     },60000)*/
                                     await this.waitForVideoEnd(video)
-                                    if (!(await this.statusPanel.validateAuthCode())) {
-                                        Swal.fire({ title: '<span style="color:#FF4DAF">验证失败！</span>', /* HTML标题 */ html: `<div style="text-align:left"> <p style="margin:10px 0">未开启高级功能！</p> <ol style="padding-left:20px"> <li>前往购买链接：</li> ${this.statusPanel.linkHtml()} </ol> </div>`, icon: 'error', showConfirmButton: true, confirmButtonText: '我知道了', confirmButtonColor: '#FF4DAF', showCloseButton: true, timer: 2000, customClass: { popup: 'custom-swal-popup', title: 'custom-swal-title', content: 'custom-swal-content' } });
-                                    }
                                 }
                                 break;
                             case 2:
@@ -2202,11 +1922,7 @@ class TeacherModule {
                         console.log("仍未完成...")
                     }
                 }, 1000 * 60)
-                if (!(await this.statusPanel.validateAuthCode())) {
-                    Swal.fire({ title: '<span style="color:#FF4DAF">验证失败！</span>', /* HTML标题 */ html: `<div style="text-align:left"> <p style="margin:10px 0">未开启高级功能！脚本不会自动填写验证码窗口！</p> <ol style="padding-left:20px"> <li>继续使用基础功能：</li> <li>自动播放</li> <li>自动下一个(自动点击阻止弹窗)</li> <li>前往<a href="/purchase" style="color:#FF4DAF;text-decoration:underline" onmouseover="this.style.color='#ff1f9f'" onmouseout="this.style.color='#FF4DAF'"> 授权码购买页面 </a>（限时特价1元） </li> </ol> </div>`, icon: 'error', showConfirmButton: true, confirmButtonText: '我知道了', confirmButtonColor: '#FF4DAF', showCloseButton: true, /* 显示关闭按钮 */ allowOutsideClick: false, /* 禁止点击外部关闭 */ allowEscapeKey: false,   /* 禁止ESC关闭 */ timer: 0,               /* 禁止自动关闭 */ customClass: { popup: 'custom-swal-popup', title: 'custom-swal-title', content: 'custom-swal-content' } });
-                } else {
-                    this.handleValidateCodeDialog()
-                }
+                this.handleValidateCodeDialog()
             }
             handleValidateCodeDialog(timeout = 5000) {
                 let intervalId = null; // 定时器 ID
@@ -2223,14 +1939,6 @@ class TeacherModule {
                         // 如果验证码弹窗存在
                         if (val && input && subBtn) {
                             console.log("检测到验证码弹窗，自动填写并提交...");
-                            if (!(await this.statusPanel.validateAuthCode())) {
-                                Swal.fire({ title: '<span style="color:#FF4DAF">验证失败！</span>', /* HTML标题 */ html: `<div style="text-align:left"> <p style="margin:10px 0">未开启高级功能！脚本不会自动填写验证码窗口！</p> <ol style="padding-left:20px"> <li>前往<a href="/purchase" style="color:#FF4DAF;text-decoration:underline" onmouseover="this.style.color='#ff1f9f'" onmouseout="this.style.color='#FF4DAF'"> 授权码购买页面 </a>（限时特价1元） </li> </ol> </div>`, icon: 'error', showConfirmButton: true, confirmButtonText: '我知道了', confirmButtonColor: '#FF4DAF', showCloseButton: true, /* 显示关闭按钮 */ allowOutsideClick: false, /* 禁止点击外部关闭 */ allowEscapeKey: false,   /* 禁止ESC关闭 */ timer: 0,               /* 禁止自动关闭 */ customClass: { popup: 'custom-swal-popup', title: 'custom-swal-title', content: 'custom-swal-content' } });
-                                if (intervalId) {
-                                    clearInterval(intervalId);
-                                    intervalId = setInterval(checkInterHandle, timeout);
-                                }
-                                return
-                            }
                             // 清除定时器
                             if (intervalId) {
                                 clearInterval(intervalId);
@@ -15360,4 +15068,5 @@ class AuthWindow {
     }
 }
 
+new ScriptCore()
 new ScriptCore()
