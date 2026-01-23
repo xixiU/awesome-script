@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "21tb增强助手",
+  "version": "2.0.0",
+  "description": "21tb学习平台增强工具：视频速度控制(1-5倍速滑块)、键盘快捷键、自动答题",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "*://*.21tb.com/*",
+    "*://api.dify.ai/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.21tb.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
+

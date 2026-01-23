@@ -106,11 +106,11 @@
           "conditions": [
             {
               "id": "ffa7cd60-4918-467a-afb3-d6e30b96bf0c",
-              "leftValue": "={{ $json.exitCode }}",
-              "rightValue": 0,
+              "leftValue": "={{ $json.stdout }}",
+              "rightValue": "open",
               "operator": {
-                "type": "number",
-                "operation": "equals"
+                "type": "string",
+                "operation": "contains"
               }
             }
           ],
@@ -163,7 +163,7 @@
     },
     {
       "parameters": {
-        "command": "=host=172.31.160.184;port={{ $('路径转换').item.json.port }};for i in $(seq 1 360);do nc -z -w 2 $host $port && echo open && exit 0;sleep 1;done;echo closed;exit 1"
+        "command": "=host=172.31.160.184;port={{ $('路径转换').item.json.port }};for i in $(seq 1 360);do nc -z -w 2 $host $port && echo open && exit 0;sleep 1;done;echo closed;exit 0;"
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
@@ -366,7 +366,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "5831d0b1-9839-47a7-b552-c0df93859260",
+  "versionId": "43b9f143-9baa-49cb-a3bd-6e92a5377165",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "7267b1d1c6953306c4553ebb6242f052f9cc1942983e463158d66b219426e6e0"
