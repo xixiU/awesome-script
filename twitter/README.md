@@ -11,6 +11,7 @@ A Tampermonkey userscript to block all commenters under a specific tweet on Twit
 - 📊 Real-time progress display
 - ✅ Statistics on successful and failed operations
 - 🎨 Beautiful floating button interface
+- 🌐 Multi-language support (English/Chinese) - Auto-detects system language
 
 ## Installation
 
@@ -113,6 +114,13 @@ A: The script has built-in reasonable delays and simulates real user operations.
 A: The script is designed for desktop browsers. Mobile browsers typically don't support userscript extensions like Tampermonkey.
 
 ## Changelog
+
+### v1.1 (2026-02-01)
+
+- 🌐 Added multi-language support (English/Chinese)
+- 🔍 Auto-detects system language
+- 📝 All UI text and messages are now internationalized
+- 💬 Comments in code are now in English
 
 ### v1.0 (2026-02-01)
 
