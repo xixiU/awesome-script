@@ -64,6 +64,7 @@ After completion, a statistics dialog will show:
 Click the Tampermonkey icon → Script settings → ⚙️ Open TwitterBlockCommenters configuration to access settings:
 
 - **Exclude Original Poster**: Do not block the person who posted the tweet (default: enabled)
+- **Max Scroll Attempts**: Maximum number of scroll attempts to load all comments (default: 3, range: 1-20)
 
 ## Important Notes
 
@@ -120,6 +121,11 @@ A: The script has built-in reasonable delays and simulates real user operations.
 A: The script is designed for desktop browsers. Mobile browsers typically don't support userscript extensions like Tampermonkey.
 
 ## Changelog
+
+### v1.4 (2026-02-01)
+
+- ✨ Added configurable max scroll attempts (default: 3, adjustable from 1-20)
+- 🔧 Optimized comment loading performance with customizable scroll behavior
 
 ### v1.3 (2026-02-01)
 

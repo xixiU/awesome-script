@@ -2,7 +2,7 @@
 // @name         Twitter Block All Commenters
 // @name:zh-CN   推特一键屏蔽评论者
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Block all commenters under a specific tweet on Twitter/X with one click
 // @description:zh-CN  一键屏蔽推特/X某条推文下的所有评论者
 // @author       xixiU
@@ -57,7 +57,9 @@
             consoleScriptLoaded: 'Twitter Block All Commenters script loaded',
             consoleExcludedOriginal: 'Excluded original poster: @{username}',
             configExcludeOriginalLabel: 'Exclude Original Poster',
-            configExcludeOriginalHelp: 'Do not block the person who posted the tweet'
+            configExcludeOriginalHelp: 'Do not block the person who posted the tweet',
+            configScrollAttemptsLabel: 'Max Scroll Attempts',
+            configScrollAttemptsHelp: 'Maximum number of scroll attempts to load all comments (default: 3)'
         },
         zh: {
             buttonText: '🚫 屏蔽所有评论者',
@@ -87,7 +89,9 @@
             consoleScriptLoaded: '推特屏蔽评论者脚本已加载',
             consoleExcludedOriginal: '已排除原推作者: @{username}',
             configExcludeOriginalLabel: '排除原推作者',
-            configExcludeOriginalHelp: '不屏蔽发推文的人'
+            configExcludeOriginalHelp: '不屏蔽发推文的人',
+            configScrollAttemptsLabel: '最大滚动次数',
+            configScrollAttemptsHelp: '加载所有评论的最大滚动尝试次数（默认：3）'
         }
     };
 
@@ -113,7 +117,8 @@
 
     // Initialize config manager
     const config = new ConfigManager('TwitterBlockCommenters', {
-        excludeOriginalPoster: true  // Default: do not block the original poster
+        excludeOriginalPoster: true,  // Default: do not block the original poster
+        scrollAttempts: 3  // Default: scroll 3 times to load comments
     }, {
         i18n: i18n,
         lang: currentLang
@@ -126,6 +131,17 @@
             label: t('configExcludeOriginalLabel'),
             type: 'checkbox',
             help: t('configExcludeOriginalHelp')
+        },
+        {
+            key: 'scrollAttempts',
+            label: t('configScrollAttemptsLabel'),
+            type: 'number',
+            placeholder: '3',
+            help: t('configScrollAttemptsHelp'),
+            validate: (value) => {
+                const num = parseInt(value);
+                return num >= 1 && num <= 20;
+            }
         }
     ]);
 
@@ -229,7 +245,6 @@
 
         // Comments on X/Twitter are usually in article tags
         const articles = document.querySelectorAll('article[data-testid="tweet"]');
-
         articles.forEach(article => {
             // Find username links
             const userLinks = article.querySelectorAll('a[href^="/"][role="link"]');
@@ -414,7 +429,7 @@
 
         let previousHeight = 0;
         let scrollAttempts = 0;
-        const maxScrollAttempts = 10;
+        const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 3;
 
         while (scrollAttempts < maxScrollAttempts) {
             window.scrollTo(0, document.body.scrollHeight);
@@ -449,7 +464,9 @@
             const username = commenters[i];
             updateButtonStatus(`🔄 ${i + 1}/${commenters.length}`, true);
 
-            const success = await blockUserByUI(username);
+            blockUserByAPI
+            const success = await blockUserByAPI(username);
+            // const success = await blockUserByUI(username);
 
             if (success) {
                 blockedCount++;
