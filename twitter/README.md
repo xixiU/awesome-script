@@ -1,137 +1,140 @@
-# 推特一键屏蔽评论者
+# Twitter Block All Commenters
 
-一键屏蔽推特/X某条推文下的所有评论者的油猴脚本。
+[中文文档](README_zh.md) | English
 
-## 功能特点
+A Tampermonkey userscript to block all commenters under a specific tweet on Twitter/X with one click.
 
-- 🎯 一键屏蔽某条推文下的所有评论者
-- 🔄 自动滚动加载所有评论
-- 📊 实时显示处理进度
-- ✅ 统计成功和失败数量
-- 🎨 精美的悬浮按钮界面
+## Features
 
-## 安装方法
+- 🎯 Block all commenters under a tweet with one click
+- 🔄 Automatically scroll and load all comments
+- 📊 Real-time progress display
+- ✅ Statistics on successful and failed operations
+- 🎨 Beautiful floating button interface
 
-### 1. 安装油猴插件
+## Installation
 
-首先需要在浏览器中安装 Tampermonkey 扩展：
+### 1. Install Tampermonkey Extension
 
-- **Chrome/Edge**: [Chrome 网上应用店](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
-- **Firefox**: [Firefox 附加组件](https://addons.mozilla.org/zh-CN/firefox/addon/tampermonkey/)
+First, install the Tampermonkey extension in your browser:
+
+- **Chrome/Edge**: [Chrome Web Store](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
+- **Firefox**: [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/tampermonkey/)
 - **Safari**: [Mac App Store](https://apps.apple.com/app/tampermonkey/id1482490089)
 
-### 2. 安装脚本
+### 2. Install the Script
 
-安装完 Tampermonkey 后：
+After installing Tampermonkey:
 
-1. 点击浏览器工具栏中的 Tampermonkey 图标
-2. 选择"添加新脚本"
-3. 将 `twitter_block_commenters.user.js` 文件中的代码完整复制粘贴到编辑器中
-4. 按 `Ctrl + S`（Mac: `Cmd + S`）保存
+1. Click the Tampermonkey icon in your browser toolbar
+2. Select "Create a new script"
+3. Copy and paste the entire code from `twitter_block_commenters.user.js` into the editor
+4. Press `Ctrl + S` (Mac: `Cmd + S`) to save
 
-## 使用方法
+## Usage
 
-### 1. 打开推文详情页
+### 1. Open a Tweet Detail Page
 
-在推特/X上打开任意一条推文的详情页（URL格式：`https://x.com/用户名/status/推文ID`）
+Navigate to any tweet's detail page on Twitter/X (URL format: `https://x.com/username/status/tweetID`)
 
-### 2. 点击屏蔽按钮
+### 2. Click the Block Button
 
-页面右上角会出现一个紫色渐变的悬浮按钮 **"🚫 屏蔽所有评论者"**
+A purple gradient floating button **"🚫 屏蔽所有评论者"** (Block All Commenters) will appear in the top right corner of the page
 
-### 3. 确认操作
+### 3. Confirm the Action
 
-点击按钮后会弹出确认对话框，再次确认后开始执行：
+After clicking the button, a confirmation dialog will appear. Once confirmed, the script will:
 
-1. 自动滚动加载所有评论
-2. 提取所有评论者的用户名
-3. 逐个屏蔽每位评论者
-4. 显示实时进度
+1. Automatically scroll to load all comments
+2. Extract all commenters' usernames
+3. Block each commenter one by one
+4. Display real-time progress
 
-### 4. 完成
+### 4. Complete
 
-屏蔽完成后会弹出统计信息：
+After completion, a statistics dialog will show:
 
-- 成功屏蔽数量
-- 失败数量
-- 总计用户数
+- Number of successful blocks
+- Number of failed blocks
+- Total number of users
 
-## 注意事项
+## Important Notes
 
-⚠️ **重要提示**：
+⚠️ **Warning**:
 
-1. **不可撤销**：屏蔽操作完成后，需要手动到设置中解除屏蔽
-2. **速率限制**：脚本已内置延迟（每个用户间隔2秒），避免触发推特的速率限制
-3. **仅限详情页**：必须在推文详情页使用，在时间线页面不生效
-4. **权限要求**：需要登录推特账号
-5. **谨慎使用**：建议只在真正需要的时候使用，避免误伤无辜用户
+1. **Irreversible**: Once blocked, you need to manually unblock users in settings
+2. **Rate Limiting**: The script has built-in delays (2 seconds between each user) to avoid triggering Twitter's rate limits
+3. **Detail Page Only**: Must be used on tweet detail pages, not on timeline pages
+4. **Login Required**: You must be logged into your Twitter account
+5. **Use Carefully**: Only use when truly necessary to avoid blocking innocent users
 
-## 工作原理
+## How It Works
 
-1. **评论加载**：自动滚动页面，触发推特的懒加载机制，加载更多评论
-2. **用户识别**：解析页面DOM结构，提取所有评论者的用户名
-3. **UI操作**：模拟用户点击操作（点击"..."菜单 → 点击"屏蔽" → 确认屏蔽）
-4. **进度反馈**：实时更新按钮状态，显示处理进度
+1. **Comment Loading**: Automatically scrolls the page to trigger Twitter's lazy loading mechanism and load more comments
+2. **User Identification**: Parses the page DOM structure to extract all commenters' usernames
+3. **UI Automation**: Simulates user click operations (click "⋯" menu → click "Block" → confirm block)
+4. **Progress Feedback**: Real-time button status updates showing processing progress
 
-## 技术栈
+## Tech Stack
 
-- 原生 JavaScript
+- Vanilla JavaScript
 - Tampermonkey GM API
-- DOM 操作
-- MutationObserver（监听路由变化）
+- DOM Manipulation
+- MutationObserver (for route change detection)
 
-## 常见问题
+## FAQ
 
-### Q: 为什么有些用户屏蔽失败？
+### Q: Why do some blocks fail?
 
-A: 可能的原因：
+A: Possible reasons:
 
-- 用户已经被屏蔽
-- 用户账号已被删除或冻结
-- 网络延迟导致页面元素未加载完成
-- 推特页面结构变化
+- User is already blocked
+- User account has been deleted or suspended
+- Network latency causing page elements not to load completely
+- Twitter page structure has changed
 
-### Q: 可以批量解除屏蔽吗？
+### Q: Can I bulk unblock users?
 
-A: 脚本目前只支持屏蔽功能，解除屏蔽需要：
+A: The script currently only supports blocking. To unblock:
 
-1. 进入设置 → 隐私和安全 → 已屏蔽的账号
-2. 手动逐个解除屏蔽
+1. Go to Settings → Privacy and Safety → Blocked Accounts
+2. Manually unblock each user one by one
 
-### Q: 会不会被推特封号？
+### Q: Will this get my account banned?
 
-A: 脚本已经内置了合理的延迟机制，模拟真实用户操作，正常使用不会导致封号。但请：
+A: The script has built-in reasonable delays and simulates real user operations. Normal use will not lead to a ban. However:
 
-- 不要频繁使用
-- 不要短时间内屏蔽大量用户
-- 遵守推特使用条款
+- Don't use it frequently
+- Don't block a large number of users in a short time
+- Follow Twitter's Terms of Service
 
-### Q: 支持移动端吗？
+### Q: Does it work on mobile?
 
-A: 脚本主要针对桌面端浏览器设计，移动端浏览器通常不支持油猴插件。
+A: The script is designed for desktop browsers. Mobile browsers typically don't support userscript extensions like Tampermonkey.
 
-## 更新日志
+## Changelog
 
 ### v1.0 (2026-02-01)
 
-- ✨ 初始版本发布
-- 🎯 支持一键屏蔽所有评论者
-- 🔄 自动加载所有评论
-- 📊 实时进度显示
-- 🎨 精美的UI界面
+- ✨ Initial release
+- 🎯 Support for blocking all commenters with one click
+- 🔄 Auto-load all comments
+- 📊 Real-time progress display
+- 🎨 Beautiful UI interface
 
-## 许可证
+## License
 
 MIT License
 
-## 作者
+## Author
 
 xixiU
 
-## 贡献
+## Contributing
 
-欢迎提交 Issue 和 Pull Request！
+Issues and Pull Requests are welcome!
 
-## 免责声明
+## Disclaimer
 
-本脚本仅供学习交流使用，使用者需自行承担使用本脚本产生的一切后果。作者不对使用本脚本造成的任何损失负责。
+This script is for educational and communication purposes only. Users are responsible for any consequences arising from the use of this script. The author is not responsible for any losses caused by using this script.
+
