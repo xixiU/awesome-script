@@ -13,6 +13,9 @@
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=twitter.com
 // @run-at       document-end
 // @license      MIT
+// @downloadURL https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_block_commenters.user.js
+// @updateURL https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_block_commenters.user.js
+
 // ==/UserScript==
 
 (function () {
