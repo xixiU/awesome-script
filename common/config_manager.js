@@ -1,14 +1,17 @@
 // ==UserScript==
-// @name        通用配置管理模块
+// @name        Common Configuration Manager
+// @name:zh-CN  通用配置管理模块
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1
-// @description  提供通用的配置管理功能，支持动态配置项和可视化配置界面
+// @version      1.1.0
+// @description  Provides common configuration management with i18n support, dynamic config items and visual config panel
+// @description:zh-CN  提供通用的配置管理功能，支持国际化、动态配置项和可视化配置界面
 // @author       xixiu
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_addStyle
 // @grant        GM_registerMenuCommand
 // @run-at       document-end
+// @license      MIT
 // ==/UserScript==
 
 (function () {
@@ -26,10 +29,83 @@
 
             // 国际化支持
             this.i18n = options.i18n || {};
-            this.currentLang = options.lang || navigator.language.slice(0, 2) || 'zh';
+            this.currentLang = options.lang || ConfigManager.detectLanguage();
 
             // 菜单命令
             this.menuCommands = [];
+        }
+
+        // ==================== 静态工具方法 ====================
+
+        /**
+         * 检测用户的系统语言
+         * @returns {string} 语言代码 ('zh', 'en', 'ja', 'ko' 等)
+         */
+        static detectLanguage() {
+            const lang = navigator.language || navigator.userLanguage || 'en';
+            // 返回前两位语言代码
+            return lang.toLowerCase().slice(0, 2);
+        }
+
+        /**
+         * 简化检测是否为中文系统（兼容方法）
+         * @returns {string} 'zh' 或 'en'
+         */
+        static detectLanguageSimple() {
+            const lang = navigator.language || navigator.userLanguage || 'en';
+            return lang.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+        }
+
+        /**
+         * 创建简单的 i18n 翻译器（无需实例化 ConfigManager）
+         * @param {Object} i18nDict - i18n 字典对象
+         * @param {string} lang - 语言代码（可选，默认自动检测）
+         * @returns {Function} 翻译函数 t(key, params)
+         * 
+         * @example
+         * const t = ConfigManager.createTranslator({
+         *   en: { greeting: 'Hello {name}!' },
+         *   zh: { greeting: '你好 {name}！' }
+         * });
+         * console.log(t('greeting', { name: 'World' }));
+         */
+        static createTranslator(i18nDict, lang = null) {
+            const currentLang = lang || ConfigManager.detectLanguage();
+
+            return function (key, paramsOrDefault = {}) {
+                let text = '';
+                let params = {};
+
+                // 兼容：paramsOrDefault 可以是字符串或对象
+                if (typeof paramsOrDefault === 'string') {
+                    const defaultText = paramsOrDefault;
+                    if (i18nDict[currentLang] && i18nDict[currentLang][key]) {
+                        text = i18nDict[currentLang][key];
+                    } else if (i18nDict['en'] && i18nDict['en'][key]) {
+                        text = i18nDict['en'][key];
+                    } else {
+                        text = defaultText || key;
+                    }
+                } else {
+                    params = paramsOrDefault || {};
+                    if (i18nDict[currentLang] && i18nDict[currentLang][key]) {
+                        text = i18nDict[currentLang][key];
+                    } else if (i18nDict['en'] && i18nDict['en'][key]) {
+                        text = i18nDict['en'][key];
+                    } else {
+                        text = key;
+                    }
+                }
+
+                // 参数替换
+                if (Object.keys(params).length > 0) {
+                    Object.keys(params).forEach(param => {
+                        text = text.replace(new RegExp(`\\{${param}\\}`, 'g'), params[param]);
+                    });
+                }
+
+                return text;
+            };
         }
 
         // 加载配置
@@ -742,20 +818,57 @@
         // ==================== 国际化菜单注册功能 ====================
 
         /**
-         * 获取国际化文本
+         * 获取国际化文本（支持参数替换）
          * @param {string} key - 文本键
-         * @param {string} defaultText - 默认文本
+         * @param {Object|string} paramsOrDefault - 参数对象或默认文本
          * @returns {string} 国际化后的文本
+         * 
+         * @example
+         * // 简单使用
+         * t('buttonText', 'Default Button')
+         * 
+         * @example
+         * // 带参数替换
+         * t('consoleFoundCommenters', { count: 10 })
+         * // i18n: "Found {count} commenters" -> "Found 10 commenters"
          */
-        t(key, defaultText = '') {
-            if (this.i18n[this.currentLang] && this.i18n[this.currentLang][key]) {
-                return this.i18n[this.currentLang][key];
+        t(key, paramsOrDefault = {}) {
+            let text = '';
+            let params = {};
+
+            // 兼容旧版本：paramsOrDefault 可以是字符串（defaultText）或对象（params）
+            if (typeof paramsOrDefault === 'string') {
+                // 旧版本用法：t(key, defaultText)
+                const defaultText = paramsOrDefault;
+                if (this.i18n[this.currentLang] && this.i18n[this.currentLang][key]) {
+                    text = this.i18n[this.currentLang][key];
+                } else if (this.i18n['zh'] && this.i18n['zh'][key]) {
+                    text = this.i18n['zh'][key];
+                } else {
+                    text = defaultText || key;
+                }
+            } else {
+                // 新版本用法：t(key, { param1: value1, param2: value2 })
+                params = paramsOrDefault || {};
+                if (this.i18n[this.currentLang] && this.i18n[this.currentLang][key]) {
+                    text = this.i18n[this.currentLang][key];
+                } else if (this.i18n['zh'] && this.i18n['zh'][key]) {
+                    text = this.i18n['zh'][key];
+                } else if (this.i18n['en'] && this.i18n['en'][key]) {
+                    text = this.i18n['en'][key];
+                } else {
+                    text = key;
+                }
             }
-            // 降级到默认语言
-            if (this.i18n['zh'] && this.i18n['zh'][key]) {
-                return this.i18n['zh'][key];
+
+            // 参数替换：将 {param} 替换为实际值
+            if (Object.keys(params).length > 0) {
+                Object.keys(params).forEach(param => {
+                    text = text.replace(new RegExp(`\\{${param}\\}`, 'g'), params[param]);
+                });
             }
-            return defaultText || key;
+
+            return text;
         }
 
         /**
@@ -1251,5 +1364,5 @@
     // 导出到全局
     window.ConfigManager = ConfigManager;
 
-    console.log('[ConfigManager] 通用配置管理模块已加载');
+    console.log('[ConfigManager] Common Configuration Manager loaded (v1.1.0)');
 })();

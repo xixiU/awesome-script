@@ -115,6 +115,13 @@ A: The script is designed for desktop browsers. Mobile browsers typically don't 
 
 ## Changelog
 
+### v1.2 (2026-02-01)
+
+- 🔧 Refactored to use common ConfigManager for i18n
+- 📦 Now requires config_manager.js for better code reusability
+- ⚡ Improved i18n performance and maintainability
+- 🛠️ Fallback support if ConfigManager is not loaded
+
 ### v1.1 (2026-02-01)
 
 - 🌐 Added multi-language support (English/Chinese)

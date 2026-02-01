@@ -2,7 +2,7 @@
 // @name         Twitter Block All Commenters
 // @name:zh-CN   推特一键屏蔽评论者
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Block all commenters under a specific tweet on Twitter/X with one click
 // @description:zh-CN  一键屏蔽推特/X某条推文下的所有评论者
 // @author       xixiU
@@ -13,9 +13,9 @@
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=twitter.com
 // @run-at       document-end
 // @license      MIT
-// @downloadURL https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_block_commenters.user.js
-// @updateURL https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_block_commenters.user.js
-
+// @require      https://github.com/xixiU/awesome-script/raw/refs/heads/master/common/config_manager.js
+// @downloadURL  https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_block_commenters.user.js
+// @updateURL    https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_block_commenters.user.js
 // ==/UserScript==
 
 (function () {
@@ -24,14 +24,6 @@
     let isBlocking = false;
     let blockedCount = 0;
     let failedCount = 0;
-
-    // Detect user's language
-    function detectLanguage() {
-        const lang = navigator.language || navigator.userLanguage || 'en';
-        return lang.toLowerCase().startsWith('zh') ? 'zh' : 'en';
-    }
-
-    const currentLang = detectLanguage();
 
     // Internationalization (i18n) text dictionary
     const i18n = {
@@ -91,14 +83,25 @@
         }
     };
 
-    // Get translated text
-    function t(key, params = {}) {
-        let text = i18n[currentLang][key] || i18n.en[key] || key;
-        Object.keys(params).forEach(param => {
-            text = text.replace(`{${param}}`, params[param]);
-        });
-        return text;
-    }
+    // Use ConfigManager's i18n translator
+    // Detect language using ConfigManager's static method
+    const currentLang = (typeof ConfigManager !== 'undefined')
+        ? ConfigManager.detectLanguageSimple()
+        : (navigator.language || navigator.userLanguage || 'en').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+
+    // Create translator function using ConfigManager if available
+    const t = (typeof ConfigManager !== 'undefined')
+        ? ConfigManager.createTranslator(i18n, currentLang)
+        : function (key, params = {}) {
+            // Fallback translator if ConfigManager is not loaded
+            let text = (i18n[currentLang] && i18n[currentLang][key]) || (i18n.en && i18n.en[key]) || key;
+            if (typeof params === 'object' && Object.keys(params).length > 0) {
+                Object.keys(params).forEach(param => {
+                    text = text.replace(new RegExp(`\\{${param}\\}`, 'g'), params[param]);
+                });
+            }
+            return text;
+        };
 
     // Utility function: delay
     function sleep(ms) {
