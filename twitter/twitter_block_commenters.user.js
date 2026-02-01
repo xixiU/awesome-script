@@ -2,7 +2,7 @@
 // @name         Twitter Block All Commenters
 // @name:zh-CN   推特一键屏蔽评论者
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  Block all commenters under a specific tweet on Twitter/X with one click
 // @description:zh-CN  一键屏蔽推特/X某条推文下的所有评论者
 // @author       xixiU
@@ -10,6 +10,8 @@
 // @match        https://twitter.com/*
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_addStyle
+// @grant        GM_registerMenuCommand
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=twitter.com
 // @run-at       document-end
 // @license      MIT
@@ -52,7 +54,10 @@
             consoleNotFoundButton: 'More options button not found for user @{username}',
             consoleNotFoundMenuItem: 'Block option not found',
             consoleNotFoundConfirm: 'Confirmation button not found',
-            consoleScriptLoaded: 'Twitter Block All Commenters script loaded'
+            consoleScriptLoaded: 'Twitter Block All Commenters script loaded',
+            consoleExcludedOriginal: 'Excluded original poster: @{username}',
+            configExcludeOriginalLabel: 'Exclude Original Poster',
+            configExcludeOriginalHelp: 'Do not block the person who posted the tweet'
         },
         zh: {
             buttonText: '🚫 屏蔽所有评论者',
@@ -79,7 +84,10 @@
             consoleNotFoundButton: '未找到用户 @{username} 的更多选项按钮',
             consoleNotFoundMenuItem: '未找到屏蔽选项',
             consoleNotFoundConfirm: '未找到确认按钮',
-            consoleScriptLoaded: '推特屏蔽评论者脚本已加载'
+            consoleScriptLoaded: '推特屏蔽评论者脚本已加载',
+            consoleExcludedOriginal: '已排除原推作者: @{username}',
+            configExcludeOriginalLabel: '排除原推作者',
+            configExcludeOriginalHelp: '不屏蔽发推文的人'
         }
     };
 
@@ -102,6 +110,24 @@
             }
             return text;
         };
+
+    // Initialize config manager
+    const config = new ConfigManager('TwitterBlockCommenters', {
+        excludeOriginalPoster: true  // Default: do not block the original poster
+    }, {
+        i18n: i18n,
+        lang: currentLang
+    });
+
+    // Initialize config panel
+    config.init([
+        {
+            key: 'excludeOriginalPoster',
+            label: t('configExcludeOriginalLabel'),
+            type: 'checkbox',
+            help: t('configExcludeOriginalHelp')
+        }
+    ]);
 
     // Utility function: delay
     function sleep(ms) {
@@ -169,9 +195,37 @@
         return url.includes('/status/');
     }
 
+    // Get original poster's username from the first tweet
+    function getOriginalPosterUsername() {
+        try {
+            // The first article is usually the original tweet
+            const firstArticle = document.querySelector('article[data-testid="tweet"]');
+            if (!firstArticle) return null;
+
+            // Find the username link in the first article
+            const userLink = firstArticle.querySelector('a[href^="/"][role="link"]');
+            if (!userLink) return null;
+
+            const href = userLink.getAttribute('href');
+            if (href && href.match(/^\/[^\/]+$/)) {
+                const username = href.substring(1);
+                return username;
+            }
+        } catch (error) {
+            console.error('Failed to get original poster username:', error);
+        }
+        return null;
+    }
+
     // Get all commenters
     function getAllCommenters() {
         const commenters = new Set();
+        const excludeOriginal = config.get('excludeOriginalPoster');
+        const originalPoster = excludeOriginal ? getOriginalPosterUsername() : null;
+
+        if (originalPoster && excludeOriginal) {
+            console.log(t('consoleExcludedOriginal', { username: originalPoster }));
+        }
 
         // Comments on X/Twitter are usually in article tags
         const articles = document.querySelectorAll('article[data-testid="tweet"]');
@@ -183,7 +237,12 @@
                 const href = link.getAttribute('href');
                 if (href && href.match(/^\/[^\/]+$/)) {
                     const username = href.substring(1);
-                    if (username && username !== 'home' && username !== 'explore' && username !== 'notifications' && username !== 'messages') {
+                    if (username &&
+                        username !== 'home' &&
+                        username !== 'explore' &&
+                        username !== 'notifications' &&
+                        username !== 'messages' &&
+                        (!excludeOriginal || username !== originalPoster)) {
                         commenters.add(username);
                     }
                 }
@@ -382,6 +441,7 @@
         }
 
         console.log(t('consoleFoundCommenters', { count: commenters.length }));
+        console.log({ commenters });
         updateButtonStatus(`🔄 0/${commenters.length}`, true);
 
         // Block commenters one by one

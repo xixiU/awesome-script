@@ -59,6 +59,12 @@ After completion, a statistics dialog will show:
 - Number of failed blocks
 - Total number of users
 
+## Configuration
+
+Click the Tampermonkey icon → Script settings → ⚙️ Open TwitterBlockCommenters configuration to access settings:
+
+- **Exclude Original Poster**: Do not block the person who posted the tweet (default: enabled)
+
 ## Important Notes
 
 ⚠️ **Warning**:
@@ -115,27 +121,14 @@ A: The script is designed for desktop browsers. Mobile browsers typically don't 
 
 ## Changelog
 
-### v1.2 (2026-02-01)
+### v1.3 (2026-02-01)
 
-- 🔧 Refactored to use common ConfigManager for i18n
-- 📦 Now requires config_manager.js for better code reusability
-- ⚡ Improved i18n performance and maintainability
-- 🛠️ Fallback support if ConfigManager is not loaded
-
-### v1.1 (2026-02-01)
-
-- 🌐 Added multi-language support (English/Chinese)
-- 🔍 Auto-detects system language
-- 📝 All UI text and messages are now internationalized
-- 💬 Comments in code are now in English
-
-### v1.0 (2026-02-01)
-
-- ✨ Initial release
-- 🎯 Support for blocking all commenters with one click
-- 🔄 Auto-load all comments
-- 📊 Real-time progress display
-- 🎨 Beautiful UI interface
+- ✨ Added configuration option to exclude original poster (default: enabled)
+- 🔧 Integrated with ConfigManager for settings management
+- 🌐 Multi-language support (English/Chinese) with auto-detection
+- 🎯 One-click blocking of all commenters under a tweet
+- 🔄 Auto-loads all comments and displays real-time progress
+- 🎨 Beautiful UI with floating button interface
 
 ## License
 

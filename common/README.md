@@ -351,6 +351,11 @@ config.registerHelpDocument({
 
 ## 版本历史
 
+### v1.1.1 (2026-02-01)
+
+- 🐛 修复方法名冲突：将内部配置菜单注册方法重命名为 `_registerConfigMenu()`
+- 🔧 增强 `registerMenuCommand()` 方法的参数验证
+
 ### v1.1.0 (2026-02-01)
 
 - ✨ 新增静态方法 `detectLanguage()` 和 `detectLanguageSimple()`

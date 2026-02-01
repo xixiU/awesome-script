@@ -2,7 +2,7 @@
 // @name        Common Configuration Manager
 // @name:zh-CN  通用配置管理模块
 // @namespace    http://tampermonkey.net/
-// @version      1.1.0
+// @version      1.1.1
 // @description  Provides common configuration management with i18n support, dynamic config items and visual config panel
 // @description:zh-CN  提供通用的配置管理功能，支持国际化、动态配置项和可视化配置界面
 // @author       xixiu
@@ -155,7 +155,7 @@
             this.addStyles();
             this.createPanel();
             this.createOverlay();
-            this.registerMenuCommand();
+            this._registerConfigMenu();
             this.isInitialized = true;
         }
 
@@ -755,11 +755,17 @@
             document.body.appendChild(this.overlay);
         }
 
-        // 注册菜单命令
-        registerMenuCommand() {
-            GM_registerMenuCommand(`⚙️ 打开${this.configName}配置`, () => {
-                this.show();
-            });
+        // 注册配置面板菜单命令
+        _registerConfigMenu() {
+            if (typeof GM_registerMenuCommand !== 'undefined') {
+                try {
+                    GM_registerMenuCommand(`⚙️ 打开${this.configName}配置`, () => {
+                        this.show();
+                    });
+                } catch (e) {
+                    console.warn(`[ConfigManager] 注册配置菜单失败`, e);
+                }
+            }
         }
 
         // 显示配置面板
@@ -878,6 +884,11 @@
          * @param {string} icon - 图标（可选）
          */
         registerMenuCommand(textKey, callback, icon = '') {
+            if (!textKey || typeof callback !== 'function') {
+                console.warn(`[ConfigManager] 注册菜单命令失败: 参数无效`, { textKey, callback });
+                return;
+            }
+
             const text = icon ? `${icon} ${this.t(textKey, textKey)}` : this.t(textKey, textKey);
 
             if (typeof GM_registerMenuCommand !== 'undefined') {
@@ -1364,5 +1375,5 @@
     // 导出到全局
     window.ConfigManager = ConfigManager;
 
-    console.log('[ConfigManager] Common Configuration Manager loaded (v1.1.0)');
+    console.log('[ConfigManager] Common Configuration Manager loaded (v1.1.1)');
 })();
