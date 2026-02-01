@@ -464,9 +464,8 @@
             const username = commenters[i];
             updateButtonStatus(`🔄 ${i + 1}/${commenters.length}`, true);
 
-            blockUserByAPI
-            const success = await blockUserByAPI(username);
-            // const success = await blockUserByUI(username);
+            // const success = await blockUserByAPI(username);
+            const success = await blockUserByUI(username);
 
             if (success) {
                 blockedCount++;
