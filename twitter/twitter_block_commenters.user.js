@@ -441,7 +441,7 @@
         }
 
         console.log(t('consoleFoundCommenters', { count: commenters.length }));
-        console.log({ commenters });
+        console.log(JSON.stringify(commenters));
         updateButtonStatus(`🔄 0/${commenters.length}`, true);
 
         // Block commenters one by one
