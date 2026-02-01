@@ -290,7 +290,7 @@
         }
     }
 
-    // Block user via API
+    // Block user via API 有bug 鉴权方式有问题 https://github.com/daymade/Twitter-Block-Porn
     async function blockUserByAPI(username) {
         try {
             console.log(t('consoleTryBlockAPI', { username }));
