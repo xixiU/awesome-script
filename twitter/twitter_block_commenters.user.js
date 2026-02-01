@@ -433,7 +433,7 @@
 
         while (scrollAttempts < maxScrollAttempts) {
             window.scrollTo(0, document.body.scrollHeight);
-            await sleep(2000);
+            await sleep(1000);
 
             const currentHeight = document.body.scrollHeight;
             if (currentHeight === previousHeight) {
@@ -474,7 +474,7 @@
             }
 
             // Wait a while after each block to avoid rate limiting
-            await sleep(2000);
+            await sleep(1000);
         }
 
         isBlocking = false;
