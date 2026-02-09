@@ -729,7 +729,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                     <button id="panel-close-btn" title="${t('panelClose')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">×</button>
                 </div>
             </div>
-            <div id="panel-content" style="padding: 24px; overflow-y: auto; overflow-x: hidden; max-height: calc(80vh - 60px); line-height: 1.6; color: rgb(231, 233, 234); user-select: text; -webkit-user-select: text; cursor: text; box-sizing: border-box;"></div>
+            <div id="panel-content" style="padding: 16px 20px; overflow-y: auto; overflow-x: hidden; max-height: calc(80vh - 60px); line-height: 1.5; color: rgb(231, 233, 234); user-select: text; -webkit-user-select: text; cursor: text; box-sizing: border-box;"></div>
         `;
 
         document.body.appendChild(panel);
@@ -786,8 +786,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 // 内容区域全屏样式
                 content.style.maxHeight = 'calc(100vh - 60px)';
                 content.style.fontSize = '18px';
-                content.style.padding = '32px 32px 48px 32px';
-                content.style.lineHeight = '1.7';
+                content.style.padding = '20px 24px 32px 24px';
+                content.style.lineHeight = '1.5';
 
                 btn.innerHTML = '⛶';
                 btn.title = t('panelExitFullscreen');
@@ -806,8 +806,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 // 内容区域正常样式
                 content.style.maxHeight = 'calc(80vh - 60px)';
                 content.style.fontSize = '16px';
-                content.style.padding = '24px';
-                content.style.lineHeight = '1.6';
+                content.style.padding = '16px 20px';
+                content.style.lineHeight = '1.5';
 
                 btn.innerHTML = '⛶';
                 btn.title = t('panelFullscreen');
@@ -833,16 +833,16 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         // Convert markdown to HTML
         const htmlContent = cleanedContent
             // Headers (must be processed before list items)
-            .replace(/^### (.*?)$/gm, '<h3 style="margin-top: 12px; margin-bottom: 6px; color: rgb(231, 233, 234); font-size: 18px; font-weight: 600;">$1</h3>')
-            .replace(/^## (.*?)$/gm, '<h2 style="margin-top: 16px; margin-bottom: 8px; color: rgb(231, 233, 234); font-size: 20px; font-weight: 700;">$1</h2>')
-            .replace(/^# (.*?)$/gm, '<h1 style="margin-top: 18px; margin-bottom: 10px; color: rgb(231, 233, 234); font-size: 24px; font-weight: 700;">$1</h1>')
+            .replace(/^### (.*?)$/gm, '<h3 style="margin-top: 4px; margin-bottom: 2px; color: rgb(231, 233, 234); font-size: 18px; font-weight: 600;">$1</h3>')
+            .replace(/^## (.*?)$/gm, '<h2 style="margin-top: 6px; margin-bottom: 3px; color: rgb(231, 233, 234); font-size: 20px; font-weight: 700;">$1</h2>')
+            .replace(/^# (.*?)$/gm, '<h1 style="margin-top: 8px; margin-bottom: 4px; color: rgb(231, 233, 234); font-size: 24px; font-weight: 700;">$1</h1>')
             // Bold and italic
             .replace(/\*\*(.*?)\*\*/g, '<strong style="color: rgb(139, 213, 255); font-weight: 600;">$1</strong>')
             .replace(/\*(.*?)\*/g, '<em style="color: rgb(255, 212, 121);">$1</em>')
             // Unordered list
-            .replace(/^[\-\*]\s+(.+)$/gm, '<li style="margin-left: 20px; margin-bottom: 4px; list-style-type: disc;">$1</li>')
+            .replace(/^[\-\*]\s+(.+)$/gm, '<li style="margin-left: 20px; margin-bottom: 2px; list-style-type: disc;">$1</li>')
             // Ordered list
-            .replace(/^\d+\.\s+(.+)$/gm, '<li style="margin-left: 20px; margin-bottom: 4px; list-style-type: decimal;">$1</li>')
+            .replace(/^\d+\.\s+(.+)$/gm, '<li style="margin-left: 20px; margin-bottom: 2px; list-style-type: decimal;">$1</li>')
             // Line breaks (减少段落间距)
             .replace(/\n\n/g, '<br>')
             .replace(/\n/g, '<br>');
