@@ -137,13 +137,14 @@ def parse_values(values_str):
     return values
 
 
-def convert_to_excel(tables_data, output_path):
+def convert_to_excel(tables_data, output_path, verbose=True):
     """
     将解析的数据转换为 Excel 文件
     
     参数:
         tables_data: 表数据字典
         output_path: 输出文件路径
+        verbose: 是否显示详细信息
     """
     with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
         for table_name, data in tables_data.items():
@@ -158,7 +159,122 @@ def convert_to_excel(tables_data, output_path):
             sheet_name = table_name.replace('.', '_')[:31]
             df.to_excel(writer, sheet_name=sheet_name, index=False)
             
-            print(f"已导出表 '{table_name}' 到工作表 '{sheet_name}'，共 {len(rows)} 行数据")
+            if verbose:
+                print(f"    - 表 '{table_name}' → 工作表 '{sheet_name}' ({len(rows)} 行)")
+
+
+def process_single_file(sql_file, output_path=None, verbose=True):
+    """
+    处理单个 SQL 文件
+    
+    参数:
+        sql_file: SQL 文件路径
+        output_path: 输出 Excel 文件路径（可选）
+        verbose: 是否显示详细信息
+    
+    返回:
+        bool: 是否成功处理
+    """
+    sql_file = Path(sql_file)
+    
+    if not sql_file.exists():
+        print(f"错误: 文件 '{sql_file}' 不存在")
+        return False
+    
+    # 确定输出路径
+    if output_path:
+        output_path = Path(output_path)
+    else:
+        output_path = sql_file.with_suffix('.xlsx')
+    
+    try:
+        # 读取 SQL 内容
+        if verbose:
+            print(f"\n处理: {sql_file.name}")
+        
+        with open(sql_file, 'r', encoding='utf-8') as f:
+            sql_content = f.read()
+        
+        # 解析 INSERT 语句
+        tables_data = parse_insert_statement(sql_content)
+        
+        if not tables_data:
+            if verbose:
+                print(f"  ⚠ 未找到有效的 INSERT 语句，跳过")
+            return False
+        
+        if verbose:
+            print(f"  发现 {len(tables_data)} 个表:")
+        
+        # 转换为 Excel
+        convert_to_excel(tables_data, output_path, verbose)
+        
+        if verbose:
+            print(f"  ✓ 已生成: {output_path.name}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"  ✗ 处理失败: {e}")
+        return False
+
+
+def process_directory(directory, output_dir=None, recursive=True):
+    """
+    批量处理目录下的所有 SQL 文件
+    
+    参数:
+        directory: 输入目录路径
+        output_dir: 输出目录（可选，默认与输入文件同目录）
+        recursive: 是否递归处理子目录
+    
+    返回:
+        tuple: (成功数量, 失败数量)
+    """
+    directory = Path(directory)
+    
+    if not directory.exists():
+        print(f"错误: 目录 '{directory}' 不存在")
+        return 0, 0
+    
+    if not directory.is_dir():
+        print(f"错误: '{directory}' 不是一个目录")
+        return 0, 0
+    
+    # 查找所有 SQL 文件
+    if recursive:
+        sql_files = list(directory.rglob('*.sql'))
+    else:
+        sql_files = list(directory.glob('*.sql'))
+    
+    if not sql_files:
+        print(f"在目录 '{directory}' 中未找到 SQL 文件")
+        return 0, 0
+    
+    print(f"\n找到 {len(sql_files)} 个 SQL 文件")
+    print("=" * 60)
+    
+    success_count = 0
+    fail_count = 0
+    
+    for sql_file in sql_files:
+        # 确定输出路径
+        if output_dir:
+            output_dir_path = Path(output_dir)
+            output_dir_path.mkdir(parents=True, exist_ok=True)
+            # 保持相对路径结构
+            relative_path = sql_file.relative_to(directory)
+            output_path = output_dir_path / relative_path.with_suffix('.xlsx')
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            output_path = None
+        
+        if process_single_file(sql_file, output_path):
+            success_count += 1
+        else:
+            fail_count += 1
+    
+    return success_count, fail_count
 
 
 def main():
@@ -168,55 +284,69 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 示例用法:
+  # 转换单个文件
   python insert_to_excel.py input.sql
   python insert_to_excel.py input.sql -o output.xlsx
+  
+  # 批量转换目录下所有 SQL 文件
+  python insert_to_excel.py /path/to/sql/folder
+  python insert_to_excel.py /path/to/sql/folder -o /path/to/output
+  python insert_to_excel.py /path/to/sql/folder --no-recursive
         '''
     )
     
     parser.add_argument(
-        'input_file',
-        help='输入的 SQL 文件路径'
+        'input_path',
+        help='输入的 SQL 文件或目录路径'
     )
     
     parser.add_argument(
         '-o', '--output',
-        help='输出的 Excel 文件路径（默认: 与输入文件同名的 .xlsx 文件）'
+        help='输出的 Excel 文件路径或目录（单文件时为文件路径，目录时为输出目录）'
+    )
+    
+    parser.add_argument(
+        '--no-recursive',
+        action='store_true',
+        help='批量转换时不递归子目录（仅处理当前目录）'
     )
     
     args = parser.parse_args()
     
-    # 读取 SQL 文件
-    input_path = Path(args.input_file)
+    input_path = Path(args.input_path)
+    
     if not input_path.exists():
-        print(f"错误: 文件 '{args.input_file}' 不存在")
+        print(f"错误: 路径 '{args.input_path}' 不存在")
         return
     
-    # 确定输出路径
-    if args.output:
-        output_path = Path(args.output)
+    # 判断是文件还是目录
+    if input_path.is_file():
+        # 单文件处理
+        if not input_path.suffix.lower() == '.sql':
+            print(f"警告: '{input_path}' 不是 SQL 文件，但仍会尝试处理")
+        
+        print("=" * 60)
+        success = process_single_file(input_path, args.output, verbose=True)
+        print("=" * 60)
+        
+        if success:
+            print("\n✓ 转换完成!")
+        else:
+            print("\n✗ 转换失败")
+        
+    elif input_path.is_dir():
+        # 批量处理目录
+        recursive = not args.no_recursive
+        success, fail = process_directory(input_path, args.output, recursive)
+        
+        print("\n" + "=" * 60)
+        print(f"批量转换完成!")
+        print(f"  成功: {success} 个文件")
+        print(f"  失败/跳过: {fail} 个文件")
+        print(f"  总计: {success + fail} 个文件")
+    
     else:
-        output_path = input_path.with_suffix('.xlsx')
-    
-    # 读取 SQL 内容
-    print(f"正在读取 SQL 文件: {input_path}")
-    with open(input_path, 'r', encoding='utf-8') as f:
-        sql_content = f.read()
-    
-    # 解析 INSERT 语句
-    print("正在解析 INSERT 语句...")
-    tables_data = parse_insert_statement(sql_content)
-    
-    if not tables_data:
-        print("警告: 未找到有效的 INSERT 语句")
-        return
-    
-    print(f"发现 {len(tables_data)} 个表的数据")
-    
-    # 转换为 Excel
-    print(f"正在生成 Excel 文件: {output_path}")
-    convert_to_excel(tables_data, output_path)
-    
-    print(f"\n转换完成! 输出文件: {output_path}")
+        print(f"错误: '{input_path}' 不是有效的文件或目录")
 
 
 if __name__ == '__main__':

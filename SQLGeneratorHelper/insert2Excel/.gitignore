@@ -1,0 +1,14 @@
+# 忽略生成的 Excel 文件
+*.xlsx
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境
+venv/
+env/
+ENV/
