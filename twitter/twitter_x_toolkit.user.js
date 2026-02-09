@@ -33,6 +33,9 @@
     // Internationalization (i18n) text dictionary
     const i18n = {
         en: {
+            // Toolbar相关
+            toolbarMainButton: 'Twitter X Toolkit',
+
             // Block功能相关
             buttonText: '🚫 Block All Commenters',
             buttonProcessing: '🔄 Processing...',
@@ -88,6 +91,9 @@
             consoleSummarizeFailed: 'AI summarization failed:'
         },
         zh: {
+            // Toolbar相关
+            toolbarMainButton: '推特X工具箱',
+
             // Block功能相关
             buttonText: '🚫 屏蔽所有评论者',
             buttonProcessing: '🔄 正在处理...',
@@ -472,83 +478,224 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     // ==================== UI控制 ====================
 
     // Create block button
-    function createBlockButton() {
-        const button = document.createElement('button');
-        button.id = 'block-all-commenters-btn';
-        button.innerHTML = t('buttonText');
-        button.style.cssText = `
+    // Create floating toolbar with draggable functionality
+    function createFloatingToolbar() {
+        // Load saved position
+        const savedPosition = {
+            x: GM_getValue('toolbar_position_x', window.innerWidth - 80),
+            y: GM_getValue('toolbar_position_y', window.innerHeight - 80)
+        };
+
+        // Create container
+        const container = document.createElement('div');
+        container.id = 'x-toolkit-toolbar';
+        container.style.cssText = `
             position: fixed;
-            top: 80px;
-            right: 20px;
-            z-index: 9999;
-            padding: 12px 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            transition: all 0.3s ease;
+            left: ${savedPosition.x}px;
+            top: ${savedPosition.y}px;
+            z-index: 99999;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            gap: 8px;
         `;
 
-        button.addEventListener('mouseenter', function () {
-            if (!isBlocking) {
-                this.style.transform = 'translateY(-2px)';
-                this.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.3)';
+        // Create main button (always visible)
+        const mainButton = document.createElement('button');
+        mainButton.id = 'x-toolkit-main-btn';
+        mainButton.innerHTML = '🛠️';
+        mainButton.title = t('toolbarMainButton') || 'Twitter X Toolkit';
+        mainButton.style.cssText = `
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #1DA1F2 0%, #0d8bd9 100%);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: move;
+            font-size: 24px;
+            box-shadow: 0 4px 12px rgba(29, 161, 242, 0.4);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+
+        // Create action buttons container (hidden by default)
+        const actionsContainer = document.createElement('div');
+        actionsContainer.id = 'x-toolkit-actions';
+        actionsContainer.style.cssText = `
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            gap: 8px;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+        `;
+
+        // Create action buttons based on page type
+        const isOnTweetPage = isOnTweetDetailPage();
+        const isOnUserPage = isOnUserProfilePage();
+
+        if (isOnTweetPage) {
+            // Block commenters button (only on tweet page)
+            const blockButton = document.createElement('button');
+            blockButton.id = 'block-all-commenters-btn';
+            blockButton.innerHTML = '🚫';
+            blockButton.title = t('buttonText');
+            blockButton.style.cssText = getActionButtonStyle('#667eea', '#764ba2');
+            blockButton.addEventListener('click', handleBlockAllCommenters);
+            blockButton.addEventListener('mouseenter', function () {
+                if (!isBlocking) {
+                    this.style.transform = 'scale(1.1)';
+                    this.style.boxShadow = '0 6px 16px rgba(102, 126, 234, 0.5)';
+                }
+            });
+            blockButton.addEventListener('mouseleave', function () {
+                this.style.transform = 'scale(1)';
+                this.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
+            });
+            actionsContainer.appendChild(blockButton);
+        }
+
+        if (isOnTweetPage || isOnUserPage) {
+            // AI summarize button
+            const summarizeButton = document.createElement('button');
+            summarizeButton.id = 'ai-summarize-btn';
+            summarizeButton.innerHTML = '🤖';
+            summarizeButton.title = t('summarizeButtonText');
+            summarizeButton.style.cssText = getActionButtonStyle('#f093fb', '#f5576c');
+            summarizeButton.addEventListener('click', handleAISummarize);
+            summarizeButton.addEventListener('mouseenter', function () {
+                if (!isSummarizing) {
+                    this.style.transform = 'scale(1.1)';
+                    this.style.boxShadow = '0 6px 16px rgba(240, 147, 251, 0.5)';
+                }
+            });
+            summarizeButton.addEventListener('mouseleave', function () {
+                this.style.transform = 'scale(1)';
+                this.style.boxShadow = '0 4px 12px rgba(240, 147, 251, 0.4)';
+            });
+            actionsContainer.appendChild(summarizeButton);
+        }
+
+        // Settings button
+        const settingsButton = document.createElement('button');
+        settingsButton.id = 'x-toolkit-settings-btn';
+        settingsButton.innerHTML = '⚙️';
+        settingsButton.title = t('configPanelTitle') || 'Settings';
+        settingsButton.style.cssText = getActionButtonStyle('#536471', '#657786');
+        settingsButton.addEventListener('click', () => config.showPanel());
+        settingsButton.addEventListener('mouseenter', function () {
+            this.style.transform = 'scale(1.1)';
+            this.style.boxShadow = '0 6px 16px rgba(83, 100, 113, 0.5)';
+        });
+        settingsButton.addEventListener('mouseleave', function () {
+            this.style.transform = 'scale(1)';
+            this.style.boxShadow = '0 4px 12px rgba(83, 100, 113, 0.4)';
+        });
+        actionsContainer.appendChild(settingsButton);
+
+        // Assemble
+        container.appendChild(mainButton);
+        container.appendChild(actionsContainer);
+
+        // Hover to expand
+        let hoverTimeout;
+        container.addEventListener('mouseenter', () => {
+            clearTimeout(hoverTimeout);
+            actionsContainer.style.opacity = '1';
+            actionsContainer.style.transform = 'translateY(0)';
+            actionsContainer.style.pointerEvents = 'auto';
+        });
+
+        container.addEventListener('mouseleave', () => {
+            hoverTimeout = setTimeout(() => {
+                actionsContainer.style.opacity = '0';
+                actionsContainer.style.transform = 'translateY(10px)';
+                actionsContainer.style.pointerEvents = 'none';
+            }, 300);
+        });
+
+        // Dragging functionality
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+
+        mainButton.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            dragOffset.x = e.clientX - container.offsetLeft;
+            dragOffset.y = e.clientY - container.offsetTop;
+            mainButton.style.cursor = 'grabbing';
+            container.style.transition = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            let newX = e.clientX - dragOffset.x;
+            let newY = e.clientY - dragOffset.y;
+
+            // Constrain within viewport
+            const maxX = window.innerWidth - 56;
+            const maxY = window.innerHeight - 56;
+            newX = Math.max(0, Math.min(newX, maxX));
+            newY = Math.max(0, Math.min(newY, maxY));
+
+            container.style.left = newX + 'px';
+            container.style.top = newY + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                mainButton.style.cursor = 'move';
+                container.style.transition = '';
+
+                // Save position
+                GM_setValue('toolbar_position_x', parseInt(container.style.left));
+                GM_setValue('toolbar_position_y', parseInt(container.style.top));
             }
         });
 
-        button.addEventListener('mouseleave', function () {
-            this.style.transform = 'translateY(0)';
-            this.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.2)';
+        // Main button hover effect
+        mainButton.addEventListener('mouseenter', function () {
+            if (!isDragging) {
+                this.style.transform = 'scale(1.1)';
+                this.style.boxShadow = '0 6px 16px rgba(29, 161, 242, 0.6)';
+            }
         });
 
-        button.addEventListener('click', handleBlockAllCommenters);
+        mainButton.addEventListener('mouseleave', function () {
+            if (!isDragging) {
+                this.style.transform = 'scale(1)';
+                this.style.boxShadow = '0 4px 12px rgba(29, 161, 242, 0.4)';
+            }
+        });
 
-        document.body.appendChild(button);
-        return button;
+        document.body.appendChild(container);
+        return container;
     }
 
-    // Create AI summarize button
-    function createSummarizeButton() {
-        const button = document.createElement('button');
-        button.id = 'ai-summarize-btn';
-        button.innerHTML = t('summarizeButtonText');
-        button.style.cssText = `
-            position: fixed;
-            top: 140px;
-            right: 20px;
-            z-index: 9999;
-            padding: 12px 20px;
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    // Helper function to get action button style
+    function getActionButtonStyle(colorStart, colorEnd) {
+        return `
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, ${colorStart} 0%, ${colorEnd} 100%);
             color: white;
             border: none;
-            border-radius: 25px;
+            border-radius: 50%;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            font-size: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         `;
-
-        button.addEventListener('mouseenter', function () {
-            if (!isSummarizing) {
-                this.style.transform = 'translateY(-2px)';
-                this.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.3)';
-            }
-        });
-
-        button.addEventListener('mouseleave', function () {
-            this.style.transform = 'translateY(0)';
-            this.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.2)';
-        });
-
-        button.addEventListener('click', handleAISummarize);
-
-        document.body.appendChild(button);
-        return button;
     }
 
     // Create result panel
@@ -715,13 +862,18 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     function updateSummarizeButtonStatus(text, isProcessing = false) {
         const button = document.getElementById('ai-summarize-btn');
         if (button) {
-            button.innerHTML = text;
             if (isProcessing) {
+                button.innerHTML = '🔄';
+                button.title = text;
                 button.style.background = 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)';
                 button.style.cursor = 'not-allowed';
+                button.disabled = true;
             } else {
+                button.innerHTML = '🤖';
+                button.title = t('summarizeButtonText');
                 button.style.background = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
                 button.style.cursor = 'pointer';
+                button.disabled = false;
             }
         }
     }
@@ -730,13 +882,18 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     function updateButtonStatus(text, isProcessing = false) {
         const button = document.getElementById('block-all-commenters-btn');
         if (button) {
-            button.innerHTML = text;
             if (isProcessing) {
-                button.style.background = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
+                button.innerHTML = '🔄';
+                button.title = text;
+                button.style.background = 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)';
                 button.style.cursor = 'not-allowed';
+                button.disabled = true;
             } else {
+                button.innerHTML = '🚫';
+                button.title = t('buttonText');
                 button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
                 button.style.cursor = 'pointer';
+                button.disabled = false;
             }
         }
     }
@@ -1104,15 +1261,9 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
     // Initialize
     function init() {
-        // Create Block button (only on tweet detail page)
-        if (!document.getElementById('block-all-commenters-btn') && isOnTweetDetailPage()) {
-            createBlockButton();
-        }
-
-        // Create AI Summarize button (on tweet detail page or user profile page)
-        if (!document.getElementById('ai-summarize-btn') &&
-            (isOnTweetDetailPage() || isOnUserProfilePage())) {
-            createSummarizeButton();
+        // Create floating toolbar (only once, contains all action buttons)
+        if (!document.getElementById('x-toolkit-toolbar')) {
+            createFloatingToolbar();
         }
 
         // Create result panel (only once)
@@ -1136,11 +1287,9 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const url = location.href;
         if (url !== lastUrl) {
             lastUrl = url;
-            // Remove old buttons
-            const oldBlockBtn = document.getElementById('block-all-commenters-btn');
-            const oldSummarizeBtn = document.getElementById('ai-summarize-btn');
-            if (oldBlockBtn) oldBlockBtn.remove();
-            if (oldSummarizeBtn) oldSummarizeBtn.remove();
+            // Remove old toolbar
+            const oldToolbar = document.getElementById('x-toolkit-toolbar');
+            if (oldToolbar) oldToolbar.remove();
             // Reinitialize
             setTimeout(init, 1000);
         }
