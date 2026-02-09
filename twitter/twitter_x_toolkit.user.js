@@ -1,10 +1,10 @@
 // ==UserScript==
-// @name         Twitter AI Helper
-// @name:zh-CN   推特AI助手
+// @name         Twitter X Toolkit
+// @name:zh-CN   推特X工具箱
 // @namespace    http://tampermonkey.net/
-// @version      2.0
-// @description  Block all commenters under a tweet and AI-powered summarization for tweets/comments/user posts
-// @description:zh-CN  一键屏蔽推文评论者 & AI智能总结推文/评论/用户发帖
+// @version      2.1
+// @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, and more features to come
+// @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结等，未来将持续扩展更多功能
 // @author       xixiU
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -18,8 +18,8 @@
 // @run-at       document-end
 // @license      MIT
 // @require      https://github.com/xixiU/awesome-script/raw/refs/heads/master/common/config_manager.js
-// @downloadURL  https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_block_commenters.user.js
-// @updateURL    https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_block_commenters.user.js
+// @downloadURL  https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_x_toolkit.user.js
+// @updateURL    https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_x_toolkit.user.js
 // ==/UserScript==
 
 (function () {
@@ -58,12 +58,12 @@
             consoleNotFoundButton: 'More options button not found for user @{username}',
             consoleNotFoundMenuItem: 'Block option not found',
             consoleNotFoundConfirm: 'Confirmation button not found',
-            consoleScriptLoaded: 'Twitter AI Helper script loaded',
+            consoleScriptLoaded: 'Twitter X Toolkit loaded successfully',
             consoleExcludedOriginal: 'Excluded original poster: @{username}',
             configExcludeOriginalLabel: 'Exclude Original Poster',
             configExcludeOriginalHelp: 'Do not block the person who posted the tweet',
             configScrollAttemptsLabel: 'Max Scroll Attempts',
-            configScrollAttemptsHelp: 'Maximum number of scroll attempts to load all comments (default: 3)',
+            configScrollAttemptsHelp: 'Maximum scroll attempts for loading content (blocking/AI summarization, default: 10)',
 
             // AI总结功能相关
             summarizeButtonText: '🤖 AI Summary',
@@ -74,8 +74,6 @@
             configAiApiKeyHelp: 'Your OpenAI API Key',
             configAiModelLabel: 'AI Model',
             configAiModelHelp: 'Model name (e.g., gpt-4, gpt-3.5-turbo)',
-            configAiMaxPagesLabel: 'Max Pages to Fetch',
-            configAiMaxPagesHelp: 'Maximum number of pages to load for comments/tweets (default: 10)',
             alertSummarizing: 'AI summarization in progress, please wait...',
             alertNoApiKey: 'Please configure your OpenAI API Key first!\nClick the config panel to set it up.',
             alertNoContent: 'No content found to summarize!',
@@ -115,12 +113,12 @@
             consoleNotFoundButton: '未找到用户 @{username} 的更多选项按钮',
             consoleNotFoundMenuItem: '未找到屏蔽选项',
             consoleNotFoundConfirm: '未找到确认按钮',
-            consoleScriptLoaded: '推特AI助手脚本已加载',
+            consoleScriptLoaded: '推特X工具箱加载成功',
             consoleExcludedOriginal: '已排除原推作者: @{username}',
             configExcludeOriginalLabel: '排除原推作者',
             configExcludeOriginalHelp: '不屏蔽发推文的人',
             configScrollAttemptsLabel: '最大滚动次数',
-            configScrollAttemptsHelp: '加载所有评论的最大滚动尝试次数（默认：3）',
+            configScrollAttemptsHelp: '加载内容的最大滚动尝试次数（用于屏蔽和AI总结，默认：10）',
 
             // AI总结功能相关
             summarizeButtonText: '🤖 AI总结',
@@ -131,8 +129,6 @@
             configAiApiKeyHelp: '你的OpenAI API Key',
             configAiModelLabel: 'AI模型',
             configAiModelHelp: '模型名称（如：gpt-4, gpt-3.5-turbo）',
-            configAiMaxPagesLabel: '最大加载页数',
-            configAiMaxPagesHelp: '加载评论/推文的最大页数（默认：10）',
             alertSummarizing: 'AI总结进行中，请稍候...',
             alertNoApiKey: '请先配置你的OpenAI API Key！\n点击配置面板进行设置。',
             alertNoContent: '未找到可总结的内容！',
@@ -169,15 +165,14 @@
         };
 
     // Initialize config manager
-    const config = new ConfigManager('TwitterAIHelper', {
+    const config = new ConfigManager('TwitterXToolkit', {
         // Block功能配置
         excludeOriginalPoster: true,
-        scrollAttempts: 3,
+        scrollAttempts: 10,
         // AI总结功能配置
         aiBaseUrl: 'https://api.openai.com/v1',
         aiApiKey: '',
-        aiModel: 'gpt-3.5-turbo',
-        aiMaxPages: 10
+        aiModel: 'gpt-3.5-turbo'
     }, {
         i18n: i18n,
         lang: currentLang
@@ -196,11 +191,11 @@
             key: 'scrollAttempts',
             label: t('configScrollAttemptsLabel'),
             type: 'number',
-            placeholder: '3',
+            placeholder: '10',
             help: t('configScrollAttemptsHelp'),
             validate: (value) => {
                 const num = parseInt(value);
-                return num >= 1 && num <= 20;
+                return num >= 1 && num <= 50;
             }
         },
         // AI总结功能配置项
@@ -224,17 +219,6 @@
             type: 'text',
             placeholder: 'gpt-3.5-turbo',
             help: t('configAiModelHelp')
-        },
-        {
-            key: 'aiMaxPages',
-            label: t('configAiMaxPagesLabel'),
-            type: 'number',
-            placeholder: '10',
-            help: t('configAiMaxPagesHelp'),
-            validate: (value) => {
-                const num = parseInt(value);
-                return num >= 1 && num <= 50;
-            }
         }
     ]);
 
@@ -298,25 +282,33 @@
         }
     }
 
-    // Extract all comments with scrolling
-    async function extractCommentsWithScroll(maxPages = 10) {
-        const comments = [];
+    // Generic function to extract tweets/comments with scrolling
+    async function extractTweetsWithScroll(options = {}) {
+        const {
+            waitTime = 1500,
+            maxPages = 10,
+            skipFirst = false,
+            idLength = 30,
+            logPrefix = 'tweets'
+        } = options;
+
+        const items = [];
         let previousHeight = 0;
         let scrollAttempts = 0;
         let pagesLoaded = 0;
 
-        console.log(`Loading comments (max ${maxPages} pages)...`);
+        console.log(`Loading ${logPrefix} (max ${maxPages} pages)...`);
 
-        while (pagesLoaded < maxPages && scrollAttempts < 3) {
+        while (pagesLoaded < maxPages && scrollAttempts < 2) {
             // Scroll to bottom
             window.scrollTo(0, document.body.scrollHeight);
-            await sleep(1500);
+            await sleep(waitTime);
 
-            // Extract current visible comments
+            // Extract current visible tweets
             const articles = document.querySelectorAll('article[data-testid="tweet"]');
             articles.forEach((article, index) => {
-                // Skip the first article (original tweet)
-                if (index === 0) return;
+                // Skip the first article if specified (e.g., original tweet in comments)
+                if (skipFirst && index === 0) return;
 
                 try {
                     const tweetTextElement = article.querySelector('[data-testid="tweetText"]');
@@ -331,18 +323,22 @@
                         }
                     }
 
-                    if (author && tweetText) {
-                        const commentId = `${author}_${tweetText.substring(0, 20)}`;
-                        if (!comments.find(c => c.id === commentId)) {
-                            comments.push({
-                                id: commentId,
+                    // For comments, require both author and text
+                    // For user tweets, text is enough
+                    const shouldAdd = skipFirst ? (author && tweetText) : tweetText;
+
+                    if (shouldAdd) {
+                        const itemId = `${author}_${tweetText.substring(0, idLength)}`;
+                        if (!items.find(item => item.id === itemId)) {
+                            items.push({
+                                id: itemId,
                                 author: author,
                                 text: tweetText
                             });
                         }
                     }
                 } catch (error) {
-                    console.error('Failed to extract comment:', error);
+                    console.error(`Failed to extract ${logPrefix}:`, error);
                 }
             });
 
@@ -356,67 +352,30 @@
             previousHeight = currentHeight;
         }
 
-        console.log(`Loaded ${comments.length} comments from ${pagesLoaded} pages`);
-        return comments;
+        console.log(`Loaded ${items.length} ${logPrefix} from ${pagesLoaded} pages`);
+        return items;
+    }
+
+    // Extract all comments with scrolling
+    async function extractCommentsWithScroll(maxPages = 10) {
+        return extractTweetsWithScroll({
+            waitTime: 500,
+            maxPages,
+            skipFirst: true,
+            idLength: 20,
+            logPrefix: 'comments'
+        });
     }
 
     // Extract user tweets with scrolling
     async function extractUserTweetsWithScroll(maxPages = 10) {
-        const tweets = [];
-        let previousHeight = 0;
-        let scrollAttempts = 0;
-        let pagesLoaded = 0;
-
-        console.log(`Loading user tweets (max ${maxPages} pages)...`);
-
-        while (pagesLoaded < maxPages && scrollAttempts < 3) {
-            // Scroll to bottom
-            window.scrollTo(0, document.body.scrollHeight);
-            await sleep(1500);
-
-            // Extract current visible tweets
-            const articles = document.querySelectorAll('article[data-testid="tweet"]');
-            articles.forEach(article => {
-                try {
-                    const tweetTextElement = article.querySelector('[data-testid="tweetText"]');
-                    const tweetText = tweetTextElement ? tweetTextElement.innerText : '';
-
-                    const userLink = article.querySelector('a[href^="/"][role="link"]');
-                    let author = '';
-                    if (userLink) {
-                        const href = userLink.getAttribute('href');
-                        if (href && href.match(/^\/[^\/]+$/)) {
-                            author = href.substring(1);
-                        }
-                    }
-
-                    if (tweetText) {
-                        const tweetId = `${author}_${tweetText.substring(0, 30)}`;
-                        if (!tweets.find(t => t.id === tweetId)) {
-                            tweets.push({
-                                id: tweetId,
-                                author: author,
-                                text: tweetText
-                            });
-                        }
-                    }
-                } catch (error) {
-                    console.error('Failed to extract tweet:', error);
-                }
-            });
-
-            const currentHeight = document.body.scrollHeight;
-            if (currentHeight === previousHeight) {
-                scrollAttempts++;
-            } else {
-                scrollAttempts = 0;
-                pagesLoaded++;
-            }
-            previousHeight = currentHeight;
-        }
-
-        console.log(`Loaded ${tweets.length} tweets from ${pagesLoaded} pages`);
-        return tweets;
+        return extractTweetsWithScroll({
+            waitTime: 1500,
+            maxPages,
+            skipFirst: false,
+            idLength: 30,
+            logPrefix: 'user tweets'
+        });
     }
 
     // ==================== AI总结功能 ====================
@@ -604,25 +563,26 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             width: 90%;
             max-width: 800px;
             max-height: 80vh;
-            background: white;
+            background: rgb(21, 32, 43);
             border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
             z-index: 10000;
             display: none;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: rgb(231, 233, 234);
         `;
 
         panel.innerHTML = `
-            <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="margin: 0; font-size: 18px;">${t('panelTitle')}</h3>
-                <div style="display: flex; gap: 10px;">
-                    <button id="panel-fullscreen-btn" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;">${t('panelFullscreen')}</button>
-                    <button id="panel-copy-btn" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;">${t('panelCopy')}</button>
-                    <button id="panel-close-btn" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;">${t('panelClose')}</button>
+            <div id="panel-header" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; font-size: 18px; font-weight: 600;">${t('panelTitle')}</h3>
+                <div id="panel-actions" style="display: flex; gap: 10px; align-items: center;">
+                    <button id="panel-fullscreen-btn" title="${t('panelFullscreen')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">⛶</button>
+                    <button id="panel-copy-btn" title="${t('panelCopy')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">📋</button>
+                    <button id="panel-close-btn" title="${t('panelClose')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">×</button>
                 </div>
             </div>
-            <div id="panel-content" style="padding: 20px; overflow-y: auto; max-height: calc(80vh - 60px); line-height: 1.6;"></div>
+            <div id="panel-content" style="padding: 24px; overflow-y: auto; overflow-x: hidden; max-height: calc(80vh - 60px); line-height: 1.8; color: rgb(231, 233, 234); user-select: text; -webkit-user-select: text; cursor: text; box-sizing: border-box;"></div>
         `;
 
         document.body.appendChild(panel);
@@ -632,14 +592,29 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             panel.style.display = 'none';
         });
 
+        // Add hover effects for buttons
+        ['panel-fullscreen-btn', 'panel-copy-btn', 'panel-close-btn'].forEach(btnId => {
+            const btn = document.getElementById(btnId);
+            btn.addEventListener('mouseenter', () => {
+                btn.style.background = 'rgba(255,255,255,0.35)';
+                btn.style.transform = 'scale(1.1)';
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.background = 'rgba(255,255,255,0.2)';
+                btn.style.transform = 'scale(1)';
+            });
+        });
+
         document.getElementById('panel-copy-btn').addEventListener('click', () => {
             const content = document.getElementById('panel-content').innerText;
             navigator.clipboard.writeText(content).then(() => {
                 const btn = document.getElementById('panel-copy-btn');
-                const originalText = btn.innerText;
-                btn.innerText = t('panelCopied');
+                const originalIcon = btn.innerHTML;
+                btn.innerHTML = '✓';
+                btn.style.background = 'rgba(16, 185, 129, 0.8)';
                 setTimeout(() => {
-                    btn.innerText = originalText;
+                    btn.innerHTML = originalIcon;
+                    btn.style.background = 'rgba(255,255,255,0.2)';
                 }, 2000);
             });
         });
@@ -648,20 +623,46 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         document.getElementById('panel-fullscreen-btn').addEventListener('click', () => {
             isFullscreen = !isFullscreen;
             const btn = document.getElementById('panel-fullscreen-btn');
+            const content = document.getElementById('panel-content');
+
             if (isFullscreen) {
+                // 全屏模式
+                panel.style.top = '0';
+                panel.style.left = '0';
+                panel.style.transform = 'none';
                 panel.style.width = '100vw';
                 panel.style.height = '100vh';
                 panel.style.maxWidth = '100vw';
                 panel.style.maxHeight = '100vh';
                 panel.style.borderRadius = '0';
-                btn.innerText = t('panelExitFullscreen');
+
+                // 内容区域全屏样式
+                content.style.maxHeight = 'calc(100vh - 60px)';
+                content.style.fontSize = '18px';
+                content.style.padding = '32px 32px 48px 32px';
+
+                btn.innerHTML = '⛶';
+                btn.title = t('panelExitFullscreen');
+                btn.setAttribute('aria-label', t('panelExitFullscreen'));
             } else {
+                // 恢复正常模式
+                panel.style.top = '50%';
+                panel.style.left = '50%';
+                panel.style.transform = 'translate(-50%, -50%)';
                 panel.style.width = '90%';
                 panel.style.height = 'auto';
                 panel.style.maxWidth = '800px';
                 panel.style.maxHeight = '80vh';
                 panel.style.borderRadius = '12px';
-                btn.innerText = t('panelFullscreen');
+
+                // 内容区域正常样式
+                content.style.maxHeight = 'calc(80vh - 60px)';
+                content.style.fontSize = '16px';
+                content.style.padding = '24px';
+
+                btn.innerHTML = '⛶';
+                btn.title = t('panelFullscreen');
+                btn.setAttribute('aria-label', t('panelFullscreen'));
             }
         });
 
@@ -673,13 +674,28 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const panel = document.getElementById('ai-result-panel');
         const panelContent = document.getElementById('panel-content');
 
-        // Convert markdown to HTML (simple implementation)
-        const htmlContent = content
-            .replace(/### (.*?)$/gm, '<h3 style="margin-top: 20px; margin-bottom: 10px; color: #333;">$1</h3>')
-            .replace(/## (.*?)$/gm, '<h2 style="margin-top: 20px; margin-bottom: 10px; color: #333;">$1</h2>')
-            .replace(/# (.*?)$/gm, '<h1 style="margin-top: 20px; margin-bottom: 10px; color: #333;">$1</h1>')
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        // Clean up markdown code block markers
+        let cleanedContent = content
+            .replace(/^```markdown\s*/i, '')
+            .replace(/^```\s*/m, '')
+            .replace(/\s*```$/m, '')
+            .trim();
+
+        // Convert markdown to HTML
+        const htmlContent = cleanedContent
+            // Headers (must be processed before list items)
+            .replace(/^### (.*?)$/gm, '<h3 style="margin-top: 20px; margin-bottom: 10px; color: rgb(231, 233, 234); font-size: 18px; font-weight: 600;">$1</h3>')
+            .replace(/^## (.*?)$/gm, '<h2 style="margin-top: 24px; margin-bottom: 12px; color: rgb(231, 233, 234); font-size: 20px; font-weight: 700;">$1</h2>')
+            .replace(/^# (.*?)$/gm, '<h1 style="margin-top: 28px; margin-bottom: 14px; color: rgb(231, 233, 234); font-size: 24px; font-weight: 700;">$1</h1>')
+            // Bold and italic
+            .replace(/\*\*(.*?)\*\*/g, '<strong style="color: rgb(139, 213, 255); font-weight: 600;">$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em style="color: rgb(255, 212, 121);">$1</em>')
+            // Unordered list
+            .replace(/^[\-\*]\s+(.+)$/gm, '<li style="margin-left: 20px; margin-bottom: 6px; list-style-type: disc;">$1</li>')
+            // Ordered list
+            .replace(/^\d+\.\s+(.+)$/gm, '<li style="margin-left: 20px; margin-bottom: 6px; list-style-type: decimal;">$1</li>')
+            // Line breaks
+            .replace(/\n\n/g, '<br><br>')
             .replace(/\n/g, '<br>');
 
         panelContent.innerHTML = htmlContent;
@@ -739,7 +755,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
             const baseUrl = config.get('aiBaseUrl') || 'https://api.openai.com/v1';
             const model = config.get('aiModel') || 'gpt-3.5-turbo';
-            const maxPages = parseInt(config.get('aiMaxPages')) || 10;
+            const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 3;
 
             let contentToSummarize = null;
 
@@ -751,7 +767,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                     return;
                 }
 
-                const comments = await extractCommentsWithScroll(maxPages);
+                const comments = await extractCommentsWithScroll(maxScrollAttempts);
 
                 contentToSummarize = {
                     type: 'tweet_with_comments',
@@ -761,7 +777,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
             } else if (isOnUserProfilePage()) {
                 // On user profile page: summarize user's tweets
-                const tweets = await extractUserTweetsWithScroll(maxPages);
+                const tweets = await extractUserTweetsWithScroll(maxScrollAttempts);
                 if (tweets.length === 0) {
                     alert(t('alertNoContent'));
                     return;
@@ -850,7 +866,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         return Array.from(commenters);
     }
 
-    // Block a single user
+    // Block a single user 暂时没用到
     async function blockUser(username) {
         try {
             console.log(t('consoleTryBlock', { username }));
@@ -873,7 +889,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         }
     }
 
-    // Block user via API 有bug 鉴权方式有问题 https://github.com/daymade/Twitter-Block-Porn
+    // Block user via API 暂时没用到 有bug 鉴权方式有问题 https://github.com/daymade/Twitter-Block-Porn
     async function blockUserByAPI(username) {
         try {
             console.log(t('consoleTryBlockAPI', { username }));

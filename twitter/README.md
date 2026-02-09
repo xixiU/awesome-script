@@ -1,8 +1,8 @@
-# Twitter AI Helper
+# Twitter X Toolkit
 
 [中文文档](README_zh.md) | English
 
-A powerful Twitter/X Tampermonkey userscript integrating two major features: blocking commenters and AI-powered summarization.
+A powerful multi-functional toolkit for Twitter/X, integrating commenter blocking, AI-powered summarization, and more features to come.
 
 ## Features
 
@@ -44,7 +44,7 @@ After installing Tampermonkey:
 
 1. Click the Tampermonkey icon in your browser toolbar
 2. Select "Create a new script"
-3. Copy and paste the entire code from `twitter_block_commenters.user.js` into the editor
+3. Copy and paste the entire code from `twitter_x_toolkit.user.js` into the editor
 4. Press `Ctrl + S` (Mac: `Cmd + S`) to save
 
 ## Usage
@@ -72,12 +72,12 @@ After clicking and confirming, the script will:
 
 #### 1. Configure AI API (First Time Use)
 
-Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterAIHelper Configuration, and set:
+Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterXToolkit Configuration, and set:
 
 - **OpenAI API Base URL**: API base URL (e.g., `https://api.openai.com/v1`)
 - **API Key**: Your OpenAI API Key
 - **AI Model**: Model name (e.g., `gpt-3.5-turbo`, `gpt-4`)
-- **Max Pages to Fetch**: Control how many pages of comments/tweets to load (default: 10)
+- **Max Scroll Attempts**: Control how many times to scroll for loading content (default: 10, range: 1-50)
 
 #### 2. Use AI Summarization
 
@@ -103,19 +103,18 @@ After summarization completes, a result panel will appear, supporting:
 
 ## Configuration Options
 
-Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterAIHelper Configuration:
+Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterXToolkit Configuration:
 
-### Block Feature Configuration
+### General Configuration
 
 - **Exclude Original Poster**: Don't block the person who posted the tweet (default: enabled)
-- **Max Scroll Attempts**: Maximum number of scroll attempts to load all comments (default: 3, range: 1-20)
+- **Max Scroll Attempts**: Maximum scroll attempts for loading content, used for both blocking and AI summarization (default: 10, range: 1-50)
 
 ### AI Summarization Configuration
 
 - **OpenAI API Base URL**: OpenAI-compatible API base URL (default: `https://api.openai.com/v1`)
 - **API Key**: Your OpenAI API Key (required)
 - **AI Model**: Model name to use (default: `gpt-3.5-turbo`)
-- **Max Pages to Fetch**: Maximum number of pages to load for comments/tweets (default: 10, range: 1-50)
 
 ## Important Notes
 
@@ -227,7 +226,7 @@ A: Possible reasons:
 A: Suggestions:
 
 - Use `gpt-3.5-turbo` instead of `gpt-4` (about 10x cheaper)
-- Reduce "Max Pages to Fetch" configuration (default 10 pages)
+- Reduce "Max Scroll Attempts" configuration (default 3, loads less content)
 - Only use summarization when needed
 - Consider using self-hosted models
 
@@ -241,6 +240,31 @@ A: The current version doesn't support custom prompts and uses built-in optimize
 
 ## Changelog
 
+### v2.1 (2026-02-09)
+
+- 🔧 **Optimized Default Config**: Increased default max scroll attempts from 3 to 10 for more content
+- 🎨 **Comprehensive Panel Optimization**:
+  - Fixed content area scrolling issue
+  - Fullscreen mode now utilizes entire screen space
+  - Unified button style with circular icon buttons (⛶ 📋 ×)
+  - Enhanced hover effects and interaction feedback
+- 📦 **Code Refactoring**: Abstracted generic scroll loading function, reducing 150+ lines of duplicate code
+- ⚡ **Performance Boost**: Optimized content extraction logic, improved code maintainability
+
+### v2.0.2 (2026-02-09)
+
+- 🔧 Optimized configuration: Merged "Max Scroll Attempts" and "Max Pages to Fetch" into a unified config
+- 📊 Unified scroll behavior: Blocking and AI summarization share the same configuration
+- ⚡ Simplified config panel: Reduced redundant settings, improved UX
+- 🔢 Extended config range: Max scroll attempts expanded from 1-20 to 1-50
+
+### v2.0.1 (2026-02-09)
+
+- 🎨 Optimized AI summary result panel: Adapted to Twitter dark mode
+- 🔧 Improved Markdown rendering: Auto-clean code block markers, optimized styles
+- 📝 Renamed to "Twitter X Toolkit" for multi-functional positioning and future expansion
+- 🌈 Enhanced color scheme: Dark background, highlighted text, better readability
+
 ### v2.0 (2026-02-09)
 
 - 🚀 **Major Update**: Added AI-powered summarization feature
@@ -249,7 +273,6 @@ A: The current version doesn't support custom prompts and uses built-in optimize
 - 🌐 Support all OpenAI-compatible API services
 - 📊 Configurable max pages to load
 - 🎨 Beautiful result panel with fullscreen and copy features
-- 🔧 Renamed to "Twitter AI Helper", integrating blocking and AI summarization
 - ⚙️ Updated config manager with more configuration options
 
 ### v1.4 (2026-02-01)
