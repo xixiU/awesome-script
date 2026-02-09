@@ -23,81 +23,239 @@ def parse_insert_statement(sql_content):
     """
     tables_data = {}
     
-    # 正则表达式匹配 INSERT 语句
-    # 支持格式: 
-    # - INSERT INTO table (col1, col2) VALUES (val1, val2)
-    # - INSERT INTO "schema"."table" (col1, col2) VALUES (val1, val2)
-    # - INSERT INTO schema.table (col1, col2) VALUES (val1, val2)
-    insert_pattern = re.compile(
-        r'INSERT\s+INTO\s+(?:"?(\w+)"?\."?(\w+)"?|`?(\w+)`?)\s*\((.*?)\)\s*VALUES\s*\((.*?)\)',
-        re.IGNORECASE | re.DOTALL
-    )
+    # 首先使用简单模式找到 INSERT 语句的起始位置
+    insert_starts = []
+    for match in re.finditer(r'INSERT\s+INTO\s+', sql_content, re.IGNORECASE):
+        insert_starts.append(match.start())
     
-    # 查找所有 INSERT 语句
-    matches = insert_pattern.finditer(sql_content)
-    
-    for match in matches:
-        # 解析表名：支持 schema.table 或 单独的 table
-        if match.group(1) and match.group(2):
-            # Oracle 格式: "schema"."table"
-            schema_name = match.group(1).strip()
-            table_name = match.group(2).strip()
-            full_table_name = f"{schema_name}.{table_name}"
-            columns_str = match.group(4).strip()
-            values_str = match.group(5).strip()
+    # 处理每个 INSERT 语句
+    for i, start_pos in enumerate(insert_starts):
+        # 确定结束位置（到下一个 INSERT 或文件末尾）
+        if i + 1 < len(insert_starts):
+            end_pos = insert_starts[i + 1]
         else:
-            # 普通格式: table
-            full_table_name = match.group(3).strip()
-            columns_str = match.group(4).strip()
-            values_str = match.group(5).strip()
+            end_pos = len(sql_content)
         
-        # 解析列名
-        columns = [col.strip().strip('`"\'') for col in columns_str.split(',')]
+        statement = sql_content[start_pos:end_pos].strip()
         
-        # 解析值
-        values = parse_values(values_str)
-        
-        # 存储数据
-        if full_table_name not in tables_data:
-            tables_data[full_table_name] = {'columns': columns, 'rows': []}
-        
-        tables_data[full_table_name]['rows'].append(values)
-    
-    # 处理多行 VALUES 格式: VALUES (row1), (row2), (row3)
-    multi_value_pattern = re.compile(
-        r'INSERT\s+INTO\s+(?:"?(\w+)"?\."?(\w+)"?|`?(\w+)`?)\s*\((.*?)\)\s*VALUES\s*((?:\([^)]+\)\s*,?\s*)+)',
-        re.IGNORECASE | re.DOTALL
-    )
-    
-    for match in multi_value_pattern.finditer(sql_content):
-        # 解析表名
-        if match.group(1) and match.group(2):
-            # Oracle 格式: "schema"."table"
-            schema_name = match.group(1).strip()
-            table_name = match.group(2).strip()
-            full_table_name = f"{schema_name}.{table_name}"
-            columns_str = match.group(4).strip()
-            values_block = match.group(5).strip()
-        else:
-            # 普通格式: table
-            full_table_name = match.group(3).strip()
-            columns_str = match.group(4).strip()
-            values_block = match.group(5).strip()
-        
-        columns = [col.strip().strip('`"\'') for col in columns_str.split(',')]
-        
-        # 提取所有值组
-        value_groups = re.findall(r'\(([^)]+)\)', values_block)
-        
-        if full_table_name not in tables_data:
-            tables_data[full_table_name] = {'columns': columns, 'rows': []}
-        
-        for value_group in value_groups:
-            values = parse_values(value_group)
-            if values not in tables_data[full_table_name]['rows']:
-                tables_data[full_table_name]['rows'].append(values)
+        # 解析单个 INSERT 语句
+        result = parse_single_insert(statement)
+        if result:
+            table_name, columns, rows = result
+            
+            # 存储数据
+            if table_name not in tables_data:
+                tables_data[table_name] = {'columns': columns, 'rows': []}
+            
+            for row in rows:
+                # 避免重复添加
+                if row not in tables_data[table_name]['rows']:
+                    tables_data[table_name]['rows'].append(row)
     
     return tables_data
+
+
+def parse_single_insert(statement):
+    """
+    解析单个 INSERT 语句
+    
+    参数:
+        statement: 单个 INSERT 语句字符串
+    
+    返回:
+        tuple: (table_name, columns, rows) 或 None
+    """
+    # 匹配表名
+    table_pattern = re.compile(
+        r'INSERT\s+INTO\s+(?:"?(\w+)"?\."?(\w+)"?|`?(\w+)`?)\s*\(',
+        re.IGNORECASE
+    )
+    
+    table_match = table_pattern.search(statement)
+    if not table_match:
+        return None
+    
+    # 解析表名
+    if table_match.group(1) and table_match.group(2):
+        # Oracle 格式: "schema"."table"
+        schema_name = table_match.group(1).strip()
+        table_name = table_match.group(2).strip()
+        full_table_name = f"{schema_name}.{table_name}"
+    else:
+        # 普通格式: table
+        full_table_name = table_match.group(3).strip()
+    
+    # 找到列名部分的括号
+    columns_start = statement.find('(', table_match.end() - 1)
+    if columns_start == -1:
+        return None
+    
+    # 使用括号匹配找到列名部分的结束位置
+    columns_end = find_matching_bracket(statement, columns_start)
+    if columns_end == -1:
+        return None
+    
+    columns_str = statement[columns_start + 1:columns_end]
+    
+    # 解析列名（处理带引号的列名）
+    columns = parse_column_names(columns_str)
+    
+    # 找到 VALUES 关键字
+    values_match = re.search(r'\bVALUES\s*', statement[columns_end:], re.IGNORECASE)
+    if not values_match:
+        return None
+    
+    values_start = columns_end + values_match.end()
+    
+    # 提取 VALUES 后的内容（到分号或语句结尾）
+    values_part = statement[values_start:].strip()
+    if values_part.endswith(';'):
+        values_part = values_part[:-1].strip()
+    
+    # 提取所有值行
+    value_rows = extract_value_rows(values_part)
+    
+    # 解析每一行的值
+    parsed_rows = []
+    for value_row in value_rows:
+        values = parse_values(value_row)
+        if values:
+            parsed_rows.append(values)
+    
+    return (full_table_name, columns, parsed_rows)
+
+
+def find_matching_bracket(text, start_pos):
+    """
+    找到匹配的右括号位置
+    
+    参数:
+        text: 文本字符串
+        start_pos: 左括号的位置
+    
+    返回:
+        int: 匹配的右括号位置，如果没找到返回 -1
+    """
+    depth = 0
+    in_quotes = False
+    quote_char = None
+    
+    for i in range(start_pos, len(text)):
+        char = text[i]
+        
+        # 处理引号
+        if char in ('"', "'") and (i == 0 or text[i-1] != '\\'):
+            if not in_quotes:
+                in_quotes = True
+                quote_char = char
+            elif char == quote_char:
+                in_quotes = False
+                quote_char = None
+        
+        # 只在非引号内处理括号
+        if not in_quotes:
+            if char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+                if depth == 0:
+                    return i
+    
+    return -1
+
+
+def parse_column_names(columns_str):
+    """
+    解析列名字符串，处理带引号的列名
+    
+    参数:
+        columns_str: 列名字符串，如: "ID", "NAME", "AGE"
+    
+    返回:
+        list: 列名列表
+    """
+    columns = []
+    current_col = ''
+    in_quotes = False
+    quote_char = None
+    
+    for i, char in enumerate(columns_str):
+        if char in ('"', "'", '`') and (i == 0 or columns_str[i-1] != '\\'):
+            if not in_quotes:
+                in_quotes = True
+                quote_char = char
+            elif char == quote_char:
+                in_quotes = False
+                quote_char = None
+            # 不把引号加入列名
+            continue
+        elif char == ',' and not in_quotes:
+            if current_col.strip():
+                columns.append(current_col.strip())
+            current_col = ''
+        else:
+            current_col += char
+    
+    # 添加最后一个列名
+    if current_col.strip():
+        columns.append(current_col.strip())
+    
+    return columns
+
+
+def extract_value_rows(values_block):
+    """
+    从 VALUES 块中提取所有行数据
+    支持: (row1), (row2), (row3) 或单个 (row1)
+    
+    参数:
+        values_block: VALUES 后的内容块
+    
+    返回:
+        list: 所有行的内容列表
+    """
+    rows = []
+    depth = 0
+    current_row = ''
+    in_quotes = False
+    quote_char = None
+    
+    i = 0
+    while i < len(values_block):
+        char = values_block[i]
+        
+        # 处理引号
+        if char in ('"', "'") and (i == 0 or values_block[i-1] != '\\'):
+            if not in_quotes:
+                in_quotes = True
+                quote_char = char
+            elif char == quote_char:
+                in_quotes = False
+                quote_char = None
+        
+        # 处理括号
+        if not in_quotes:
+            if char == '(':
+                depth += 1
+                if depth == 1:
+                    current_row = ''
+                    i += 1
+                    continue
+            elif char == ')':
+                depth -= 1
+                if depth == 0:
+                    if current_row.strip():
+                        rows.append(current_row.strip())
+                    current_row = ''
+                    i += 1
+                    continue
+        
+        if depth > 0:
+            current_row += char
+        
+        i += 1
+    
+    return rows
 
 
 def parse_values(values_str):
@@ -146,10 +304,18 @@ def convert_to_excel(tables_data, output_path, verbose=True):
         output_path: 输出文件路径
         verbose: 是否显示详细信息
     """
+    if not tables_data:
+        raise ValueError("没有数据可以转换为 Excel")
+    
     with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
         for table_name, data in tables_data.items():
             columns = data['columns']
             rows = data['rows']
+            
+            if not rows:
+                if verbose:
+                    print(f"    - 表 '{table_name}' 没有数据，跳过")
+                continue
             
             # 创建 DataFrame
             df = pd.DataFrame(rows, columns=columns)
@@ -157,6 +323,11 @@ def convert_to_excel(tables_data, output_path, verbose=True):
             # 写入 Excel
             # Excel 工作表名最多 31 个字符，将点号替换为下划线
             sheet_name = table_name.replace('.', '_')[:31]
+            
+            # 确保工作表名不为空
+            if not sheet_name:
+                sheet_name = 'Sheet1'
+            
             df.to_excel(writer, sheet_name=sheet_name, index=False)
             
             if verbose:
