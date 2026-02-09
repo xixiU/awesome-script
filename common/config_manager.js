@@ -732,13 +732,18 @@
             const successMsg = document.getElementById(`${this.configName}-save-success`);
             if (successMsg) {
                 successMsg.classList.add('show');
-                setTimeout(() => {
-                    successMsg.classList.remove('show');
-                }, 3000);
             }
 
             // 触发配置更新事件
             this.onConfigUpdated();
+
+            // 保存成功后自动关闭面板
+            setTimeout(() => {
+                if (successMsg) {
+                    successMsg.classList.remove('show');
+                }
+                this.hide();
+            }, 1000);
         }
 
         // 配置更新回调

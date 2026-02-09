@@ -587,7 +587,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         settingsButton.innerHTML = '⚙️';
         settingsButton.title = t('configPanelTitle') || 'Settings';
         settingsButton.style.cssText = getActionButtonStyle('#536471', '#657786');
-        settingsButton.addEventListener('click', () => config.showPanel());
+        settingsButton.addEventListener('click', () => config.show());
         settingsButton.addEventListener('mouseenter', function () {
             this.style.transform = 'scale(1.1)';
             this.style.boxShadow = '0 6px 16px rgba(83, 100, 113, 0.5)';
