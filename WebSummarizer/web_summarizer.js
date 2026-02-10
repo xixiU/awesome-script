@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.5.5
-// @description  使用Dify工作流或Chrome Gemini AI智能总结网页内容，支持全文总结和选中文本总结
+// @version      1.5.6
+// @description  使用Dify工作流、Chrome Gemini AI或OpenAI兼容API智能总结网页内容，支持全文总结和选中文本总结
 // @author       xixiu
 // @match        *://*/*
 // @exclude      https://www.youtube.com/*
@@ -12,8 +12,8 @@
 // @grant        GM_registerMenuCommand
 // @connect      *
 // @run-at       document-end
-// @downloadURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/difyWebSummarizer/dify_web_summarizer.js
-// @updateURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/difyWebSummarizer/dify_web_summarizer.js
+// @downloadURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/WebSummarizer/web_summarizer.js
+// @updateURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/WebSummarizer/web_summarizer.js
 // ==/UserScript==
 
 (function () {
@@ -21,12 +21,17 @@
 
     // ==================== 配置区域 ====================
     const CONFIG = {
-        // AI提供商配置: 'dify' 或 'chrome-gemini'
+        // AI提供商配置: 'dify' 或 'chrome-gemini' 或 'openai'
         aiProvider: GM_getValue('aiProvider', 'dify'),
 
         // Dify API配置 - 需要用户自行配置
         difyApiUrl: GM_getValue('difyApiUrl', 'https://api.dify.ai/v1/workflows/run'), // 替换为你的Dify工作流API地址
         difyApiKey: GM_getValue('difyApiKey', ''), // 替换为你的Dify API Key
+
+        // OpenAI API配置 - 需要用户自行配置
+        openaiBaseUrl: GM_getValue('openaiBaseUrl', 'https://api.openai.com/v1'), // OpenAI API基础地址
+        openaiModel: GM_getValue('openaiModel', 'gpt-3.5-turbo'), // 模型名称
+        openaiApiKey: GM_getValue('openaiApiKey', ''), // OpenAI API Key
 
         // 按钮样式配置
         buttonPosition: {
@@ -1012,6 +1017,88 @@ ${newsContent}
         }
     }
 
+    // ==================== OpenAI 兼容API调用 ====================
+    class OpenAIAPI {
+        static async summarize(newsUrl, newsContent) {
+            return new Promise((resolve, reject) => {
+                if (!CONFIG.openaiApiKey) {
+                    reject(new Error('请先配置 OpenAI API Key！点击设置按钮进行配置。'));
+                    return;
+                }
+
+                if (!CONFIG.openaiBaseUrl) {
+                    reject(new Error('请先配置 OpenAI Base URL！点击设置按钮进行配置。'));
+                    return;
+                }
+
+                // 构建总结提示词
+                const systemPrompt = `你是一个专业的内容总结助手。请对用户提供的网页内容进行智能总结，要求：
+1. 提取核心观点和关键信息
+2. 使用清晰的结构组织内容
+3. 保持客观准确
+4. 无论原文使用何种语言，都使用中文总结
+5. 输出markdown格式的内容
+6. 基于文章观点，在单独章节给出相关的建议或者预测
+7. 最后要有阅读原文跳转链接`;
+
+                const userPrompt = `网页地址：${newsUrl}
+
+网页内容：
+${newsContent}
+
+请生成总结：`;
+
+                // 构建完整的API URL
+                const apiUrl = `${CONFIG.openaiBaseUrl.replace(/\/$/, '')}/chat/completions`;
+
+                GM_xmlhttpRequest({
+                    method: 'POST',
+                    url: apiUrl,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${CONFIG.openaiApiKey}`
+                    },
+                    data: JSON.stringify({
+                        model: CONFIG.openaiModel,
+                        messages: [
+                            {
+                                role: 'system',
+                                content: systemPrompt
+                            },
+                            {
+                                role: 'user',
+                                content: userPrompt
+                            }
+                        ],
+                        temperature: 0.7,
+                        max_tokens: 2000
+                    }),
+                    timeout: 60000,
+                    onload: function (response) {
+                        try {
+                            if (response.status === 200) {
+                                const data = JSON.parse(response.responseText);
+                                // OpenAI API 返回结构: data.choices[0].message.content
+                                const result = data.choices?.[0]?.message?.content || JSON.stringify(data, null, 2);
+                                resolve(result);
+                            } else {
+                                reject(new Error(`API请求失败: ${response.status} ${response.statusText}\n${response.responseText}`));
+                            }
+                        } catch (e) {
+                            reject(new Error(`解析响应失败: ${e.message}\n${response.responseText}`));
+                        }
+                    },
+                    onerror: function (error) {
+                        reject(new Error(`网络请求失败: ${error.message || '未知错误'}`));
+                    },
+                    ontimeout: function () {
+                        reject(new Error('请求超时，请稍后重试'));
+                    }
+                });
+            });
+        }
+    }
+
     // ==================== UI管理 ====================
     class UIManager {
         constructor() {
@@ -1405,6 +1492,11 @@ ${newsContent}
             geminiOption.textContent = 'Chrome Gemini AI (内置)';
             providerSelect.appendChild(geminiOption);
 
+            const openaiOption = document.createElement('option');
+            openaiOption.value = 'openai';
+            openaiOption.textContent = 'OpenAI 兼容模式';
+            providerSelect.appendChild(openaiOption);
+
             const providerHelp = document.createElement('div');
             providerHelp.className = 'dify-form-help';
             providerHelp.textContent = '选择使用哪个 AI 服务来生成总结';
@@ -1477,6 +1569,98 @@ ${newsContent}
             // 将 Dify 配置区块添加到内容区
             content.appendChild(difyConfigSection);
 
+            // OpenAI 配置区块
+            const openaiConfigSection = document.createElement('div');
+            openaiConfigSection.id = 'openai-config-section';
+            openaiConfigSection.style.display = 'none';
+
+            // OpenAI Base URL 表单组
+            const openaiUrlGroup = document.createElement('div');
+            openaiUrlGroup.className = 'dify-form-group';
+
+            const openaiUrlLabel = document.createElement('label');
+            openaiUrlLabel.setAttribute('for', 'openai-base-url');
+            openaiUrlLabel.textContent = 'OpenAI Base URL';
+
+            const openaiUrlStatus = document.createElement('span');
+            openaiUrlStatus.className = 'dify-config-status';
+            openaiUrlStatus.id = 'openai-url-status';
+            openaiUrlLabel.appendChild(openaiUrlStatus);
+
+            const openaiUrlInput = document.createElement('input');
+            openaiUrlInput.type = 'text';
+            openaiUrlInput.id = 'openai-base-url';
+            openaiUrlInput.placeholder = 'https://api.openai.com/v1';
+            openaiUrlInput.autocomplete = 'off';
+
+            const openaiUrlHelp = document.createElement('div');
+            openaiUrlHelp.className = 'dify-form-help';
+            openaiUrlHelp.textContent = 'OpenAI API 基础地址（兼容 OpenAI 格式的其他服务也可使用）';
+
+            openaiUrlGroup.appendChild(openaiUrlLabel);
+            openaiUrlGroup.appendChild(openaiUrlInput);
+            openaiUrlGroup.appendChild(openaiUrlHelp);
+            openaiConfigSection.appendChild(openaiUrlGroup);
+
+            // OpenAI Model 表单组
+            const openaiModelGroup = document.createElement('div');
+            openaiModelGroup.className = 'dify-form-group';
+
+            const openaiModelLabel = document.createElement('label');
+            openaiModelLabel.setAttribute('for', 'openai-model');
+            openaiModelLabel.textContent = '模型名称 (Model)';
+
+            const openaiModelStatus = document.createElement('span');
+            openaiModelStatus.className = 'dify-config-status';
+            openaiModelStatus.id = 'openai-model-status';
+            openaiModelLabel.appendChild(openaiModelStatus);
+
+            const openaiModelInput = document.createElement('input');
+            openaiModelInput.type = 'text';
+            openaiModelInput.id = 'openai-model';
+            openaiModelInput.placeholder = 'gpt-3.5-turbo';
+            openaiModelInput.autocomplete = 'off';
+
+            const openaiModelHelp = document.createElement('div');
+            openaiModelHelp.className = 'dify-form-help';
+            openaiModelHelp.textContent = '使用的模型名称，如 gpt-3.5-turbo、gpt-4、deepseek-chat 等';
+
+            openaiModelGroup.appendChild(openaiModelLabel);
+            openaiModelGroup.appendChild(openaiModelInput);
+            openaiModelGroup.appendChild(openaiModelHelp);
+            openaiConfigSection.appendChild(openaiModelGroup);
+
+            // OpenAI API Key 表单组
+            const openaiKeyGroup = document.createElement('div');
+            openaiKeyGroup.className = 'dify-form-group';
+
+            const openaiKeyLabel = document.createElement('label');
+            openaiKeyLabel.setAttribute('for', 'openai-api-key');
+            openaiKeyLabel.textContent = 'API Key (SK)';
+
+            const openaiKeyStatus = document.createElement('span');
+            openaiKeyStatus.className = 'dify-config-status';
+            openaiKeyStatus.id = 'openai-key-status';
+            openaiKeyLabel.appendChild(openaiKeyStatus);
+
+            const openaiKeyInput = document.createElement('input');
+            openaiKeyInput.type = 'password';
+            openaiKeyInput.id = 'openai-api-key';
+            openaiKeyInput.placeholder = 'sk-xxxxxxxxxxxxxxxx';
+            openaiKeyInput.autocomplete = 'off';
+
+            const openaiKeyHelp = document.createElement('div');
+            openaiKeyHelp.className = 'dify-form-help';
+            openaiKeyHelp.textContent = 'OpenAI API 密钥（或兼容服务的 API 密钥）';
+
+            openaiKeyGroup.appendChild(openaiKeyLabel);
+            openaiKeyGroup.appendChild(openaiKeyInput);
+            openaiKeyGroup.appendChild(openaiKeyHelp);
+            openaiConfigSection.appendChild(openaiKeyGroup);
+
+            // 将 OpenAI 配置区块添加到内容区
+            content.appendChild(openaiConfigSection);
+
             // 按钮组
             const actionsDiv = document.createElement('div');
             actionsDiv.className = 'dify-form-actions';
@@ -1511,8 +1695,13 @@ ${newsContent}
             providerSelect.addEventListener('change', () => {
                 if (providerSelect.value === 'chrome-gemini') {
                     difyConfigSection.style.display = 'none';
+                    openaiConfigSection.style.display = 'none';
+                } else if (providerSelect.value === 'openai') {
+                    difyConfigSection.style.display = 'none';
+                    openaiConfigSection.style.display = 'block';
                 } else {
                     difyConfigSection.style.display = 'block';
+                    openaiConfigSection.style.display = 'none';
                 }
             });
 
@@ -1521,6 +1710,15 @@ ${newsContent}
                 if (e.key === 'Enter') this.saveSettings();
             });
             keyInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.saveSettings();
+            });
+            openaiUrlInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.saveSettings();
+            });
+            openaiModelInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.saveSettings();
+            });
+            openaiKeyInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') this.saveSettings();
             });
         }
@@ -1584,6 +1782,8 @@ ${newsContent}
                 let result;
                 if (CONFIG.aiProvider === 'chrome-gemini') {
                     result = await ChromeGeminiAPI.summarize(newsUrl, newsContent);
+                } else if (CONFIG.aiProvider === 'openai') {
+                    result = await OpenAIAPI.summarize(newsUrl, newsContent);
                 } else {
                     result = await DifyAPI.summarize(newsUrl, newsContent);
                 }
@@ -2275,16 +2475,28 @@ ${newsContent}
             const urlInput = this.settingsPanel.querySelector('#dify-api-url');
             const keyInput = this.settingsPanel.querySelector('#dify-api-key');
             const difyConfigSection = this.settingsPanel.querySelector('#dify-config-section');
+            const openaiConfigSection = this.settingsPanel.querySelector('#openai-config-section');
+            const openaiUrlInput = this.settingsPanel.querySelector('#openai-base-url');
+            const openaiModelInput = this.settingsPanel.querySelector('#openai-model');
+            const openaiKeyInput = this.settingsPanel.querySelector('#openai-api-key');
 
             providerSelect.value = CONFIG.aiProvider;
             urlInput.value = CONFIG.difyApiUrl;
             keyInput.value = CONFIG.difyApiKey;
+            openaiUrlInput.value = CONFIG.openaiBaseUrl;
+            openaiModelInput.value = CONFIG.openaiModel;
+            openaiKeyInput.value = CONFIG.openaiApiKey;
 
-            // 根据当前提供商显示/隐藏 Dify 配置
+            // 根据当前提供商显示/隐藏配置区块
             if (CONFIG.aiProvider === 'chrome-gemini') {
                 difyConfigSection.style.display = 'none';
+                openaiConfigSection.style.display = 'none';
+            } else if (CONFIG.aiProvider === 'openai') {
+                difyConfigSection.style.display = 'none';
+                openaiConfigSection.style.display = 'block';
             } else {
                 difyConfigSection.style.display = 'block';
+                openaiConfigSection.style.display = 'none';
             }
 
             // 隐藏成功消息
@@ -2310,11 +2522,17 @@ ${newsContent}
             const providerSelect = this.settingsPanel.querySelector('#dify-ai-provider');
             const urlInput = this.settingsPanel.querySelector('#dify-api-url');
             const keyInput = this.settingsPanel.querySelector('#dify-api-key');
+            const openaiUrlInput = this.settingsPanel.querySelector('#openai-base-url');
+            const openaiModelInput = this.settingsPanel.querySelector('#openai-model');
+            const openaiKeyInput = this.settingsPanel.querySelector('#openai-api-key');
             const successMsg = this.settingsPanel.querySelector('#dify-save-success');
 
             const aiProvider = providerSelect.value;
             const apiUrl = urlInput.value.trim();
             const apiKey = keyInput.value.trim();
+            const openaiUrl = openaiUrlInput.value.trim();
+            const openaiModel = openaiModelInput.value.trim();
+            const openaiKey = openaiKeyInput.value.trim();
 
             // 如果选择 Dify，需要验证配置
             if (aiProvider === 'dify') {
@@ -2356,6 +2574,57 @@ ${newsContent}
                 GM_setValue('difyApiUrl', apiUrl);
                 GM_setValue('difyApiKey', apiKey);
             }
+            // 如果选择 OpenAI，需要验证配置
+            else if (aiProvider === 'openai') {
+                // 基本验证
+                if (!openaiUrl) {
+                    openaiUrlInput.focus();
+                    openaiUrlInput.style.borderColor = '#ef4444';
+                    setTimeout(() => {
+                        openaiUrlInput.style.borderColor = '';
+                    }, 2000);
+                    return;
+                }
+
+                if (!openaiModel) {
+                    openaiModelInput.focus();
+                    openaiModelInput.style.borderColor = '#ef4444';
+                    setTimeout(() => {
+                        openaiModelInput.style.borderColor = '';
+                    }, 2000);
+                    return;
+                }
+
+                if (!openaiKey) {
+                    openaiKeyInput.focus();
+                    openaiKeyInput.style.borderColor = '#ef4444';
+                    setTimeout(() => {
+                        openaiKeyInput.style.borderColor = '';
+                    }, 2000);
+                    return;
+                }
+
+                // 验证 URL 格式
+                try {
+                    new URL(openaiUrl);
+                } catch (e) {
+                    openaiUrlInput.focus();
+                    openaiUrlInput.style.borderColor = '#ef4444';
+                    alert('请输入有效的 Base URL（必须以 http:// 或 https:// 开头）');
+                    setTimeout(() => {
+                        openaiUrlInput.style.borderColor = '';
+                    }, 2000);
+                    return;
+                }
+
+                // 保存 OpenAI 配置
+                CONFIG.openaiBaseUrl = openaiUrl;
+                CONFIG.openaiModel = openaiModel;
+                CONFIG.openaiApiKey = openaiKey;
+                GM_setValue('openaiBaseUrl', openaiUrl);
+                GM_setValue('openaiModel', openaiModel);
+                GM_setValue('openaiApiKey', openaiKey);
+            }
 
             // 保存 AI 提供商选择
             CONFIG.aiProvider = aiProvider;
@@ -2379,8 +2648,11 @@ ${newsContent}
         updateConfigStatus() {
             const urlStatus = this.settingsPanel.querySelector('#dify-url-status');
             const keyStatus = this.settingsPanel.querySelector('#dify-key-status');
+            const openaiUrlStatus = this.settingsPanel.querySelector('#openai-url-status');
+            const openaiModelStatus = this.settingsPanel.querySelector('#openai-model-status');
+            const openaiKeyStatus = this.settingsPanel.querySelector('#openai-key-status');
 
-            // 更新 URL 状态
+            // 更新 Dify URL 状态
             if (CONFIG.difyApiUrl && CONFIG.difyApiUrl !== 'https://api.dify.ai/v1/workflows/run') {
                 urlStatus.textContent = '已配置';
                 urlStatus.className = 'dify-config-status configured';
@@ -2389,13 +2661,40 @@ ${newsContent}
                 urlStatus.className = 'dify-config-status not-configured';
             }
 
-            // 更新 Key 状态
+            // 更新 Dify Key 状态
             if (CONFIG.difyApiKey) {
                 keyStatus.textContent = '已配置';
                 keyStatus.className = 'dify-config-status configured';
             } else {
                 keyStatus.textContent = '未配置';
                 keyStatus.className = 'dify-config-status not-configured';
+            }
+
+            // 更新 OpenAI Base URL 状态
+            if (CONFIG.openaiBaseUrl && CONFIG.openaiBaseUrl !== 'https://api.openai.com/v1') {
+                openaiUrlStatus.textContent = '已配置';
+                openaiUrlStatus.className = 'dify-config-status configured';
+            } else {
+                openaiUrlStatus.textContent = '未配置';
+                openaiUrlStatus.className = 'dify-config-status not-configured';
+            }
+
+            // 更新 OpenAI Model 状态
+            if (CONFIG.openaiModel && CONFIG.openaiModel !== 'gpt-3.5-turbo') {
+                openaiModelStatus.textContent = '已配置';
+                openaiModelStatus.className = 'dify-config-status configured';
+            } else {
+                openaiModelStatus.textContent = '未配置';
+                openaiModelStatus.className = 'dify-config-status not-configured';
+            }
+
+            // 更新 OpenAI Key 状态
+            if (CONFIG.openaiApiKey) {
+                openaiKeyStatus.textContent = '已配置';
+                openaiKeyStatus.className = 'dify-config-status configured';
+            } else {
+                openaiKeyStatus.textContent = '未配置';
+                openaiKeyStatus.className = 'dify-config-status not-configured';
             }
         }
 
