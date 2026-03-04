@@ -31,6 +31,7 @@
 - [独立脚本](#独立脚本)
   - [removeXAd.js](#removexadjs)
 - [项目](#项目)
+  - [WSL 右键菜单](#wsl-右键菜单)
   - [Enetedu 脚本](#enetedu-脚本)
   - [Iflytek 视频速度控制](#iflytek-视频速度控制)
   - [JWS 数据导出器](#jws-数据导出器)
@@ -54,6 +55,30 @@
 ---
 
 ## 项目
+
+### WSL 右键菜单
+
+**描述**: 在 Windows 资源管理器中注册「在 WSL 中打开」右键菜单，右键点击任意文件夹即可一键进入对应的 WSL 路径。自动检测 Windows Terminal，优先使用 `wt.exe`，回退到 WSL 默认终端。
+
+**文件**:
+- `OpenInWSL/setup.ps1`: 安装 / 卸载脚本
+
+**使用方法**:
+
+```powershell
+# 安装（需要管理员权限，脚本会自动提权）
+.\OpenInWSL\setup.ps1
+
+# 卸载
+.\OpenInWSL\setup.ps1 -Uninstall
+
+# 强制指定终端（wt = Windows Terminal, wsl = WSL默认终端）
+.\OpenInWSL\setup.ps1 -Terminal wt
+```
+
+**注意事项**: 需要已安装 WSL。修改的是 `HKEY_CLASSES_ROOT` 注册表项，卸载后完全还原。
+
+---
 
 ### Enetedu 脚本
 
