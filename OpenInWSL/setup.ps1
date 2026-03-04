@@ -1,4 +1,4 @@
-# WSL 右键菜单集成工具
+﻿# WSL 右键菜单集成工具
 # 在 Windows 资源管理器中添加「在 WSL 中打开」右键菜单项
 # 用法:
 #   安装: .\setup.ps1
@@ -11,6 +11,9 @@ param(
     [ValidateSet("wt", "wsl", "auto")]
     [string]$Terminal = "auto"
 )
+
+# PS 5.1 控制台默认 GBK，强制 UTF-8 输出避免乱码
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # ─── 常量 ────────────────────────────────────────────────────────────────────
 
@@ -29,16 +32,17 @@ $REG_PATHS = @(
 # ─── 管理员提权 ───────────────────────────────────────────────────────────────
 
 function Assert-Admin {
-    $isAdmin = ([Security.Principal.WindowsPrincipal]
-        [Security.Principal.WindowsIdentity]::GetCurrent()
-    ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
     if (-not $isAdmin) {
         Write-Host "需要管理员权限，正在提权重启..." -ForegroundColor Yellow
-        $args = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
-        if ($Uninstall)            { $args += " -Uninstall" }
-        if ($Terminal -ne "auto")  { $args += " -Terminal $Terminal" }
-        Start-Process powershell -Verb RunAs -ArgumentList $args
+        # 用数组传参，避免 Start-Process 将整串当作单个参数导致解析失败
+        $launchArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
+        if ($Uninstall)           { $launchArgs += "-Uninstall" }
+        if ($Terminal -ne "auto") { $launchArgs += @("-Terminal", $Terminal) }
+        Start-Process powershell -Verb RunAs -ArgumentList $launchArgs
         exit
     }
 }
@@ -54,8 +58,8 @@ function Get-TerminalCommand {
     }
 
     # auto: 优先用 Windows Terminal
-    $wtPath = (Get-Command wt.exe -ErrorAction SilentlyContinue)?.Source
-    if ($wtPath) {
+    $wtCmd = Get-Command wt.exe -ErrorAction SilentlyContinue
+    if ($wtCmd) {
         return "wt.exe wsl.exe --cd `"%V`""
     }
     return "wsl.exe --cd `"%V`""
