@@ -31,9 +31,25 @@ workflow 会在每周日凌晨 2 点自动运行，使用默认配置：
 
 ### Token 配置
 
-此 workflow 使用 GitHub 自动提供的 `GITHUB_TOKEN`，**无需手动配置**。
+**默认配置（推荐）：**
 
-如果需要使用自定义 token（例如需要更高权限），可以：
+此 workflow 默认使用 GitHub 自动提供的 `GITHUB_TOKEN`，**完全无需手动配置**。
+
+workflow 文件中的配置：
+```yaml
+token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+`GITHUB_TOKEN` 是 GitHub Actions 自动注入的内置 token，每次运行时自动可用，不需要在 Secrets 中添加任何东西。
+
+**可选：使用自定义 Token**
+
+仅在以下情况需要自定义 token：
+- 需要跨仓库操作
+- 需要更高权限
+- 需要触发其他 workflows
+
+步骤：
 
 1. 在 GitHub 创建 Personal Access Token
    - 进入 Settings → Developer settings → Personal access tokens → Tokens (classic)
@@ -44,12 +60,15 @@ workflow 会在每周日凌晨 2 点自动运行，使用默认配置：
 2. 添加到仓库 Secrets
    - 进入仓库 Settings → Secrets and variables → Actions
    - 点击 New repository secret
-   - Name: `GH_PAT`
+   - Name: `GH_PAT`（或其他你喜欢的名字）
    - Value: 粘贴你的 token
    - 点击 Add secret
 
 3. 修改 workflow 文件中的 token 配置
    ```yaml
+   # 将这一行：
+   token: ${{ secrets.GITHUB_TOKEN }}
+   # 改为：
    token: ${{ secrets.GH_PAT }}
    ```
 
