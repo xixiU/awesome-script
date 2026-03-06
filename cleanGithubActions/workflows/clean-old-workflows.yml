@@ -1,0 +1,36 @@
+name: Clean Old Workflow Runs
+
+on:
+  # 每周日凌晨 2 点自动运行
+  schedule:
+    - cron: '0 2 * * 0'
+  # 支持手动触发
+  workflow_dispatch:
+    inputs:
+      days_to_keep:
+        description: '保留最近几天的 runs'
+        required: false
+        default: '30'
+      minimum_runs_to_keep:
+        description: '每个 workflow 至少保留的 runs 数量'
+        required: false
+        default: '5'
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: ${{ github.event.inputs.days_to_keep || 30 }}
+          keep_minimum_runs: ${{ github.event.inputs.minimum_runs_to_keep || 5 }}
