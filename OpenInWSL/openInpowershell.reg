@@ -1,0 +1,17 @@
+﻿Windows Registry Editor Version 5.00
+
+[HKEY_CLASSES_ROOT\Directory\Background\shell\OpenPowerShellHere]
+@="在此处打开 PowerShell"
+"Icon"="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+
+[HKEY_CLASSES_ROOT\Directory\Background\shell\OpenPowerShellHere\command]
+@="powershell.exe -NoExit -Command \"Set-Location -LiteralPath '%V'\""
+
+
+[HKEY_CLASSES_ROOT\Directory\Background\shell\RunAsAdminPowerShell]
+@="以管理员身份打开 PowerShell"
+"HasLUAShield"=""
+"Extended"=""  ; 按住Shift时显示
+
+[HKEY_CLASSES_ROOT\Directory\Background\shell\RunAsAdminPowerShell\command]
+@="powershell.exe -NoExit -Command \"Set-Location -LiteralPath '%V'\""

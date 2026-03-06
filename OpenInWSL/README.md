@@ -34,3 +34,7 @@
 - 已安装 WSL（Windows Subsystem for Linux）
 - PowerShell 5.1+（Windows 10 自带）
 - 可选：Windows Terminal（安装后自动优先使用）
+
+## 备注
+
+ps1和reg文件需要保存为UTF-8 with BOM格式，否则在右键菜单会出现乱码
