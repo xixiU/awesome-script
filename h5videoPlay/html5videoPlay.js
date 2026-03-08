@@ -1,4 +1,4 @@
-/* globals jQuery, $, Vue */
+/* globals unsafeWindow */
 // ==UserScript==
 // @name       HTML5视频播放工具
 // @name:en	   HTML5 Video Playing Tools
@@ -6,14 +6,12 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.1.0
+// @version    2.1.1
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
 // @run-at     document-start
 // @inject-into content
-// @require    https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js
-// @require    https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js
 // @require    https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/common/config_manager.js
 // @grant      GM_addStyle
 // @grant      GM_xmlhttpRequest
@@ -520,21 +518,19 @@ const adjustVolume = n => {
         }
     }
 };
+let _tipTimer = null;
 const tip = (msg) => {
-    if (!$msg?.get(0)?.offsetHeight) {
-        // 使用 createElement 而不是 innerHTML 来避免 Trusted Types 问题
-        const tipEl = d.createElement('div');
-        tipEl.style.cssText = 'max-width:455px;min-width:333px;background:#EEE;color:#111;height:22px;top:-30px;left:50%;transform:translate(-50%, 0); border-radius:8px;border:1px solid orange;text-align:center;font-size:15px;position:fixed;z-index:2147483647';
-        by.appendChild(tipEl);
-        $msg = $(tipEl);
-    }
     if (!msg?.length) return;
-    const len = msg.length * 15;
-    $msg.stop(true, true).text(msg)
-        .css({ width: `${len}px` })
-        .animate({ top: '190px' })
-        .animate({ top: '+=9px' }, 1900)
-        .animate({ top: '-30px' });
+    if (!$msg) {
+        const tipEl = d.createElement('div');
+        tipEl.style.cssText = 'max-width:455px;min-width:333px;background:#EEE;color:#111;padding:2px 8px;top:-40px;left:50%;transform:translate(-50%,0);border-radius:8px;border:1px solid orange;text-align:center;font-size:15px;position:fixed;z-index:2147483647;transition:top .25s ease';
+        by.appendChild(tipEl);
+        $msg = tipEl;
+    }
+    clearTimeout(_tipTimer);
+    $msg.textContent = msg;
+    $msg.style.top = '190px';
+    _tipTimer = setTimeout(() => { $msg.style.top = '-40px'; }, 2200);
 };
 const u = getMainDomain(host);
 const cfg = {
@@ -544,7 +540,13 @@ const cfg = {
     multipleV: !1, //多视频页面
     isNumURL: !1 //网址数字分集
 };
-const bus = new Vue();
+const bus = new class {
+    constructor() { this._et = new EventTarget(); }
+    $on(ev, fn) { this._et.addEventListener(ev, e => fn(e.detail)); }
+    $once(ev, fn) { this._et.addEventListener(ev, e => fn(e.detail), { once: true }); }
+    $off(ev, fn) { this._et.removeEventListener(ev, fn); }
+    $emit(ev, data) { this._et.dispatchEvent(new CustomEvent(ev, { detail: data })); }
+}();
 if (window.onurlchange === void 0) {
     history.pushState = (f => function pushState() {
         const ret = f.apply(this, arguments);
@@ -973,8 +975,7 @@ const app = {
                 }
             }, false);
         }
-        $(v).one('canplay', ev => {
-            cfg.isLive = cfg.isLive || v.duration == Infinity;
+        v.addEventListener('canplay', ev => {
             if (cfg.isLive) for (const k of [37, 1061, 39, 1063, 67, 77, 78, 88, 90]) actList.delete(k);
             else {
                 if (videoConfigManager.get('remberRate')) v.playbackRate = +localStorage.mvPlayRate || 1;
@@ -985,7 +986,7 @@ const app = {
 
             this.checkMV();
             bus.$emit('canplay');
-        });
+        }, { once: true });
         // $(by).keydown(this.hotKey.bind(this));
         window.addEventListener('keydown', this.hotKey.bind(this), true);
 
@@ -1098,7 +1099,7 @@ const router = {
             });
             cfg.fullCSS = '.live_icon_full';
         } else {
-            bus.$on('foundMV', () => { $(document).unbind('keyup') });
+            bus.$on('foundMV', () => { document.removeEventListener('keyup', null) });
             cfg.shellCSS = '#ykPlayer';
             cfg.webfullCSS = '.kui-webfullscreen-icon-0';
             cfg.fullCSS = '.kui-fullscreen-icon-0';
@@ -1208,10 +1209,10 @@ const router = {
             const pos = v.currentTime;
             const buf = v.buffered;
             v.currentTime = buf.end(buf.length - 1) + 1;
-            $(v).one('progress', ev => {
+            v.addEventListener('progress', ev => {
                 v.currentTime = pos;
                 v.play();
-            });
+            }, { once: true });
         });
         cfg.nextCSS = '.playlist .on + li a';
     },
@@ -1226,9 +1227,9 @@ const router = {
             cfg.webfullCSS = '.wfs-2a8e83';
             cfg.fullCSS = '.fs-781153';
             cfg.playCSS = 'div[class|=play]';
-            path != '/' && $(ev => {
+            path != '/' && document.addEventListener('DOMContentLoaded', () => {
                 q('.u-specialStateInput').checked = true;
-            });
+            }, { once: true });
         } else bus.$on('addShadowRoot', async function (r) {
             if (r.host.matches('#demandcontroller-bar')) {
                 await sleep(600);
