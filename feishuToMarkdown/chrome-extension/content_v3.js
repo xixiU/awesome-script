@@ -439,6 +439,8 @@
         container.addEventListener('mouseenter', () => {
             if (!isDragging) {
                 clearTimeout(hideTimer);
+                // 重新读取最新配置
+                config = getConfig();
                 updateMenu();
                 menu.style.display = 'block';
             }
