@@ -239,23 +239,60 @@
         const images = [];
         const useBase64 = config.imageType === 'base64';
 
+        // 如果是本地图片模式，先从 docx 中提取所有图片
+        if (!useBase64) {
+            try {
+                const zip = await JSZip.loadAsync(arrayBuffer);
+                const mediaFolder = zip.folder('word/media');
+                if (mediaFolder) {
+                    let index = 1;
+                    for (const [filename, file] of Object.entries(mediaFolder.files)) {
+                        if (!file.dir) {
+                            const ext = filename.split('.').pop().toLowerCase();
+                            if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
+                                const base64Data = await file.async('base64');
+                                const imgFilename = `image_${String(index).padStart(3, '0')}.${ext}`;
+                                images.push({
+                                    filename: imgFilename,
+                                    base64: base64Data,
+                                    contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+                                    originalName: filename
+                                });
+                                index++;
+                            }
+                        }
+                    }
+                    console.log(`从 docx 中提取了 ${images.length} 张图片`);
+                }
+            } catch (error) {
+                console.warn('提取图片失败:', error);
+            }
+        }
+
         const result = await mammoth.convertToHtml({
             arrayBuffer: arrayBuffer,
             convertImage: mammoth.images.imgElement(function(image) {
+                console.log('mammoth 提取到图片:', image.contentType);
                 return image.read('base64').then(function(base64Data) {
                     const contentType = image.contentType || 'image/png';
                     const ext = (contentType.split('/')[1] || 'png').split('+')[0];
                     const validExt = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext) ? ext : 'png';
-                    const index = images.length + 1;
-                    const imgFilename = `image_${String(index).padStart(3, '0')}.${validExt}`;
 
                     if (useBase64) {
-                        // Base64 编码：直接嵌入 markdown，不保存到 images 数组
+                        // Base64 编码：直接嵌入 markdown
                         return { src: `data:${contentType};base64,${base64Data}` };
                     } else {
-                        // 本地图片：保存到 images 数组，使用相对路径
-                        images.push({ filename: imgFilename, base64: base64Data, contentType });
-                        return { src: `./images/${imgFilename}` };
+                        // 本地图片：使用相对路径（图片已经在 images 数组中）
+                        const index = images.findIndex(img => img.base64 === base64Data);
+                        if (index >= 0) {
+                            return { src: `./images/${images[index].filename}` };
+                        } else {
+                            // 如果没找到，添加到数组
+                            const imgIndex = images.length + 1;
+                            const imgFilename = `image_${String(imgIndex).padStart(3, '0')}.${validExt}`;
+                            images.push({ filename: imgFilename, base64: base64Data, contentType });
+                            return { src: `./images/${imgFilename}` };
+                        }
                     }
                 });
             })
