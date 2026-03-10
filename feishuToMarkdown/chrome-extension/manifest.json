@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "飞书文档转 Markdown",
+  "version": "3.0.0",
+  "description": "将飞书文档（包括私有化部署）转换为 Markdown 或 Word 格式并下载图片",
+  "permissions": [
+    "activeTab",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://*.feishu.cn/*",
+    "https://*.larksuite.com/*",
+    "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.feishu.cn/docx/*",
+        "https://*.feishu.cn/docs/*",
+        "https://*.larksuite.com/docx/*",
+        "https://*.larksuite.com/docs/*",
+        "https://*/docx/*",
+        "https://*/docs/*"
+      ],
+      "js": [
+        "libs/turndown.min.js",
+        "libs/jszip.min.js",
+        "libs/mammoth.browser.min.js",
+        "content_v3.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
