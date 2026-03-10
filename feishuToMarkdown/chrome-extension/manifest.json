@@ -5,7 +5,8 @@
   "description": "将飞书文档（包括私有化部署）转换为 Markdown 或 Word 格式并下载图片",
   "permissions": [
     "activeTab",
-    "downloads"
+    "downloads",
+    "storage"
   ],
   "host_permissions": [
     "https://*.feishu.cn/*",
