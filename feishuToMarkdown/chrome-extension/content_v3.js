@@ -244,13 +244,13 @@
                     const validExt = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext) ? ext : 'png';
                     const index = images.length + 1;
                     const imgFilename = `image_${String(index).padStart(3, '0')}.${validExt}`;
-                    images.push({ filename: imgFilename, base64: base64Data, contentType });
 
                     if (useBase64) {
-                        // Base64 编码：直接嵌入 markdown
+                        // Base64 编码：直接嵌入 markdown，不保存到 images 数组
                         return { src: `data:${contentType};base64,${base64Data}` };
                     } else {
-                        // 本地图片：使用相对路径
+                        // 本地图片：保存到 images 数组，使用相对路径
+                        images.push({ filename: imgFilename, base64: base64Data, contentType });
                         return { src: `./images/${imgFilename}` };
                     }
                 });
