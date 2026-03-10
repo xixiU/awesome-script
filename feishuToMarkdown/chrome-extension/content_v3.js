@@ -84,9 +84,21 @@
     function loadConfig() {
         chrome.storage.sync.get(defaultConfig, (items) => {
             config = items;
+            console.log('配置已加载:', config);
             updateButtonsVisibility();
         });
     }
+
+    // 监听配置变化
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+        if (namespace === 'sync') {
+            for (let [key, { oldValue, newValue }] of Object.entries(changes)) {
+                config[key] = newValue;
+                console.log(`配置更新: ${key} = ${newValue}`);
+            }
+            updateButtonsVisibility();
+        }
+    });
 
     // 保存配置
     function saveConfig(newConfig) {
@@ -481,6 +493,7 @@
             // Step 2: 转换为 Markdown
             const { markdown, images, warnings } = await convertDocxToMarkdown(docxBlob);
             console.log(`转换完成: ${images.length} 张图片`);
+            console.log('当前配置 imageType:', config.imageType);
             if (warnings.length > 0) {
                 console.warn('转换警告:', warnings);
             }
@@ -488,10 +501,12 @@
             // Step 3: 根据图片类型决定输出方式
             if (config.imageType === 'base64') {
                 // Base64 模式：直接下载 .md 文件
+                console.log('使用 Base64 模式，下载 .md 文件');
                 const mdBlob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
                 downloadFile(mdBlob, `${title}.md`);
             } else {
                 // 本地图片模式：打包为 zip
+                console.log('使用本地图片模式，打包 ZIP，图片数量:', images.length);
                 const zipBlob = await packageOutput(title, markdown, images);
                 downloadFile(zipBlob, `${title}.zip`);
             }
