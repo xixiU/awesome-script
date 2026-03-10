@@ -10,6 +10,41 @@ document.addEventListener('DOMContentLoaded', function() {
     const convertBtn = document.getElementById('convertBtn');
     const statusEl = document.getElementById('status');
 
+    // 配置选项
+    const configMarkdown = document.getElementById('config-markdown');
+    const configWord = document.getElementById('config-word');
+    const configPDF = document.getElementById('config-pdf');
+
+    let selectedFile = null;
+
+    // 默认配置
+    const defaultConfig = {
+        showMarkdown: true,
+        showWord: true,
+        showPDF: true
+    };
+
+    // 加载配置
+    chrome.storage.sync.get(defaultConfig, (items) => {
+        configMarkdown.checked = items.showMarkdown;
+        configWord.checked = items.showWord;
+        configPDF.checked = items.showPDF;
+    });
+
+    // 保存配置
+    function saveConfig() {
+        const config = {
+            showMarkdown: configMarkdown.checked,
+            showWord: configWord.checked,
+            showPDF: configPDF.checked
+        };
+        chrome.storage.sync.set(config);
+    }
+
+    configMarkdown.addEventListener('change', saveConfig);
+    configWord.addEventListener('change', saveConfig);
+    configPDF.addEventListener('change', saveConfig);
+
     let selectedFile = null;
 
     // 检查依赖库是否加载

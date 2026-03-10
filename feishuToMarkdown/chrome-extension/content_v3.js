@@ -307,156 +307,97 @@
 
     // ==================== UI 创建 ====================
 
-    function createButtonContainer() {
+    function createExportButton() {
         if (document.getElementById('feishu-export-container')) return;
 
         const container = document.createElement('div');
         container.id = 'feishu-export-container';
         container.style.cssText = `
             position: fixed; top: 80px; right: 20px; z-index: 10000;
-            display: flex; flex-direction: column; gap: 10px;
         `;
 
-        // Markdown 按钮
-        const markdownBtn = createButton('feishu-markdown-btn', '📥 导出 Markdown', '#0066FF', () => handleExportMarkdown());
-        container.appendChild(markdownBtn);
-
-        // Word 按钮
-        const wordBtn = createButton('feishu-word-btn', '📄 下载 Word', '#10B981', () => handleDownloadWord());
-        container.appendChild(wordBtn);
-
-        // PDF 按钮
-        const pdfBtn = createButton('feishu-pdf-btn', '📕 下载 PDF', '#F59E0B', () => handleDownloadPDF());
-        container.appendChild(pdfBtn);
-
-        // 配置按钮
-        const configBtn = createButton('feishu-config-btn', '⚙️', '#6B7280', () => toggleConfigPanel());
-        configBtn.style.width = '40px';
-        configBtn.style.padding = '10px';
-        container.appendChild(configBtn);
-
-        document.body.appendChild(container);
-        updateButtonsVisibility();
-    }
-
-    function createButton(id, text, color, onClick) {
-        const button = document.createElement('button');
-        button.id = id;
-        button.innerHTML = text;
-        button.style.cssText = `
-            padding: 10px 20px; background: ${color}; color: white; border: none;
+        const mainBtn = document.createElement('button');
+        mainBtn.id = 'feishu-export-btn';
+        mainBtn.innerHTML = '📥 导出';
+        mainBtn.style.cssText = `
+            padding: 10px 20px; background: #0066FF; color: white; border: none;
             border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15); transition: all 0.3s;
-            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0,102,255,0.3); transition: all 0.3s;
         `;
 
-        button.addEventListener('mouseover', () => {
-            button.style.transform = 'translateY(-2px)';
-            button.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
-        });
-
-        button.addEventListener('mouseout', () => {
-            button.style.transform = 'translateY(0)';
-            button.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-        });
-
-        button.addEventListener('click', onClick);
-        return button;
-    }
-
-    function createConfigPanel() {
-        if (document.getElementById('feishu-config-panel')) return;
-
-        const panel = document.createElement('div');
-        panel.id = 'feishu-config-panel';
-        panel.style.cssText = `
-            position: fixed; top: 80px; right: 80px; z-index: 10001;
-            background: white; border-radius: 8px; padding: 20px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-            display: none; min-width: 200px;
+        const menu = document.createElement('div');
+        menu.id = 'feishu-export-menu';
+        menu.style.cssText = `
+            position: absolute; top: 45px; right: 0;
+            background: white; border-radius: 6px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            min-width: 160px; display: none; overflow: hidden;
         `;
 
-        panel.innerHTML = `
-            <div style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #1f2329;">显示选项</div>
-            <label style="display: flex; align-items: center; margin-bottom: 12px; cursor: pointer;">
-                <input type="checkbox" id="config-markdown" ${config.showMarkdown ? 'checked' : ''}
-                       style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;">
-                <span style="font-size: 14px; color: #1f2329;">导出 Markdown</span>
-            </label>
-            <label style="display: flex; align-items: center; margin-bottom: 12px; cursor: pointer;">
-                <input type="checkbox" id="config-word" ${config.showWord ? 'checked' : ''}
-                       style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;">
-                <span style="font-size: 14px; color: #1f2329;">下载 Word</span>
-            </label>
-            <label style="display: flex; align-items: center; margin-bottom: 12px; cursor: pointer;">
-                <input type="checkbox" id="config-pdf" ${config.showPDF ? 'checked' : ''}
-                       style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;">
-                <span style="font-size: 14px; color: #1f2329;">下载 PDF</span>
-            </label>
-        `;
+        container.appendChild(mainBtn);
+        container.appendChild(menu);
+        document.body.appendChild(container);
 
-        document.body.appendChild(panel);
+        let hideTimer = null;
 
-        // 添加事件监听
-        document.getElementById('config-markdown').addEventListener('change', (e) => {
-            saveConfig({ showMarkdown: e.target.checked });
-        });
-        document.getElementById('config-word').addEventListener('change', (e) => {
-            saveConfig({ showWord: e.target.checked });
-        });
-        document.getElementById('config-pdf').addEventListener('change', (e) => {
-            saveConfig({ showPDF: e.target.checked });
+        container.addEventListener('mouseenter', () => {
+            clearTimeout(hideTimer);
+            updateMenu();
+            menu.style.display = 'block';
         });
 
-        // 点击外部关闭
-        document.addEventListener('click', (e) => {
-            const panel = document.getElementById('feishu-config-panel');
-            const configBtn = document.getElementById('feishu-config-btn');
-            if (panel && !panel.contains(e.target) && e.target !== configBtn) {
-                panel.style.display = 'none';
-            }
+        container.addEventListener('mouseleave', () => {
+            hideTimer = setTimeout(() => { menu.style.display = 'none'; }, 200);
+        });
+
+        mainBtn.addEventListener('mouseover', () => {
+            mainBtn.style.background = '#0052CC';
+            mainBtn.style.transform = 'translateY(-2px)';
+        });
+
+        mainBtn.addEventListener('mouseout', () => {
+            mainBtn.style.background = '#0066FF';
+            mainBtn.style.transform = 'translateY(0)';
         });
     }
 
-    function toggleConfigPanel() {
-        const panel = document.getElementById('feishu-config-panel');
-        if (!panel) {
-            createConfigPanel();
-            return;
-        }
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    function updateMenu() {
+        const menu = document.getElementById('feishu-export-menu');
+        if (!menu) return;
+        menu.innerHTML = '';
+        if (config.showMarkdown) menu.appendChild(createMenuItem('📝 导出 Markdown', handleExportMarkdown));
+        if (config.showWord) menu.appendChild(createMenuItem('📄 下载 Word', handleDownloadWord));
+        if (config.showPDF) menu.appendChild(createMenuItem('📕 下载 PDF', handleDownloadPDF));
     }
 
-    function updateButtonsVisibility() {
-        const markdownBtn = document.getElementById('feishu-markdown-btn');
-        const wordBtn = document.getElementById('feishu-word-btn');
-        const pdfBtn = document.getElementById('feishu-pdf-btn');
-
-        if (markdownBtn) markdownBtn.style.display = config.showMarkdown ? 'block' : 'none';
-        if (wordBtn) wordBtn.style.display = config.showWord ? 'block' : 'none';
-        if (pdfBtn) pdfBtn.style.display = config.showPDF ? 'block' : 'none';
+    function createMenuItem(text, onClick) {
+        const item = document.createElement('div');
+        item.textContent = text;
+        item.style.cssText = `
+            padding: 12px 16px; cursor: pointer; font-size: 14px; color: #1f2329;
+            transition: background 0.2s; border-bottom: 1px solid #f0f0f0;
+        `;
+        item.addEventListener('mouseenter', () => { item.style.background = '#f7f8fa'; });
+        item.addEventListener('mouseleave', () => { item.style.background = 'white'; });
+        item.addEventListener('click', () => {
+            const menu = document.getElementById('feishu-export-menu');
+            if (menu) menu.style.display = 'none';
+            onClick();
+        });
+        return item;
     }
 
     function showProgress(message, buttonType) {
-        const btnId = buttonType === 'word' ? 'feishu-word-btn' :
-                      buttonType === 'pdf' ? 'feishu-pdf-btn' : 'feishu-markdown-btn';
-        const btn = document.getElementById(btnId);
-        if (btn) {
-            btn.innerHTML = message;
-            btn.disabled = true;
-        }
+        const btn = document.getElementById('feishu-export-btn');
+        if (btn) { btn.innerHTML = message; btn.disabled = true; btn.style.cursor = 'not-allowed'; }
     }
 
-    function resetButton(buttonType, originalText) {
-        const btnId = buttonType === 'word' ? 'feishu-word-btn' :
-                      buttonType === 'pdf' ? 'feishu-pdf-btn' : 'feishu-markdown-btn';
-        const btn = document.getElementById(btnId);
-        if (btn) {
-            btn.innerHTML = originalText || (buttonType === 'word' ? '📄 下载 Word' :
-                                             buttonType === 'pdf' ? '📕 下载 PDF' : '📥 导出 Markdown');
-            btn.disabled = false;
-        }
+    function resetButton(buttonType) {
+        const btn = document.getElementById('feishu-export-btn');
+        if (btn) { btn.innerHTML = '📥 导出'; btn.disabled = false; btn.style.cursor = 'pointer'; }
     }
+
+    function updateButtonsVisibility() {}
 
     // ==================== 导出功能 ====================
 
@@ -556,7 +497,7 @@
 
         loadConfig();
         setTimeout(() => {
-            createButtonContainer(); createConfigPanel();
+            createExportButton();
             console.log('飞书文档转 Markdown v3.0 已加载（多功能模式）');
         }, 1000);
     }
