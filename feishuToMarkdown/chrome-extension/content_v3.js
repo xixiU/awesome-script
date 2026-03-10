@@ -14,7 +14,13 @@
         imageType: 'local'
     };
 
-    let config = { ...defaultConfig };
+    // 从 localStorage 读取配置
+    function getConfig() {
+        const saved = localStorage.getItem('feishu-export-config');
+        return saved ? { ...defaultConfig, ...JSON.parse(saved) } : defaultConfig;
+    }
+
+    let config = getConfig();
 
     // ==================== 工具函数 ====================
 
@@ -82,28 +88,14 @@
 
     // 加载配置
     function loadConfig() {
-        chrome.storage.sync.get(defaultConfig, (items) => {
-            config = items;
-            console.log('配置已加载:', config);
-            updateButtonsVisibility();
-        });
+        config = getConfig();
+        console.log('配置已加载:', config);
+        updateButtonsVisibility();
     }
 
-    // 监听配置变化
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-        if (namespace === 'sync') {
-            for (let [key, { oldValue, newValue }] of Object.entries(changes)) {
-                config[key] = newValue;
-                console.log(`配置更新: ${key} = ${newValue}`);
-            }
-            updateButtonsVisibility();
-        }
-    });
-
-    // 保存配置
     function saveConfig(newConfig) {
         config = { ...config, ...newConfig };
-        chrome.storage.sync.set(config);
+        localStorage.setItem('feishu-export-config', JSON.stringify(config));
         updateButtonsVisibility();
     }
 
@@ -487,7 +479,8 @@
 
             const title = getDocTitle();
 
-            // Step 1: 自动下载 docx
+            // 重新读取最新配置
+            config = getConfig();
             const docxBlob = await downloadDocxFromFeishu();
 
             // Step 2: 转换为 Markdown
