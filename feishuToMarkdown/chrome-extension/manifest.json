@@ -20,8 +20,8 @@
         "https://*.feishu.cn/docs/*",
         "https://*.larksuite.com/docx/*",
         "https://*.larksuite.com/docs/*",
-        "https://*/docx/*",
-        "https://*/docs/*"
+        "https://yf2ljykclb.xfchat.iflytek.com/docx/*"
+        
       ],
       "js": [
         "libs/turndown.min.js",

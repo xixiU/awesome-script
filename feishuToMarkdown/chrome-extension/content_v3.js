@@ -310,18 +310,22 @@
     function createExportButton() {
         if (document.getElementById('feishu-export-container')) return;
 
+        // 从存储中加载位置
+        const savedPosition = JSON.parse(localStorage.getItem('feishu-export-position') || '{"top": 80, "right": 20}');
+
         const container = document.createElement('div');
         container.id = 'feishu-export-container';
         container.style.cssText = `
-            position: fixed; top: 80px; right: 20px; z-index: 10000;
+            position: fixed; top: ${savedPosition.top}px; right: ${savedPosition.right}px; z-index: 10000;
+            cursor: move;
         `;
 
         const mainBtn = document.createElement('button');
         mainBtn.id = 'feishu-export-btn';
-        mainBtn.innerHTML = '📥 导出';
+        mainBtn.innerHTML = '📥';
         mainBtn.style.cssText = `
-            padding: 10px 20px; background: #0066FF; color: white; border: none;
-            border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;
+            padding: 8px 12px; background: #0066FF; color: white; border: none;
+            border-radius: 6px; cursor: move; font-size: 16px; font-weight: 500;
             box-shadow: 0 2px 8px rgba(0,102,255,0.3); transition: all 0.3s;
         `;
 
@@ -338,12 +342,56 @@
         container.appendChild(menu);
         document.body.appendChild(container);
 
+        // 拖动功能
+        let isDragging = false;
+        let startX, startY, startRight, startTop;
+
+        mainBtn.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startRight = parseInt(container.style.right);
+            startTop = parseInt(container.style.top);
+            mainBtn.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const deltaX = startX - e.clientX;
+            const deltaY = e.clientY - startY;
+            const newRight = startRight + deltaX;
+            const newTop = startTop + deltaY;
+
+            // 限制在视口内
+            const maxRight = window.innerWidth - container.offsetWidth;
+            const maxTop = window.innerHeight - container.offsetHeight;
+
+            container.style.right = Math.max(0, Math.min(newRight, maxRight)) + 'px';
+            container.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                mainBtn.style.cursor = 'move';
+                // 保存位置
+                const position = {
+                    top: parseInt(container.style.top),
+                    right: parseInt(container.style.right)
+                };
+                localStorage.setItem('feishu-export-position', JSON.stringify(position));
+            }
+        });
+
         let hideTimer = null;
 
         container.addEventListener('mouseenter', () => {
-            clearTimeout(hideTimer);
-            updateMenu();
-            menu.style.display = 'block';
+            if (!isDragging) {
+                clearTimeout(hideTimer);
+                updateMenu();
+                menu.style.display = 'block';
+            }
         });
 
         container.addEventListener('mouseleave', () => {
@@ -351,13 +399,17 @@
         });
 
         mainBtn.addEventListener('mouseover', () => {
-            mainBtn.style.background = '#0052CC';
-            mainBtn.style.transform = 'translateY(-2px)';
+            if (!isDragging) {
+                mainBtn.style.background = '#0052CC';
+                mainBtn.style.transform = 'translateY(-2px)';
+            }
         });
 
         mainBtn.addEventListener('mouseout', () => {
-            mainBtn.style.background = '#0066FF';
-            mainBtn.style.transform = 'translateY(0)';
+            if (!isDragging) {
+                mainBtn.style.background = '#0066FF';
+                mainBtn.style.transform = 'translateY(0)';
+            }
         });
     }
 
@@ -446,12 +498,14 @@
 
         try {
             const title = getDocTitle();
-            showProgress('📤 创建导出任务...', 'word');
+            showProgress('📤 创建任务...', 'word');
 
             const result = await downloadFromFeishu('docx', 'docx');
+
+            showProgress('💾 自动下载中...', 'word');
             downloadFile(result.blob, `${result.fileName || title}.${result.fileExtension}`);
 
-            showProgress('✅ 下载成功！', 'word');
+            showProgress('✅ 已下载！', 'word');
             setTimeout(() => resetButton('word'), 2000);
 
         } catch (error) {
@@ -469,12 +523,14 @@
 
         try {
             const title = getDocTitle();
-            showProgress('📤 创建导出任务...', 'pdf');
+            showProgress('📤 创建任务...', 'pdf');
 
             const result = await downloadFromFeishu('pdf', 'pdf');
+
+            showProgress('💾 自动下载中...', 'pdf');
             downloadFile(result.blob, `${result.fileName || title}.${result.fileExtension}`);
 
-            showProgress('✅ 下载成功！', 'pdf');
+            showProgress('✅ 已下载！', 'pdf');
             setTimeout(() => resetButton('pdf'), 2000);
 
         } catch (error) {
