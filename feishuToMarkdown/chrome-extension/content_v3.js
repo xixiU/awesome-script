@@ -525,7 +525,7 @@
             const title = getDocTitle();
             showProgress('📤 创建任务...', 'pdf');
 
-            const result = await downloadFromFeishu('pdf', 'pdf');
+            const result = await downloadFromFeishu('docx', 'pdf');
 
             showProgress('💾 自动下载中...', 'pdf');
             downloadFile(result.blob, `${result.fileName || title}.${result.fileExtension}`);
