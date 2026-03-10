@@ -70,8 +70,6 @@ document.addEventListener('DOMContentLoaded', function() {
     imageLocal.addEventListener('change', saveConfig);
     imageBase64.addEventListener('change', saveConfig);
 
-    let selectedFile = null;
-
     // 检查依赖库是否加载
     function checkDependencies() {
         const missing = [];
