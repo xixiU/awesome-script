@@ -14,6 +14,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const configMarkdown = document.getElementById('config-markdown');
     const configWord = document.getElementById('config-word');
     const configPDF = document.getElementById('config-pdf');
+    const imageTypeOption = document.getElementById('image-type-option');
+    const imageLocal = document.getElementById('image-local');
+    const imageBase64 = document.getElementById('image-base64');
 
     let selectedFile = null;
 
@@ -21,7 +24,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const defaultConfig = {
         showMarkdown: true,
         showWord: true,
-        showPDF: true
+        showPDF: true,
+        imageType: 'local'
     };
 
     // 加载配置
@@ -29,21 +33,42 @@ document.addEventListener('DOMContentLoaded', function() {
         configMarkdown.checked = items.showMarkdown;
         configWord.checked = items.showWord;
         configPDF.checked = items.showPDF;
+
+        if (items.imageType === 'base64') {
+            imageBase64.checked = true;
+        } else {
+            imageLocal.checked = true;
+        }
+
+        updateImageTypeVisibility();
     });
+
+    // 更新图片类型选项可见性
+    function updateImageTypeVisibility() {
+        if (configMarkdown.checked) {
+            imageTypeOption.classList.add('show');
+        } else {
+            imageTypeOption.classList.remove('show');
+        }
+    }
 
     // 保存配置
     function saveConfig() {
         const config = {
             showMarkdown: configMarkdown.checked,
             showWord: configWord.checked,
-            showPDF: configPDF.checked
+            showPDF: configPDF.checked,
+            imageType: imageBase64.checked ? 'base64' : 'local'
         };
         chrome.storage.sync.set(config);
+        updateImageTypeVisibility();
     }
 
     configMarkdown.addEventListener('change', saveConfig);
     configWord.addEventListener('change', saveConfig);
     configPDF.addEventListener('change', saveConfig);
+    imageLocal.addEventListener('change', saveConfig);
+    imageBase64.addEventListener('change', saveConfig);
 
     let selectedFile = null;
 

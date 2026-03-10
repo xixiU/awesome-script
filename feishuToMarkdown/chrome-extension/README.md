@@ -14,29 +14,6 @@
 
 ## 安装方法
 
-### 1. 下载依赖库
-
-在 `libs/` 目录下需要以下文件：
-
-- **mammoth.browser.min.js**（必须）
-  - 下载：https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js
-  - 保存为：`libs/mammoth.browser.min.js`
-
-- **jszip.min.js**
-  - 下载：https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js
-
-- **turndown.min.js**
-  - 下载：https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.min.js
-
-### 2. 准备图标文件
-
-在 `icons/` 目录下准备三个尺寸的图标：
-- `icon16.png` (16x16)
-- `icon48.png` (48x48)
-- `icon128.png` (128x128)
-
-### 3. 加载扩展
-
 1. 打开 Chrome 浏览器
 2. 访问 `chrome://extensions/`
 3. 开启右上角的「开发者模式」

@@ -10,7 +10,8 @@
     const defaultConfig = {
         showMarkdown: true,
         showWord: true,
-        showPDF: true
+        showPDF: true,
+        imageType: 'local'
     };
 
     let config = { ...defaultConfig };
@@ -232,6 +233,7 @@
         showProgress('📄 解析 docx...', 'markdown');
         const arrayBuffer = await docxBlob.arrayBuffer();
         const images = [];
+        const useBase64 = config.imageType === 'base64';
 
         const result = await mammoth.convertToHtml({
             arrayBuffer: arrayBuffer,
@@ -243,7 +245,14 @@
                     const index = images.length + 1;
                     const imgFilename = `image_${String(index).padStart(3, '0')}.${validExt}`;
                     images.push({ filename: imgFilename, base64: base64Data, contentType });
-                    return { src: `./images/${imgFilename}` };
+
+                    if (useBase64) {
+                        // Base64 编码：直接嵌入 markdown
+                        return { src: `data:${contentType};base64,${base64Data}` };
+                    } else {
+                        // 本地图片：使用相对路径
+                        return { src: `./images/${imgFilename}` };
+                    }
                 });
             })
         });
@@ -476,9 +485,16 @@
                 console.warn('转换警告:', warnings);
             }
 
-            // Step 3: 打包下载
-            const zipBlob = await packageOutput(title, markdown, images);
-            downloadFile(zipBlob, `${title}.zip`);
+            // Step 3: 根据图片类型决定输出方式
+            if (config.imageType === 'base64') {
+                // Base64 模式：直接下载 .md 文件
+                const mdBlob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+                downloadFile(mdBlob, `${title}.md`);
+            } else {
+                // 本地图片模式：打包为 zip
+                const zipBlob = await packageOutput(title, markdown, images);
+                downloadFile(zipBlob, `${title}.zip`);
+            }
 
             showProgress('✅ 导出成功！', 'markdown');
             setTimeout(() => resetButton('markdown'), 2000);
