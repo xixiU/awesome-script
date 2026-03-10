@@ -28,25 +28,20 @@ document.addEventListener('DOMContentLoaded', function() {
         imageType: 'local'
     };
 
-    // 从 localStorage 读取配置
-    function getConfig() {
-        const saved = localStorage.getItem('feishu-export-config');
-        return saved ? { ...defaultConfig, ...JSON.parse(saved) } : defaultConfig;
-    }
-
     // 加载配置
-    const config = getConfig();
-    configMarkdown.checked = config.showMarkdown;
-    configWord.checked = config.showWord;
-    configPDF.checked = config.showPDF;
+    chrome.storage.local.get(defaultConfig, (items) => {
+        configMarkdown.checked = items.showMarkdown;
+        configWord.checked = items.showWord;
+        configPDF.checked = items.showPDF;
 
-    if (config.imageType === 'base64') {
-        imageBase64.checked = true;
-    } else {
-        imageLocal.checked = true;
-    }
+        if (items.imageType === 'base64') {
+            imageBase64.checked = true;
+        } else {
+            imageLocal.checked = true;
+        }
 
-    updateImageTypeVisibility();
+        updateImageTypeVisibility();
+    });
 
     // 更新图片类型选项可见性
     function updateImageTypeVisibility() {
@@ -65,7 +60,9 @@ document.addEventListener('DOMContentLoaded', function() {
             showPDF: configPDF.checked,
             imageType: imageBase64.checked ? 'base64' : 'local'
         };
-        localStorage.setItem('feishu-export-config', JSON.stringify(config));
+        chrome.storage.local.set(config, () => {
+            console.log('配置已保存:', config);
+        });
         updateImageTypeVisibility();
     }
 

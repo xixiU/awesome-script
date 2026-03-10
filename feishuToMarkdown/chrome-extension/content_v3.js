@@ -14,13 +14,20 @@
         imageType: 'local'
     };
 
-    // 从 localStorage 读取配置
-    function getConfig() {
-        const saved = localStorage.getItem('feishu-export-config');
-        return saved ? { ...defaultConfig, ...JSON.parse(saved) } : defaultConfig;
+    // 从 chrome.storage.local 读取配置
+    function getConfig(callback) {
+        chrome.storage.local.get(defaultConfig, (items) => {
+            callback(items);
+        });
     }
 
-    let config = getConfig();
+    let config = { ...defaultConfig };
+
+    // 初始化时加载配置
+    getConfig((items) => {
+        config = items;
+        console.log('初始配置已加载:', config);
+    });
 
     // ==================== 工具函数 ====================
 
@@ -88,14 +95,15 @@
 
     // 加载配置
     function loadConfig() {
-        config = getConfig();
-        console.log('配置已加载:', config);
-        updateButtonsVisibility();
+        getConfig((items) => {
+            config = items;
+            updateButtonsVisibility();
+        });
     }
 
     function saveConfig(newConfig) {
         config = { ...config, ...newConfig };
-        localStorage.setItem('feishu-export-config', JSON.stringify(config));
+        chrome.storage.local.set(config);
         updateButtonsVisibility();
     }
 
@@ -440,9 +448,12 @@
             if (!isDragging) {
                 clearTimeout(hideTimer);
                 // 重新读取最新配置
-                config = getConfig();
-                updateMenu();
-                menu.style.display = 'block';
+                getConfig((items) => {
+                    config = items;
+                    console.log('菜单显示时配置:', config);
+                    updateMenu();
+                    menu.style.display = 'block';
+                });
             }
         });
 
@@ -519,38 +530,48 @@
             const title = getDocTitle();
 
             // 重新读取最新配置
-            config = getConfig();
-            const docxBlob = await downloadDocxFromFeishu();
+            getConfig(async (items) => {
+                config = items;
+                console.log('导出时配置:', config);
 
-            // Step 2: 转换为 Markdown
-            const { markdown, images, warnings } = await convertDocxToMarkdown(docxBlob);
-            console.log(`转换完成: ${images.length} 张图片`);
-            console.log('当前配置 imageType:', config.imageType);
-            if (warnings.length > 0) {
-                console.warn('转换警告:', warnings);
-            }
+                try {
+                    const docxBlob = await downloadDocxFromFeishu();
 
-            // Step 3: 根据图片类型决定输出方式
-            if (config.imageType === 'base64') {
-                // Base64 模式：直接下载 .md 文件
-                console.log('使用 Base64 模式，下载 .md 文件');
-                const mdBlob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
-                downloadFile(mdBlob, `${title}.md`);
-            } else {
-                // 本地图片模式：打包为 zip
-                console.log('使用本地图片模式，打包 ZIP，图片数量:', images.length);
-                const zipBlob = await packageOutput(title, markdown, images);
-                downloadFile(zipBlob, `${title}.zip`);
-            }
+                    // Step 2: 转换为 Markdown
+                    const { markdown, images, warnings } = await convertDocxToMarkdown(docxBlob);
+                    console.log(`转换完成: ${images.length} 张图片`);
+                    console.log('当前配置 imageType:', config.imageType);
+                    if (warnings.length > 0) {
+                        console.warn('转换警告:', warnings);
+                    }
 
-            showProgress('✅ 导出成功！', 'markdown');
-            setTimeout(() => resetButton('markdown'), 2000);
+                    // Step 3: 根据图片类型决定输出方式
+                    if (config.imageType === 'base64') {
+                        // Base64 模式：直接下载 .md 文件
+                        console.log('使用 Base64 模式，下载 .md 文件');
+                        const mdBlob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+                        downloadFile(mdBlob, `${title}.md`);
+                    } else {
+                        // 本地图片模式：打包为 zip
+                        console.log('使用本地图片模式，打包 ZIP，图片数量:', images.length);
+                        const zipBlob = await packageOutput(title, markdown, images);
+                        downloadFile(zipBlob, `${title}.zip`);
+                    }
+
+                    showProgress('✅ 导出成功！', 'markdown');
+                    setTimeout(() => resetButton('markdown'), 2000);
+                } catch (innerError) {
+                    console.error('导出失败:', innerError);
+                    alert('导出失败: ' + innerError.message + '\n\n请尝试手动下载:\n1. 点击飞书「···」→「导出」→「Word」\n2. 使用扩展弹窗转换');
+                    resetButton('markdown');
+                } finally {
+                    isProcessing = false;
+                }
+            });
 
         } catch (error) {
-            console.error('导出失败:', error);
-            alert('导出失败: ' + error.message + '\n\n请尝试手动下载:\n1. 点击飞书「···」→「导出」→「Word」\n2. 使用扩展弹窗转换');
+            console.error('初始化失败:', error);
             resetButton('markdown');
-        } finally {
             isProcessing = false;
         }
     }
