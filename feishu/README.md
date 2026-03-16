@@ -28,7 +28,7 @@ uv pip install fastmcp httpx certifi pyyaml
 
 ### 1. 获取飞书应用凭证
 
-1. 访问 [飞书开放平台](https://open.feishu.cn/app) 或 [讯飞飞书开放平台](https://open.xfchat.iflytek.com/)
+1. 访问 [飞书开放平台/企业私有化开放平台](https://open.feishu.cn/app) 
 2. 创建企业自建应用
 3. 在「凭证与基础信息」页面获取：
    - App ID
