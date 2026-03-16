@@ -1,0 +1,19 @@
+# 飞书文档 MCP 工具配置示例
+# 复制此文件为 config.yml 并填入你的实际配置
+
+# 飞书开放平台配置
+feishu:
+  # 飞书 API 地址前缀
+  # 官方飞书: https://open.feishu.cn
+  url_prefix: "https://open.feishu.cn"
+
+  # 应用凭证（从飞书开放平台获取）
+  app_id: "your_app_id_here"
+  app_secret: "your_app_secret_here"
+
+# MCP 服务器配置
+server:
+  # 服务监听地址
+  host: "0.0.0.0"
+  # 服务监听端口
+  port: 50070
