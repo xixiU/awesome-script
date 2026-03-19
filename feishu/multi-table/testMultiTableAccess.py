@@ -202,7 +202,25 @@ def create_record_with_file(fields: dict, file_path: str):
         return None
 
 
+def get_record(record_id: str):
+    """根据 record_id 查询单条记录"""
+    url = f"{URL_PREFIX}/open-apis/bitable/v1/apps/{APP_TOKEN}/tables/{TABLE_ID}/records/{record_id}"
+    resp = requests.get(url, headers=headers)
+    res = resp.json()
+    if res.get("code") == 0:
+        record = res["data"]["record"]
+        print(f"✅ 查询成功: {record}")
+        return record
+    else:
+        print(f"❌ 查询失败: {res}")
+        return None
+
+
 # ========== 测试函数 ==========
+
+def test_get_record():
+    """测试：根据 record_id 查询单条记录"""
+    get_record("recveiHuEzhJn9")  # 替换为实际的 recveiPRMKH77U
 
 def test_get_fields():
     """测试：查询表格字段列表
@@ -238,4 +256,4 @@ def test_create_record_with_file():
 
 
 if __name__ == "__main__":
-    test_search_by_project_code()
+    test_get_record()
