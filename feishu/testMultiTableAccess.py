@@ -106,8 +106,9 @@ def query_User_id():
 def query_record():
     # 获取表格记录
     record_url = f'{URL_PREFIX}/open-apis/bitable/v1/apps/{APP_TOKEN}/tables/{TABLE_ID}/records'
-    res = requests.get(record_url, headers=headers).json()
-    print(res)
+    resp = requests.get(record_url, headers=headers)
+    print(resp.text)
+    res = resp.json()
     if res.get("code") == 0:
         print(f"✅ 获取表格记录: {res.get('data', {}).get('app', {}).get('name')}")
     else:
