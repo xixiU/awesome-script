@@ -5,7 +5,7 @@ import sys
 from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
 
-MCP_URL = "http://172.17.151.105:50070/sse"
+MCP_URL = "http://localhost:50070/sse"
 TEST_FILE_ID = "doxrzFVGxynmgH727mFFd1oThSb"
 
 async def test():

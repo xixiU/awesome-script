@@ -27,7 +27,23 @@ def test_connection():
     else:
         print(f"❌ 绑定失败，错误码: {res.get('code')}, 错误信息: {res.get('msg')}")
 
-def get_roles():
+def get_fields():
+    """查询表格字段列表"""
+    url = f"{URL_PREFIX}/open-apis/bitable/v1/apps/{APP_TOKEN}/tables/{TABLE_ID}/fields"
+    resp = requests.get(url, headers=headers)
+    res = resp.json()
+    if res.get("code") == 0:
+        fields = res["data"]["items"]
+        print("✅ 表格字段列表:")
+        for f in fields:
+            print(f"  - {f['field_name']} (type: {f['type']})")
+        return fields
+    else:
+        print(f"❌ 获取字段失败: {res}")
+        return []
+
+
+
     url = f"{URL_PREFIX}/open-apis/bitable/v1/apps/{APP_TOKEN}/roles"
     resp = requests.get(url, headers=headers)
     print(f"多维表格的角色: {resp.json()}")
@@ -82,5 +98,81 @@ def query_record():
         print(f"❌ 查询表格记录失败，错误码: {res.get('code')}, 错误信息: {res.get('msg')}")
 
 
-query_record()
-get_file_download_url("boxrzW8SYPhdJsFl00XGjAOuYBg")
+def upload_file(file_path):
+    """上传文件到多维表格，返回 file_token"""
+    file_path = Path(file_path)
+    file_size = file_path.stat().st_size
+
+    url = f"{URL_PREFIX}/open-apis/drive/v1/medias/upload_all"
+    with open(file_path, "rb") as f:
+        resp = requests.post(
+            url,
+            headers={"Authorization": headers["Authorization"]},
+            data={
+                "file_name": file_path.name,
+                "parent_type": "bitable_file",
+                "parent_node": APP_TOKEN,
+                "size": str(file_size),
+            },
+            files={"file": (file_path.name, f)},
+        )
+    res = resp.json()
+    if res.get("code") == 0:
+        file_token = res["data"]["file_token"]
+        print(f"✅ 文件上传成功，file_token: {file_token}")
+        return file_token
+    else:
+        print(f"❌ 文件上传失败: {res}")
+        return None
+
+
+def create_record_with_file(fields: dict, file_path: str):
+    """新增多维表格记录，并附带上传文件
+
+    Args:
+        fields: 记录字段，如 {"标题": "测试", "区域": "华东"}
+        file_path: 本地文件路径，附件字段名固定为 "附件"
+
+    Example:
+        create_record_with_file(
+            fields={"标题": "测试记录", "项目编码": "PRJ-001"},
+            file_path="入库模板.xlsx"
+        )
+    """
+    # 1. 上传文件
+    file_token = upload_file(file_path)
+    if not file_token:
+        print("❌ 文件上传失败，取消新增记录")
+        return None
+
+    # 2. 新增记录，附件字段格式为 [{"file_token": "xxx"}]
+    fields["附件"] = [{"file_token": file_token}]
+    url = f"{URL_PREFIX}/open-apis/bitable/v1/apps/{APP_TOKEN}/tables/{TABLE_ID}/records"
+    resp = requests.post(url, headers=headers, json={"fields": fields})
+    res = resp.json()
+    if res.get("code") == 0:
+        record_id = res["data"]["record"]["record_id"]
+        print(f"✅ 记录新增成功，record_id: {record_id}")
+        return record_id
+    else:
+        print(f"❌ 记录新增失败: {res}")
+        return None
+
+
+if __name__ == "__main__":
+    # 查询表格字段名
+    # get_fields()
+#     表格字段列表:
+#   - 自动编号 (type: 1005)
+#   - 项目编码 (type: 1)
+#   - 区域 (type: 3)
+#   - 提交时间 (type: 1001)
+#   - 提交人 (type: 1003)
+#   - 附件 (type: 17)
+#   - 文本 2 (type: 1)
+
+    # 新增记录并上传文件（区域为单选，填写选项文字；附件字段名固定为"附件"）
+    create_record_with_file(
+        fields={"项目编码": "PRJ-003", "区域": "北京市", "文本 2": "测试备注"},
+        file_path="入库模板.xlsx"
+    )
