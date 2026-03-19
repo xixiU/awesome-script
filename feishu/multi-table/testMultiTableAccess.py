@@ -202,22 +202,40 @@ def create_record_with_file(fields: dict, file_path: str):
         return None
 
 
-if __name__ == "__main__":
-    # 查询表格字段名
-    # get_fields()
-#     表格字段列表:
-#   - 自动编号 (type: 1005)
-#   - 项目编码 (type: 1)
-#   - 区域 (type: 3)
-#   - 提交时间 (type: 1001)
-#   - 提交人 (type: 1003)
-#   - 附件 (type: 17)
-#   - 文本 2 (type: 1)
+# ========== 测试函数 ==========
 
-    # 新增记录并上传文件（区域为单选，填写选项文字；附件字段名固定为"附件"）
-    # create_record_with_file(
-    #     fields={"项目编码": "PRJ-003", "区域": "北京市", "文本 2": "测试备注"},
-    #     file_path="入库模板.xlsx"
-    # )
-    # 按字段条件查询
+def test_get_fields():
+    """测试：查询表格字段列表
+    字段列表:
+      - 自动编号 (type: 1005)
+      - 项目编码 (type: 1)
+      - 区域     (type: 3)
+      - 提交时间 (type: 1001)
+      - 提交人   (type: 1003)
+      - 附件     (type: 17)
+      - 文本 2   (type: 1)
+    """
+    get_fields()
+
+def test_query_all_records():
+    """测试：查询所有记录"""
+    search_records()
+
+def test_search_by_project_code():
+    """测试：按项目编码查询"""
     search_records("项目编码", "PRJ-003")
+
+def test_search_by_region():
+    """测试：按区域查询"""
+    search_records("区域", "北京市")
+
+def test_create_record_with_file():
+    """测试：新增记录并上传附件（区域为单选，填写选项文字）"""
+    create_record_with_file(
+        fields={"项目编码": "PRJ-003", "区域": "北京市", "文本 2": "测试备注"},
+        file_path="入库模板.xlsx"
+    )
+
+
+if __name__ == "__main__":
+    test_search_by_project_code()
