@@ -98,6 +98,49 @@ def query_record():
         print(f"❌ 查询表格记录失败，错误码: {res.get('code')}, 错误信息: {res.get('msg')}")
 
 
+def search_records(filter_field: str = None, filter_value: str = None, page_size: int = 20):
+    """根据条件查询多维表格记录
+
+    Args:
+        filter_field: 过滤字段名，如 "项目编码"，为 None 时查询所有记录
+        filter_value: 过滤字段值，如 "PRJ-001"
+        page_size: 每页返回记录数，最大 500
+
+    Example:
+        search_records()                                    # 查询所有记录
+        search_records("项目编码", "PRJ-001")               # 按项目编码查询
+        search_records("区域", "北京市")                    # 按区域查询
+    """
+    url = f"{URL_PREFIX}/open-apis/bitable/v1/apps/{APP_TOKEN}/tables/{TABLE_ID}/records/search"
+    body = {"page_size": page_size}
+
+    if filter_field and filter_value:
+        body["filter"] = {
+            "conjunction": "and",
+            "conditions": [
+                {
+                    "field_name": filter_field,
+                    "operator": "is",
+                    "value": [filter_value],
+                }
+            ],
+        }
+
+    resp = requests.post(url, headers=headers, json=body)
+    res = resp.json()
+    if res.get("code") == 0:
+        items = res["data"]["items"]
+        total = res["data"].get("total", len(items))
+        print(f"✅ 查询成功，共 {total} 条记录:")
+        for item in items:
+            print(f"  record_id: {item['record_id']} | fields: {item['fields']}")
+        return items
+    else:
+        print(f"❌ 查询失败: {res}")
+        return []
+
+
+
 def upload_file(file_path):
     """上传文件到多维表格，返回 file_token"""
     file_path = Path(file_path)
@@ -172,7 +215,9 @@ if __name__ == "__main__":
 #   - 文本 2 (type: 1)
 
     # 新增记录并上传文件（区域为单选，填写选项文字；附件字段名固定为"附件"）
-    create_record_with_file(
-        fields={"项目编码": "PRJ-003", "区域": "北京市", "文本 2": "测试备注"},
-        file_path="入库模板.xlsx"
-    )
+    # create_record_with_file(
+    #     fields={"项目编码": "PRJ-003", "区域": "北京市", "文本 2": "测试备注"},
+    #     file_path="入库模板.xlsx"
+    # )
+    # 按字段条件查询
+    search_records("项目编码", "PRJ-003")
