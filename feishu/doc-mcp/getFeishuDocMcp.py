@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-import os
-import json
+import sys
 import httpx
 import certifi
+from pathlib import Path
 from mcp.server.fastmcp import FastMCP
+
+# 将父目录加入路径，以便导入共用 config.py
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import load_config
 
 # 加载配置
@@ -14,8 +17,6 @@ CONFIG = {
     "app_secret": config['feishu']['app_secret']
 }
 
-# 实例化 FastMCP
-# 注意：SSE 模式下，FastMCP 会自动处理 /sse 和 /messages 路由
 mcp = FastMCP(
     "feishu-document-reader",
     host=config['server']['host'],
@@ -35,23 +36,20 @@ async def get_document_content(file_id: str) -> str:
     """获取飞书文档的原始文本内容"""
     token = await get_tenant_auth()
     url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{file_id}/raw_content"
-    
+
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json; charset=utf-8",
     }
-    
+
     async with httpx.AsyncClient(verify=certifi.where()) as client:
         response = await client.get(url, headers=headers)
         response.encoding = 'utf-8'
-        # 保持原始逻辑：对内容进行转义以确保 JSON 传输安全
         return response.text.encode("unicode_escape").decode("ascii")
 
 if __name__ == "__main__":
-    import sys
     import asyncio
 
-    # 如果提供了文档 ID 参数，则测试读取文档
     if len(sys.argv) > 1:
         test_file_id = sys.argv[1]
         print(f"测试读取文档: {test_file_id}")
@@ -63,6 +61,5 @@ if __name__ == "__main__":
 
         asyncio.run(test())
     else:
-        # 启动 MCP 服务器
         print(f"启动 MCP 服务器: {config['server']['host']}:{config['server']['port']}")
         mcp.run(transport="sse")
