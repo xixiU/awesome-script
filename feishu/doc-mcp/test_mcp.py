@@ -5,7 +5,7 @@ import sys
 from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
 
-MCP_URL = "http://localhost:50070/sse"
+MCP_URL = "http://172.17.151.105:50070/sse"
 TEST_FILE_ID = "doxrzFVGxynmgH727mFFd1oThSb"
 
 async def test():
@@ -16,7 +16,7 @@ async def test():
             print("✅ 连接成功")
 
             # 列出可用工具
-            
+
             tools = await session.list_tools()
             print(f"✅ 可用工具: {[t.name for t in tools.tools]}")
 
