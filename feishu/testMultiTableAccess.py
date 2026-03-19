@@ -10,7 +10,7 @@ def get_tenant_access_token():
     # 1. 获取 Token
     auth_url = f"{URL_PREFIX}/open-apis/auth/v3/tenant_access_token/internal"
     resp = requests.post(auth_url, json=payload)
-    print(resp.json())
+    print(resp.text)
     token_res = resp.json()
     token = token_res.get("tenant_access_token")
     return token
