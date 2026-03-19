@@ -1,3 +1,11 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+'''
+@File    :   testMultiTableWebhook.py
+@Date    :   2026/03/18 16:22:17
+@Author  :   yuan 
+@Desc    :   需要开通bitable,drive:drive, drive:drive:readonly权限
+'''
 import logging
 import requests
 from flask import Flask, request, jsonify
@@ -10,8 +18,6 @@ logging.basicConfig(
     level=logging.INFO, 
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
-
-
 
 # 创建一个全局 Session，禁用系统代理环境变量，规避 TUN 模式干扰
 session = requests.Session()
@@ -29,40 +35,25 @@ def get_tenant_access_token():
         logging.error(f"❌ 获取 Token 失败: {e}")
         return None
 
-def get_file_info_and_size(file_token):
+
+
+def get_download_url(file_token):
     """根据 File Token 下载文件并计算大小"""
     token = get_tenant_access_token()
     if not token:
         return "Auth Error"
 
     # 飞书多维表格附件下载接口
-    url = f"{URL_PREFIX}/open-apis/drive/v1/files/{file_token}/download"
+    # url = f"{URL_PREFIX}/open-apis/drive/v1/files/{file_token}/download"
     headers = {"Authorization": f"Bearer {token}"}
 
-    try:
-        # 使用流式下载获取 Header
-        response = session.get(url, headers=headers, stream=True, proxies={"http": None, "https": None})
-        
-        if response.status_code == 200:
-            # 优先从 Content-Length 获取大小
-            content_length = response.headers.get('Content-Length')
-            if content_length:
-                size_bytes = int(content_length)
-            else:
-                # 如果没有 Header（极少见），则读取流计算大小
-                size_bytes = len(response.content)
-            
-            # 转换为易读格式
-            if size_bytes < 1024 * 1024:
-                return f"{size_bytes / 1024:.2f} KB"
-            else:
-                return f"{size_bytes / (1024 * 1024):.2f} MB"
-        else:
-            logging.error(f"❌ 下载失败，状态码: {response.status_code}, 详情: {response.text}")
-            return "Download Forbidden (Check App Permissions)"
-    except Exception as e:
-        logging.error(f"❌ 网络异常: {e}")
-        return "Network Error"
+    url = f"{URL_PREFIX}/open-apis/drive/v1/medias/batch_get_tmp_download_url"
+
+    params = {"file_tokens":file_token}
+    resp = requests.get(url, headers=headers,params = params)
+    data = resp.json()
+    print(f"下载地址: {resp.text}")
+    return data['data']
 
 @app.route('/webhook', methods=['POST'])
 def handle_feishu_webhook():
@@ -80,11 +71,11 @@ def handle_feishu_webhook():
     file_id = fields.get('file') # 对应你在自动化配置里引用的“附件 ID”
 
     logging.info(f"🔔 接收到新增记录 -> 区域: {region} | 编码: {code}")
-
+    print(file_id)
     if file_id:
         logging.info(f"正在分析文件 ID: {file_id} ...")
-        file_size = get_file_info_and_size(file_id)
-        logging.info(f"✅ 处理完成！文件大小: {file_size}")
+        file_size = get_download_url(file_id)
+        logging.info(f"✅ 处理完成！地址: {file_size}")
     else:
         logging.warning("⚠️ 未发现文件 ID，请检查多维表格自动化中的 JSON 配置。")
 
