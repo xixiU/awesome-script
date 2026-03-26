@@ -1,375 +1,276 @@
 /**
- * HTML5 视频播放工具 - Chrome 扩展版本
- * 注入到页面的主脚本
- * 包含所有视频控制功能 + 字幕显示UI
+ * HTML5 视频播放工具 - Chrome 扩展注入脚本
  */
-
 (function () {
     'use strict';
+    if (window.__h5videoInjected) return;
+    window.__h5videoInjected = true;
 
-    console.log('[H5Video] 主脚本开始执行');
-
-    // 基础变量
-    let video = null;
-    let subtitleContainer = null;
-    let subtitleText = null;
-    let currentSubtitles = [];
-    let subtitleUpdateInterval = null;
-
-    // 快捷键映射
-    const keyActions = {
-        86: () => adjustRate(0.1),   // V 键 - 加速
-        88: () => adjustRate(-0.1),  // X 键 - 减速
-        90: () => toggleRate(),      // Z 键 - 切换速度
-        37: () => { video.currentTime -= 5 },   // ← 快退
-        39: () => { video.currentTime += 5 },   // → 快进
-        38: () => adjustVolume(0.1),  // ↑ 音量+
-        40: () => adjustVolume(-0.1), // ↓ 音量-
-        80: () => takeScreenshot(),   // P 键 - 截图
-        73: () => togglePIP(),        // I 键 - 画中画
-        83: () => toggleSubtitle(),   // S 键 - 字幕
-        68: () => { video.currentTime -= 0.03; video.pause(); }, // D - 上一帧
-        70: () => { video.currentTime += 0.03; video.pause(); }  // F - 下一帧
+    const d = document;
+    const host = location.host;
+    const q = (css, p = d) => p.querySelector(css);
+    const noopFn = () => {};
+    const getMainDomain = h => {
+        const a = h.split('.');
+        let i = a.length - 2;
+        if (/^(com?|cc|tv|net|org|gov|edu)$/.test(a[i])) i--;
+        return a[i];
     };
+    const u = getMainDomain(host);
+    let v = null;
 
-    // 调整播放速度
-    function adjustRate(delta) {
-        if (!video) return;
-        let newRate = video.playbackRate + delta;
-        if (newRate < 0.1) newRate = 0.1;
-        if (newRate > 16) newRate = 16;
-        video.playbackRate = parseFloat(newRate.toFixed(2));
-        showTip(`播放速度: ${video.playbackRate}x`);
-    }
-
-    // 切换播放速度
-    function toggleRate() {
-        if (!video) return;
-        if (video.playbackRate === 1 || video.playbackRate === 0) {
-            video.playbackRate = parseFloat(localStorage.mvPlayRate || 1.3);
-        } else {
-            localStorage.mvPlayRate = video.playbackRate;
-            video.playbackRate = 1;
+    // ===== 提示条 =====
+    let tipTimer = null;
+    function showTip(msg) {
+        let el = d.getElementById('h5video-tip');
+        if (!el) {
+            el = d.createElement('div');
+            el.id = 'h5video-tip';
+            el.style.cssText = 'position:fixed;z-index:2147483647;top:-40px;left:50%;transform:translateX(-50%);' +
+                'background:#eee;color:#111;padding:4px 16px;border-radius:8px;border:1px solid orange;' +
+                'font-size:15px;transition:top .25s;pointer-events:none;white-space:nowrap';
+            d.body.appendChild(el);
         }
-        showTip(`播放速度: ${video.playbackRate}x`);
+        el.textContent = msg;
+        clearTimeout(tipTimer);
+        el.style.top = '20px';
+        tipTimer = setTimeout(() => { el.style.top = '-40px'; }, 2200);
     }
 
-    // 调整音量
-    function adjustVolume(delta) {
-        if (!video) return;
-        let newVolume = video.volume + delta;
-        if (newVolume < 0) newVolume = 0;
-        if (newVolume > 1) newVolume = 1;
-        video.volume = parseFloat(newVolume.toFixed(2));
-        showTip(`音量: ${Math.round(video.volume * 100)}%`);
+    // ===== 全屏 =====
+    class FullScreen {
+        constructor(el) {
+            const exit = d.exitFullscreen || d.webkitExitFullscreen || d.mozCancelFullScreen || noopFn;
+            this.exit = exit.bind(d);
+            const enter = el.requestFullscreen || el.webkitRequestFullScreen || el.mozRequestFullScreen || noopFn;
+            this.enter = enter.bind(el);
+        }
+        static isFull() {
+            return !!(d.fullscreen || d.webkitIsFullScreen || d.mozFullScreen ||
+                d.fullscreenElement || d.webkitFullscreenElement);
+        }
+        toggle() { FullScreen.isFull() ? this.exit() : this.enter(); }
     }
 
-    // 截图
+    // ===== 网页全屏 =====
+    class FullPage {
+        constructor(el) { this.el = el; }
+        static isFull(el) { return el && el.classList.contains('gm-fp-full'); }
+        toggle() {
+            if (!this.el) return;
+            const isFull = FullPage.isFull(this.el);
+            this.el.classList.toggle('gm-fp-full', !isFull);
+            d.body.classList.toggle('gm-fp-body', !isFull);
+        }
+    }
+
+    let _fs = null, _fp = null;
+
+    // ===== 速度 / 音量 =====
+    function adjustRate(n) {
+        if (!v) return;
+        v.playbackRate = Math.min(16, Math.max(0.1, +(v.playbackRate + n).toFixed(2)));
+        showTip('速度 ' + v.playbackRate + 'x');
+    }
+
+    function adjustVolume(n) {
+        if (!v) return;
+        v.volume = Math.min(1, Math.max(0, +(v.volume + n).toFixed(2)));
+        showTip('音量 ' + Math.round(v.volume * 100) + '%');
+    }
+
+    // ===== 截图 =====
     function takeScreenshot() {
-        if (!video) return;
-
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        canvas.toBlob(async (blob) => {
+        if (!v) return;
+        const canvas = d.createElement('canvas');
+        canvas.width = v.videoWidth;
+        canvas.height = v.videoHeight;
+        canvas.getContext('2d').drawImage(v, 0, 0);
+        canvas.toBlob(blob => {
             const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `screenshot_${Date.now()}.png`;
-            link.click();
-            await new Promise(resolve => setTimeout(resolve, 500));
-            URL.revokeObjectURL(url);
-            showTip('✅ 截图已保存');
+            const a = d.createElement('a');
+            a.href = url;
+            a.download = 'screenshot_' + Date.now() + '.png';
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 500);
+            showTip('截图已保存');
         });
     }
 
-    // 画中画
+    // ===== 画中画 =====
     function togglePIP() {
-        if (!video) return;
-
-        if (!document.pictureInPictureElement) {
-            video.requestPictureInPicture().catch(err => {
-                showTip('❌ 无法进入画中画: ' + err.message);
-            });
+        if (!v) return;
+        if (!d.pictureInPictureElement) {
+            v.requestPictureInPicture().catch(e => showTip('画中画失败: ' + e.message));
         } else {
-            document.exitPictureInPicture().catch(err => {
-                showTip('❌ 无法退出画中画: ' + err.message);
-            });
+            d.exitPictureInPicture().catch(e => showTip('退出画中画失败: ' + e.message));
         }
     }
 
-    // 切换字幕
-    function toggleSubtitle() {
-        console.log('[H5Video] 切换字幕');
+    // ===== 快捷键表（shift 组合 = keyCode + 1024）=====
+    const actList = new Map([
+        [90, () => {
+            if (!v) return;
+            v.playbackRate = (v.playbackRate === 1 || v.playbackRate === 0)
+                ? (+localStorage.mvPlayRate || 1.3) : 1;
+            showTip('速度 ' + v.playbackRate + 'x');
+        }],
+        [88, () => adjustRate(-0.1)],
+        [67, () => adjustRate(0.1)],
+        [40, () => adjustVolume(-0.1)],
+        [38, () => adjustVolume(0.1)],
+        [37, () => { if (v) v.currentTime -= 5; }],
+        [37 + 1024, () => { if (v) v.currentTime -= 20; }],
+        [39, () => { if (v) v.currentTime += 5; }],
+        [39 + 1024, () => { if (v) v.currentTime += 20; }],
+        [68, () => { if (v) { v.currentTime -= 0.03; v.pause(); } }],
+        [70, () => { if (v) { v.currentTime += 0.03; v.pause(); } }],
+        [32, () => { if (v) v.paused ? v.play() : v.pause(); }],
+        [13, () => { if (_fs) _fs.toggle(); }],
+        [13 + 1024, () => { if (_fp) _fp.toggle(); }],
+        [27, () => {
+            if (FullScreen.isFull()) { _fs && _fs.exit(); }
+            else if (_fp && FullPage.isFull(v)) { _fp.toggle(); }
+        }],
+        [73, togglePIP],
+        [80, takeScreenshot],
+    ]);
 
-        // 发送消息给 content script
-        window.postMessage({
-            source: 'h5video-page',
-            type: 'toggleSubtitle'
-        }, '*');
+    // ===== 站点适配 =====
+    function applyYouTubeConfig() {
+        actList.delete(32);                                    // YouTube 自己处理空格
+        actList.set(69, actList.get(70)); actList.delete(70); // F→E 下一帧
+        actList.set(86, actList.get(67)); actList.delete(67); // C→V 加速
     }
 
-    // 显示提示
-    function showTip(message) {
-        let tipEl = document.getElementById('h5video-tip');
-        if (!tipEl) {
-            tipEl = document.createElement('div');
-            tipEl.id = 'h5video-tip';
-            tipEl.className = 'h5video-tip';
-            document.body.appendChild(tipEl);
-        }
-
-        tipEl.textContent = message;
-        tipEl.style.top = '-50px';
-
-        // 动画显示
-        setTimeout(() => {
-            tipEl.style.top = '20px';
-        }, 10);
-
-        setTimeout(() => {
-            tipEl.style.top = '-50px';
-        }, 2500);
+    function applyDouyinConfig() {
+        actList.set(65, actList.get(90)); actList.delete(90); // Z→A
+        actList.set(83, actList.get(88)); actList.delete(88); // X→S
+        actList.set(86, actList.get(67)); actList.delete(67); // C→V
     }
 
-    // 键盘事件处理
-    function handleKeyPress(e) {
-        // 排除输入框
-        if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
-        if (e.target.contentEditable === 'true') return;
+    // ===== 键盘处理 =====
+    function handleKeydown(e) {
+        const t = e.target;
         if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (t.contentEditable === 'true' || /INPUT|TEXTAREA|SELECT/.test(t.nodeName)) return;
+        if (e.shiftKey && ![13, 37, 39].includes(e.keyCode)) return;
+        if (!v) return;
 
-        const action = keyActions[e.keyCode];
-        if (action) {
-            e.preventDefault();
+        const key = e.shiftKey ? e.keyCode + 1024 : e.keyCode;
+        if (actList.has(key)) {
+            e.stopImmediatePropagation();
             e.stopPropagation();
-            action();
+            e.preventDefault();
+            actList.get(key)(e);
         }
     }
 
-    // 查找视频元素（包括 iframe 中的视频）
+    // ===== 查找视频 =====
     function findVideo() {
-        // 先查找当前页面的视频
-        const videos = document.getElementsByTagName('video');
-        for (const v of videos) {
-            if (v.offsetWidth > 100) {
-                return v;
-            }
+        const videos = d.getElementsByTagName('video');
+        for (const el of videos) {
+            if (el.offsetWidth > 9) return el;
         }
-        if (videos.length > 0) {
-            return videos[0];
-        }
-
-        // 如果当前页面没有视频，查找 iframe 中的视频（同源 iframe）
-        const iframes = document.getElementsByTagName('iframe');
-        for (let i = 0; i < iframes.length; i++) {
-            try {
-                const iframe = iframes[i];
-                // 尝试访问 iframe 内容（如果同源则可以访问）
-                if (iframe.contentDocument || iframe.contentWindow) {
-                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                    const iframeVideos = iframeDoc.getElementsByTagName('video');
-
-                    // 查找尺寸合适的视频
-                    for (const v of iframeVideos) {
-                        if (v.offsetWidth > 100) {
-                            console.log('[H5Video] 在 iframe 中找到视频元素');
-                            return v;
-                        }
-                    }
-                    // 如果没找到尺寸合适的，返回第一个
-                    if (iframeVideos.length > 0) {
-                        console.log('[H5Video] 在 iframe 中找到视频元素');
-                        return iframeVideos[0];
-                    }
-                }
-            } catch (e) {
-                // 跨域 iframe，无法访问内容（这是正常的）
-                // 跨域 iframe 中的视频无法直接控制
-                if (iframes[i].offsetWidth > 100 && iframes[i].offsetHeight > 100) {
-                    console.log('[H5Video] 检测到跨域 iframe（可能包含视频，但无法直接访问）');
-                }
-            }
-        }
-
-        return null;
+        return videos[0] || null;
     }
 
-    // 创建字幕UI
-    function createSubtitleUI() {
-        if (subtitleContainer) return;
-
-        const videoParent = video.parentElement;
-        if (!videoParent) return;
-
-        // 确保父容器是相对定位
-        if (!videoParent.style.position || videoParent.style.position === 'static') {
-            videoParent.style.position = 'relative';
-        }
-
-        // 创建容器
-        subtitleContainer = document.createElement('div');
-        subtitleContainer.className = 'h5video-subtitle-container';
-
-        // 创建字幕文本元素
-        subtitleText = document.createElement('div');
-        subtitleText.className = 'h5video-subtitle-text';
-
-        subtitleContainer.appendChild(subtitleText);
-        videoParent.appendChild(subtitleContainer);
-
-        console.log('[H5Video] 字幕UI已创建');
+    // ===== ShadowRoot hook =====
+    function hookAttachShadow(cb) {
+        const orig = Element.prototype.attachShadow;
+        Element.prototype.attachShadow = function (...args) {
+            const sr = orig.apply(this, args);
+            cb(sr);
+            return sr;
+        };
     }
 
-    // 更新字幕显示
-    function updateSubtitleDisplay() {
-        if (!video || !subtitleText) return;
+    // ===== 初始化视频 =====
+    function initVideo(el) {
+        v = el;
+        _fs = new FullScreen(v);
 
-        const currentTime = video.currentTime;
-        let foundSubtitle = '';
+        // 找播放器容器作为网页全屏目标
+        const shell = q('#player') || q('.video-js') || v.closest('[class*="player"]') || v.parentElement;
+        _fp = new FullPage(shell);
 
-        for (const sub of currentSubtitles) {
-            if (currentTime >= sub.start && currentTime <= sub.end) {
-                foundSubtitle = sub.text;
-                break;
-            }
-        }
-
-        if (foundSubtitle) {
-            subtitleText.textContent = foundSubtitle;
-            subtitleText.classList.add('show');
-        } else {
-            subtitleText.classList.remove('show');
-        }
-    }
-
-    // 添加字幕数据
-    function addSubtitles(newSubtitles) {
-        if (!video) return;
-
-        const currentTime = video.currentTime;
-
-        // 调整时间戳
-        const adjustedSubtitles = newSubtitles.map(sub => ({
-            ...sub,
-            start: currentTime + sub.start - 5, // 5 秒是录制间隔
-            end: currentTime + sub.end - 5
-        }));
-
-        currentSubtitles.push(...adjustedSubtitles);
-        currentSubtitles.sort((a, b) => a.start - b.start);
-
-        // 清理过期字幕
-        const minTime = currentTime - 120;
-        currentSubtitles = currentSubtitles.filter(sub => sub.end > minTime);
-
-        console.log('[H5Video] 字幕已更新，当前共', currentSubtitles.length, '条');
-    }
-
-    // 监听来自扩展的消息
-    window.addEventListener('message', (event) => {
-        if (event.source !== window) return;
-        if (!event.data || event.data.source !== 'h5video-extension') return;
-
-        const { type, message, subtitles } = event.data;
-
-        switch (type) {
-            case 'subtitleStarted':
-                showTip(message || '字幕识别已开启');
-                if (!subtitleUpdateInterval) {
-                    subtitleUpdateInterval = setInterval(updateSubtitleDisplay, 100);
-                }
-                break;
-
-            case 'subtitleStopped':
-                showTip(message || '字幕识别已关闭');
-                if (subtitleUpdateInterval) {
-                    clearInterval(subtitleUpdateInterval);
-                    subtitleUpdateInterval = null;
-                }
-                if (subtitleText) {
-                    subtitleText.classList.remove('show');
-                }
-                currentSubtitles = [];
-                break;
-
-            case 'newSubtitles':
-                addSubtitles(subtitles);
-                showTip(`获取 ${subtitles.length} 条字幕`);
-                break;
-
-            case 'subtitleError':
-                showTip(message);
-                break;
-        }
-    });
-
-    // 初始化
-    function init() {
-        console.log('[H5Video] 初始化...');
-
-        // 查找视频元素
-        video = findVideo();
-        if (!video) {
-            console.log('[H5Video] 未找到视频，延迟初始化');
-            setTimeout(init, 1000);
-            return;
-        }
-
-        console.log('[H5Video] ✅ 找到视频元素');
-
-        // 绑定键盘事件
-        document.addEventListener('keydown', handleKeyPress, true);
-
-        // 创建字幕UI
-        createSubtitleUI();
-
-        // 监听视频变化（单页应用和 iframe）
-        const observer = new MutationObserver(() => {
-            const newVideo = findVideo();
-            if (newVideo && newVideo !== video) {
-                console.log('[H5Video] 检测到新视频');
-                video = newVideo;
-                createSubtitleUI();
-            }
+        // 记忆播放速度
+        const savedRate = +localStorage.mvPlayRate;
+        if (savedRate && savedRate !== 1) v.playbackRate = savedRate;
+        v.addEventListener('ratechange', () => {
+            if (v.playbackRate && v.playbackRate !== 1) localStorage.mvPlayRate = v.playbackRate;
         });
 
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-
-        // 监听 iframe 的加载（当 iframe 加载完成后，检查其中是否有视频）
-        const iframes = document.getElementsByTagName('iframe');
-        for (let i = 0; i < iframes.length; i++) {
-            const iframe = iframes[i];
-            // 如果 iframe 还未加载完成，等待加载完成
-            if (!iframe.contentDocument && !iframe.contentWindow) {
-                iframe.addEventListener('load', () => {
-                    setTimeout(() => {
-                        const newVideo = findVideo();
-                        if (newVideo && newVideo !== video) {
-                            console.log('[H5Video] iframe 加载完成，检测到新视频');
-                            video = newVideo;
-                            createSubtitleUI();
-                        }
-                    }, 500); // 延迟一点，让视频元素完全加载
-                }, { once: true });
+        // 直播检测：禁用时间相关快捷键
+        v.addEventListener('canplay', () => {
+            if (v.duration === Infinity) {
+                for (const k of [37, 37+1024, 39, 39+1024, 67, 86, 88, 90]) actList.delete(k);
             }
-        }
+        }, { once: true });
 
-        console.log('[H5Video] ✅ 初始化完成');
         showTip('HTML5视频工具已就绪');
     }
 
-    // 等待 DOM 加载
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
+    // ===== URL 变化监听（SPA）=====
+    function listenURLChange(cb) {
+        const orig = history.pushState;
+        history.pushState = function (...args) { orig.apply(this, args); cb(); };
+        const origR = history.replaceState;
+        history.replaceState = function (...args) { origR.apply(this, args); cb(); };
+        window.addEventListener('popstate', cb);
     }
 
-})();
+    // ===== 主初始化 =====
+    async function main() {
+        if (u === 'youtube') applyYouTubeConfig();
+        else if (u === 'douyin') applyDouyinConfig();
 
+        window.addEventListener('keydown', handleKeydown, true);
+
+        // 轮询等待视频出现
+        const tryFind = () => {
+            const el = findVideo();
+            if (el) { initVideo(el); return; }
+            setTimeout(tryFind, 300);
+        };
+        tryFind();
+
+        // ShadowRoot 中的视频（如 YouTube）
+        hookAttachShadow(async sr => {
+            await new Promise(r => setTimeout(r, 600));
+            if (v) return;
+            const el = q('video', sr);
+            if (el) initVideo(el);
+        });
+
+        // MutationObserver 监听新视频
+        new MutationObserver(() => {
+            const el = findVideo();
+            if (el && el !== v) initVideo(el);
+        }).observe(d.documentElement, { childList: true, subtree: true });
+
+        // SPA URL 变化后重新检测视频
+        listenURLChange(async () => {
+            await new Promise(r => setTimeout(r, 1000));
+            const el = findVideo();
+            if (el && el !== v) initVideo(el);
+        });
+    }
+
+    if (d.readyState === 'loading') {
+        d.addEventListener('DOMContentLoaded', main);
+    } else {
+        main();
+    }
+
+    // ===== 监听来自 content script 的消息（字幕等）=====
+    window.addEventListener('message', (event) => {
+        if (event.source !== window) return;
+        if (!event.data || event.data.source !== 'h5video-extension') return;
+        const { type, message } = event.data;
+        if (type === 'subtitleStarted') showTip(message || '字幕识别已开启');
+        else if (type === 'subtitleStopped') showTip(message || '字幕识别已关闭');
+        else if (type === 'subtitleError') showTip(message);
+    });
+
+})();
