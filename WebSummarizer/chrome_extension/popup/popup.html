@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSummarizer</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <header class="popup-header">
+            <span class="logo">📝</span>
+            <div class="header-text">
+                <h1>WebSummarizer</h1>
+                <p class="version">AI 网页智能总结 v2.0</p>
+            </div>
+        </header>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-label">AI 引擎</span>
+                <span class="status-value" id="providerName">加载中...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">总结类别</span>
+                <span class="status-value" id="categoryName">加载中...</span>
+            </div>
+        </div>
+
+        <div class="feature-badges" id="featureBadges"></div>
+
+        <div class="actions">
+            <button class="btn btn-primary" id="btnSummarize">
+                <span>📝</span>
+                <span>AI 总结当前页面</span>
+            </button>
+            <button class="btn btn-secondary" id="btnSettings">
+                <span>⚙️</span>
+                <span>打开设置</span>
+            </button>
+        </div>
+
+        <div class="footer">
+            <span>选中文字后点击总结按钮可只总结选中内容</span>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

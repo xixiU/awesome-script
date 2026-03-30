@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSummarizer 设置</title>
+    <link rel="stylesheet" href="options.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>⚙️ WebSummarizer 设置</h1>
+            <p class="subtitle">AI 网页智能总结插件配置</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="ai">🤖 AI 配置</button>
+            <button class="tab-btn" data-tab="features">✨ 功能开关</button>
+            <button class="tab-btn" data-tab="prompts">📝 Prompt 类别</button>
+        </div>
+
+        <!-- Tab 1: AI 配置 -->
+        <div class="tab-content active" id="tab-ai">
+            <div class="section">
+                <h2>AI 提供商</h2>
+                <div class="form-group">
+                    <label>选择 AI 提供商</label>
+                    <select id="aiProvider">
+                        <option value="openai">OpenAI 兼容 API（推荐）</option>
+                        <option value="dify">Dify 工作流</option>
+                        <option value="chrome-gemini">Chrome Gemini（本地）</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="section" id="section-openai">
+                <h2>OpenAI 兼容 API 配置</h2>
+                <div class="form-group">
+                    <label>API Base URL</label>
+                    <input type="text" id="openaiBaseUrl" placeholder="https://api.openai.com/v1">
+                    <p class="help-text">支持任何 OpenAI 兼容接口，如 DeepSeek、Moonshot 等</p>
+                </div>
+                <div class="form-group">
+                    <label>模型名称</label>
+                    <input type="text" id="openaiModel" placeholder="gpt-3.5-turbo">
+                </div>
+                <div class="form-group">
+                    <label>API Key</label>
+                    <input type="password" id="openaiApiKey" placeholder="sk-...">
+                </div>
+            </div>
+
+            <div class="section" id="section-dify" style="display:none;">
+                <h2>Dify 工作流配置</h2>
+                <div class="form-group">
+                    <label>Dify 工作流 API 地址</label>
+                    <input type="text" id="difyApiUrl" placeholder="https://api.dify.ai/v1/workflows/run">
+                </div>
+                <div class="form-group">
+                    <label>Dify API Key</label>
+                    <input type="password" id="difyApiKey" placeholder="app-...">
+                </div>
+            </div>
+
+            <div class="section" id="section-gemini" style="display:none;">
+                <h2>Chrome Gemini（本地模型）</h2>
+                <div class="info-box">
+                    <p>🔹 无需配置 API，使用 Chrome 内置 Gemini Nano 模型</p>
+                    <p>🔹 需要 Chrome 版本 ≥ 138</p>
+                    <p>🔹 需在 <code>chrome://components</code> 中下载 Optimization Guide 模型</p>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" id="saveAiConfig">保存 AI 配置</button>
+            </div>
+            <div class="success-msg" id="aiSaveSuccess">✓ AI 配置已保存！</div>
+        </div>
+
+        <!-- Tab 2: 功能开关 -->
+        <div class="tab-content" id="tab-features">
+            <div class="section">
+                <h2>功能开关</h2>
+
+                <div class="toggle-item">
+                    <div class="toggle-info">
+                        <span class="toggle-title">📊 结构化元数据抓取</span>
+                        <span class="toggle-desc">抓取页面标题、作者、发布时间、标签等结构化信息，一并提供给 AI 提升总结质量</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="enableMetadata">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-item">
+                    <div class="toggle-info">
+                        <span class="toggle-title">⬇️ 数据导出</span>
+                        <span class="toggle-desc">在总结结果面板显示导出按钮，支持导出为 JSON 或 Markdown 文件</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="enableExport">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-item">
+                    <div class="toggle-info">
+                        <span class="toggle-title">🔍 观点纠偏（AI 交叉核验）</span>
+                        <span class="toggle-desc">让 AI 对文章中的数据和观点进行交叉核验，识别可疑数据、立场偏差，提供中立视角补充</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="enableFactCheck">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" id="saveFeatures">保存功能设置</button>
+            </div>
+            <div class="success-msg" id="featuresSaveSuccess">✓ 功能设置已保存！</div>
+        </div>
+
+        <!-- Tab 3: Prompt 类别管理 -->
+        <div class="tab-content" id="tab-prompts">
+            <div class="section">
+                <h2>当前激活类别</h2>
+                <div class="form-group">
+                    <label>选择总结类别</label>
+                    <select id="activeCategoryId"></select>
+                    <p class="help-text">选择后，AI 将使用对应类别的 Prompt 进行总结</p>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-primary" id="saveActiveCategory">保存激活类别</button>
+                </div>
+                <div class="success-msg" id="categorySaveSuccess">✓ 已保存！</div>
+            </div>
+
+            <div class="section">
+                <h2>预设类别（只读）</h2>
+                <div id="presetList" class="category-list"></div>
+            </div>
+
+            <div class="section">
+                <h2>自定义类别</h2>
+                <div id="customList" class="category-list"></div>
+                <button class="btn btn-secondary" id="addCustomCategory">+ 新增自定义类别</button>
+            </div>
+
+            <!-- 自定义类别编辑器（隐藏，点击新增时显示） -->
+            <div class="section" id="customEditor" style="display:none;">
+                <h2 id="editorTitle">新增自定义类别</h2>
+                <div class="form-group">
+                    <label>类别名称</label>
+                    <input type="text" id="customName" placeholder="例如：产品评测">
+                </div>
+                <div class="form-group">
+                    <label>Prompt 内容</label>
+                    <textarea id="customPrompt" rows="8" placeholder="请输入自定义 Prompt..."></textarea>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-primary" id="saveCustomCategory">保存</button>
+                    <button class="btn btn-secondary" id="cancelCustomCategory">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="options.js"></script>
+</body>
+</html>

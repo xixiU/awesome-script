@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "WebSummarizer - AI 网页智能总结",
+  "version": "2.0.0",
+  "description": "使用 AI 智能总结网页内容，支持观点纠偏、类型化 Prompt、结构化数据导出",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "downloads",
+    "activeTab"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background/service_worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "exclude_matches": ["https://www.youtube.com/*"],
+      "js": [
+        "modules/content-extractor.js",
+        "modules/metadata-extractor.js",
+        "modules/prompt-manager.js",
+        "modules/export-manager.js",
+        "content/content.js"
+      ],
+      "css": ["content/content.css"],
+      "run_at": "document_end",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "options_page": "options/options.html"
+}
