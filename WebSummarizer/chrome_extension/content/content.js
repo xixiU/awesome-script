@@ -72,18 +72,33 @@
             this._makeDraggable(btn);
 
             let isDragging = false;
-            let dragStartTime = 0;
+            // 初始值用 Date.now() 而非 0，避免某些网站拦截 mousedown 后
+            // dragStartTime 停留在 0 导致 dragDuration 异常大、点击失效
+            let dragStartTime = Date.now();
+            // 标记 mouseup 是否已经触发了 handleSummarize，避免 click 事件重复触发
+            let handledByMouseup = false;
 
             btn.addEventListener('mousedown', () => {
                 isDragging = false;
                 dragStartTime = Date.now();
+                handledByMouseup = false;
             });
 
             btn.addEventListener('mouseup', () => {
                 const dragDuration = Date.now() - dragStartTime;
                 if (!isDragging && dragDuration < 200) {
+                    handledByMouseup = true;
                     this.handleSummarize();
                 }
+            });
+
+            // 部分网站会在捕获阶段拦截 mousedown/mouseup，导致上面的逻辑失效
+            // 用 click 事件作为兜底（click 比 mousedown/mouseup 更难被页面脚本拦截）
+            btn.addEventListener('click', () => {
+                if (!handledByMouseup) {
+                    this.handleSummarize();
+                }
+                handledByMouseup = false;
             });
         }
 
