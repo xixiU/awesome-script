@@ -1,10 +1,8 @@
 {
     "manifest_version": 3,
     "name": "HTML5视频播放工具",
-    "name__en": "HTML5 Video Player Tools",
-    "version": "3.0.0",
-    "description": "视频快捷键控制 + 实时字幕翻译。支持所有视频网站，突破跨域限制。",
-    "description__en": "Video hotkeys control + real-time subtitle translation. Support all video sites, bypass CORS restrictions.",
+    "version": "3.0.1",
+    "description": "视频快捷键控制 + 实时字幕翻译。支持15+主流视频网站，iframe支持，播放器框架自动识别。",
     "permissions": [
         "activeTab",
         "tabs",
