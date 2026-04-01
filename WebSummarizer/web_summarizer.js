@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.5.6
+// @version      1.5.7
 // @description  使用Dify工作流、Chrome Gemini AI或OpenAI兼容API智能总结网页内容，支持全文总结和选中文本总结
 // @author       xixiu
 // @match        *://*/*
@@ -692,6 +692,45 @@
             background: #fee2e2;
             color: #991b1b;
         }
+
+        .dify-ai-score-badge {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: #475569;
+            flex-wrap: wrap;
+        }
+
+        .dify-ai-score-bar {
+            flex: 1;
+            min-width: 80px;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .dify-ai-score-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.6s ease;
+        }
+
+        .dify-ai-score-value {
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .dify-ai-score-loading {
+            color: #94a3b8;
+            font-style: italic;
+        }
     `;
 
     // ==================== 智能正文提取器 ====================
@@ -985,21 +1024,29 @@
                 // 创建会话
                 const session = await LanguageModel.create();
 
-                // 构建总结提示词
-                const prompt = `请对以下网页内容进行智能总结，要求：
+                // 构建总结提示词（含AI生成概率检测）
+                const prompt = `请完成以下两项任务并按指定格式输出：
+
+【任务一】判断下方网页内容被AI生成的概率（0-100），100表示确定是AI生成，0表示确定是人工写作。判断依据：结构是否过于工整、用词是否过于正式、是否缺乏个人情感、是否存在AI惯用表达等。
+
+【任务二】对网页内容进行智能总结，要求：
 1. 提取核心观点和关键信息
 2. 使用清晰的结构组织内容
 3. 保持客观准确
 4. 无论原文使用何种语言，都使用中文总结
-5. 输出markdown格式的内容。
-6.基于文章观点，在单独章节给出相关的建议或者预测。
-7.最后要有阅读原文跳转，原文地址:
+5. 输出markdown格式的内容
+6. 基于文章观点，在单独章节给出相关的建议或者预测
+7. 最后要有阅读原文跳转，原文地址
+
+【输出格式】严格按以下格式，第一行输出分数，第二行输出三个减号，之后输出总结正文：
+AI_SCORE: [0-100的整数]
+---
+[总结正文]
+
 网页地址：${newsUrl}
 
 网页内容：
-${newsContent}
-
-请生成总结：`;
+${newsContent}`;
 
                 // 调用模型生成总结
                 const result = await session.prompt(prompt);
@@ -1031,8 +1078,16 @@ ${newsContent}
                     return;
                 }
 
-                // 构建总结提示词
-                const systemPrompt = `你是一个专业的内容总结助手。请对用户提供的网页内容进行智能总结，要求：
+                // 构建总结提示词（含AI生成概率检测）
+                const systemPrompt = `你是一个专业的内容总结助手，同时具备AI生成内容识别能力。
+每次回复必须严格按以下格式输出，第一行为AI生成概率分数，第二行为分隔线，之后为总结正文：
+AI_SCORE: [0-100的整数]
+---
+[总结正文]
+
+AI_SCORE说明：100表示确定是AI生成，0表示确定是人工写作，判断依据包括结构工整度、用词正式程度、个人情感表达、AI惯用表达等。
+
+总结正文要求：
 1. 提取核心观点和关键信息
 2. 使用清晰的结构组织内容
 3. 保持客观准确
@@ -1044,9 +1099,7 @@ ${newsContent}
                 const userPrompt = `网页地址：${newsUrl}
 
 网页内容：
-${newsContent}
-
-请生成总结：`;
+${newsContent}`;
 
                 // 构建完整的API URL
                 const apiUrl = `${CONFIG.openaiBaseUrl.replace(/\/$/, '')}/chat/completions`;
@@ -1097,6 +1150,32 @@ ${newsContent}
                 });
             });
         }
+    }
+
+    // ==================== AI回复解析工具 ====================
+    // 从合并回复中解析AI生成概率分数与正文内容
+    // 约定格式：回复第一行为 "AI_SCORE: [0-100]"，第二行为 "---"，之后为正文
+    function parseAIScore(rawText) {
+        const lines = rawText.split('\n');
+        let aiScore = null;
+        let contentStart = 0;
+
+        // 在前5行内查找分数标记，容忍模型在前面输出多余空行
+        for (let i = 0; i < Math.min(5, lines.length); i++) {
+            const match = lines[i].match(/^AI_SCORE:\s*(\d+)/i);
+            if (match) {
+                aiScore = Math.max(0, Math.min(100, parseInt(match[1], 10)));
+                contentStart = i + 1;
+                // 跳过紧随其后的分隔线
+                if (lines[contentStart]?.trim() === '---') {
+                    contentStart++;
+                }
+                break;
+            }
+        }
+
+        const content = lines.slice(contentStart).join('\n').trimStart();
+        return { aiScore, content };
     }
 
     // ==================== UI管理 ====================
@@ -1779,20 +1858,24 @@ ${newsContent}
                 this.currentSummaryMode = isSelectionMode ? 'selection' : 'full';
 
                 // 根据配置选择 AI 提供商
-                let result;
+                let rawResult;
                 if (CONFIG.aiProvider === 'chrome-gemini') {
-                    result = await ChromeGeminiAPI.summarize(newsUrl, newsContent);
+                    rawResult = await ChromeGeminiAPI.summarize(newsUrl, newsContent);
                 } else if (CONFIG.aiProvider === 'openai') {
-                    result = await OpenAIAPI.summarize(newsUrl, newsContent);
+                    rawResult = await OpenAIAPI.summarize(newsUrl, newsContent);
                 } else {
-                    result = await DifyAPI.summarize(newsUrl, newsContent);
+                    rawResult = await DifyAPI.summarize(newsUrl, newsContent);
                 }
 
-                // 保存原始结果文本（用于复制）
-                this.currentResult = result;
+                // 解析合并回复中的AI生成概率与正文内容
+                // Dify工作流输出格式不可控，aiScore可能为null
+                const { aiScore, content } = parseAIScore(rawResult);
+
+                // 保存原始结果文本（用于复制，去除分数行）
+                this.currentResult = content;
 
                 // 显示结果
-                this.showResultPanel(result);
+                this.showResultPanel(content, aiScore);
 
             } catch (error) {
                 console.error('错误:', error);
@@ -1837,7 +1920,7 @@ ${newsContent}
             this.overlay.classList.add('show');
         }
 
-        showResultPanel(result) {
+        showResultPanel(result, aiScore = null) {
             // 更新面板标题
             const titleElement = this.panel.querySelector('#dify-panel-title');
             if (this.currentSummaryMode === 'selection') {
@@ -1846,9 +1929,36 @@ ${newsContent}
                 titleElement.textContent = '📝 AI总结结果（全文）';
             }
 
-            // 显示总结结果
             const contentDiv = this.panel.querySelector('#dify-panel-content');
-            contentDiv.textContent = ''; // 清空内容
+            contentDiv.textContent = '';
+
+            if (aiScore !== null) {
+                // 渲染AI生成概率条
+                const badge = document.createElement('div');
+                badge.className = 'dify-ai-score-badge';
+                let color, label, emoji;
+                if (aiScore < 30) {
+                    color = '#10b981';
+                    label = '人工创作';
+                    emoji = '✍️';
+                } else if (aiScore < 60) {
+                    color = '#f59e0b';
+                    label = '疑似混合';
+                    emoji = '⚠️';
+                } else {
+                    color = '#ef4444';
+                    label = 'AI生成';
+                    emoji = '🤖';
+                }
+                badge.innerHTML = `
+                    <span>${emoji} AI生成概率</span>
+                    <div class="dify-ai-score-bar">
+                        <div class="dify-ai-score-fill" style="width:${aiScore}%;background:${color}"></div>
+                    </div>
+                    <span class="dify-ai-score-value" style="color:${color}">${aiScore}% · ${label}</span>
+                `;
+                contentDiv.appendChild(badge);
+            }
 
             // 将 Markdown 格式的结果转换为 DOM 元素
             this.renderMarkdownContent(result, contentDiv);
