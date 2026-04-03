@@ -274,8 +274,18 @@
                                             );
                                             if (code) {
                                                 let inputElement = selector(inputSelector);
+                                                // Angular 表单特殊处理
+                                                if (inputElement.hasAttribute('formcontrolname') || inputElement.className.includes('ng-')) {
+                                                    inputElement.value = code;
+                                                    inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+                                                    inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+                                                    inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
+                                                    inputElement.dispatchEvent(new Event('focus', { bubbles: true }));
+                                                    inputElement.dispatchEvent(new Event('keyup', { bubbles: true }));
+                                                    console.log('[验证码助手] 检测到 Angular 表单（共享验证码），已触发完整事件链');
+                                                }
                                                 // Element UI 特殊处理
-                                                if (inputElement.closest('.el-input-group')) {
+                                                else if (inputElement.closest('.el-input-group')) {
                                                     // 触发Element UI的输入事件
                                                     inputElement.value = code;
                                                     inputElement.dispatchEvent(new Event('input', { bubbles: true }));
@@ -623,7 +633,19 @@
                             selector(captchaPath.img).getAttribute("src")
                         );
                         if (code) {
-                            selector(captchaPath.input).value = code.trim();
+                            let inputElement = selector(captchaPath.input);
+                            // Angular 表单特殊处理
+                            if (inputElement.hasAttribute('formcontrolname') || inputElement.className.includes('ng-')) {
+                                inputElement.value = code.trim();
+                                inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+                                inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+                                inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
+                                inputElement.dispatchEvent(new Event('focus', { bubbles: true }));
+                                inputElement.dispatchEvent(new Event('keyup', { bubbles: true }));
+                                console.log('[验证码助手] 检测到 Angular 表单（用户自定义），已触发完整事件链');
+                            } else {
+                                inputElement.value = code.trim();
+                            }
                             console.log("正在使用用户自定义验证码位置数据获取验证码");
                             return;
                         } else {
@@ -872,8 +894,21 @@
                             item.img.getAttribute("src")
                         );
                         if (code) {
+                            // Angular 表单特殊处理
+                            if (item.input.hasAttribute('formcontrolname') || item.input.className.includes('ng-')) {
+                                // 设置值
+                                item.input.value = code;
+                                // 触发 Angular 的输入事件（必须按顺序触发）
+                                item.input.dispatchEvent(new Event('input', { bubbles: true }));
+                                item.input.dispatchEvent(new Event('change', { bubbles: true }));
+                                item.input.dispatchEvent(new Event('blur', { bubbles: true }));
+                                // 额外触发 focus 和 keyup 事件以确保 Angular 检测到变化
+                                item.input.dispatchEvent(new Event('focus', { bubbles: true }));
+                                item.input.dispatchEvent(new Event('keyup', { bubbles: true }));
+                                console.log('[验证码助手] 检测到 Angular 表单，已触发完整事件链');
+                            }
                             // Element UI 特殊处理
-                            if (item.input.closest('.el-input-group')) {
+                            else if (item.input.closest('.el-input-group')) {
                                 // 触发Element UI的输入事件
                                 item.input.value = code;
                                 item.input.dispatchEvent(new Event('input', { bubbles: true }));
