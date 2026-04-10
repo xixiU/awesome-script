@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.2.6
+// @version      4.3.1
 // @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。修复跨域图片处理问题。
 // @author       xixiu
 // @thanks       哈士奇
@@ -92,16 +92,54 @@
         }
     }
 
+    /**
+     * 通用输入框填值函数，兼容 Angular / Vue 3 (Naive UI / Arco Design) / React / Ant Design / 原生表单
+     * 通过 nativeInputValueSetter 绕过框架对 value 属性的拦截，并触发完整事件链
+     */
+    function fillInput(el, value) {
+        try {
+            // 使用原生 setter，确保 Vue3/React 的响应式系统能感知到值的变化
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            nativeSetter.call(el, value);
+        } catch (e) {
+            el.value = value;
+        }
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        // Angular 响应式表单需要额外的事件才能触发 ControlValueAccessor
+        if (el.hasAttribute('formcontrolname') || (el.className && el.className.includes('ng-'))) {
+            el.dispatchEvent(new Event('blur', { bubbles: true }));
+            el.dispatchEvent(new Event('focus', { bubbles: true }));
+            el.dispatchEvent(new Event('keyup', { bubbles: true }));
+            console.log('[验证码助手] 检测到 Angular 表单，已触发完整事件链');
+        } else {
+            el.dispatchEvent(new Event('blur', { bubbles: true }));
+        }
+    }
+
     function init() {
         //简化各种api和初始化全局变量
-        CUR_URL = window.location.href;
-        DOMAIN = CUR_URL.split("//")[1].split("/")[0];
-        SLIDE_STORE_KEY = "husky_" + "slidePath" + location.host;
-        NORMAL_STORE_KEY = "husky_" + "normalPath" + location.host;
-        selector = document.querySelector.bind(document);
-        selectorAll = document.querySelectorAll.bind(document);
-        getItem = localStorage.getItem.bind(localStorage);
-        setItem = localStorage.setItem.bind(localStorage);
+        /* eslint-disable no-var */
+        var CUR_URL = window.location.href;
+        var DOMAIN = CUR_URL.split("//")[1].split("/")[0];
+        var SLIDE_STORE_KEY = "husky_" + "slidePath" + location.host;
+        var NORMAL_STORE_KEY = "husky_" + "normalPath" + location.host;
+        var selector = document.querySelector.bind(document);
+        var selectorAll = document.querySelectorAll.bind(document);
+        var getItem = localStorage.getItem.bind(localStorage);
+        var setItem = localStorage.setItem.bind(localStorage);
+        /* eslint-enable no-var */
+        // 将变量挂到 window 上供 IIFE 内其他函数访问（保持向后兼容）
+        window._captchaHelper = { CUR_URL, DOMAIN, SLIDE_STORE_KEY, NORMAL_STORE_KEY, selector, selectorAll, getItem, setItem };
+        // 同时保留全局引用（IIFE 内部使用）
+        window.CUR_URL = CUR_URL;
+        window.DOMAIN = DOMAIN;
+        window.SLIDE_STORE_KEY = SLIDE_STORE_KEY;
+        window.NORMAL_STORE_KEY = NORMAL_STORE_KEY;
+        window.selector = selector;
+        window.selectorAll = selectorAll;
+        window.getItem = getItem;
+        window.setItem = setItem;
     }
 
     function getNumber(str) {
@@ -235,14 +273,14 @@
                                 this.doCheckTask();
                                 this.checkTimer = setTimeout(() => {
                                     this.checkTimer = null;
-                                }, 2000);
+                                }, 600);
                             } else {
                                 // SPA 持续变更期间，重置静默计时器，静默结束后再执行一次
                                 window.clearTimeout(this.checkTimer);
                                 this.checkTimer = setTimeout(() => {
                                     this.checkTimer = null;
                                     this.doCheckTask();
-                                }, 2000);
+                                }, 600);
                             }
                             return;
                         }
@@ -302,35 +340,7 @@
                                             );
                                             if (code) {
                                                 let inputElement = selector(inputSelector);
-                                                // Angular 表单特殊处理
-                                                if (inputElement.hasAttribute('formcontrolname') || inputElement.className.includes('ng-')) {
-                                                    inputElement.value = code;
-                                                    inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-                                                    inputElement.dispatchEvent(new Event('change', { bubbles: true }));
-                                                    inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
-                                                    inputElement.dispatchEvent(new Event('focus', { bubbles: true }));
-                                                    inputElement.dispatchEvent(new Event('keyup', { bubbles: true }));
-                                                    console.log('[验证码助手] 检测到 Angular 表单（共享验证码），已触发完整事件链');
-                                                }
-                                                // Element UI 特殊处理
-                                                else if (inputElement.closest('.el-input-group')) {
-                                                    // 触发Element UI的输入事件
-                                                    inputElement.value = code;
-                                                    inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-                                                    inputElement.dispatchEvent(new Event('change', { bubbles: true }));
-                                                    inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
-                                                }
-                                                // Naive UI 特殊处理：Vue 响应式需要通过 nativeInputValueSetter 触发
-                                                else if (inputElement.classList.contains('n-input__input-el') || inputElement.closest('.n-input')) {
-                                                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-                                                    nativeInputValueSetter.call(inputElement, code);
-                                                    inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-                                                    inputElement.dispatchEvent(new Event('change', { bubbles: true }));
-                                                    inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
-                                                    console.log('[验证码助手] 检测到 Naive UI 表单（共享验证码），已触发完整事件链');
-                                                } else {
-                                                    inputElement.value = code;
-                                                }
+                                                fillInput(inputElement, code);
 
                                                 if (typeof Vue !== "undefined") {
                                                     new Vue().$message.success("获取验证码成功");
@@ -499,10 +509,7 @@
                         }
                     };
                     if (!img.src.includes(";base64,")) {
-                        img.onload = function () {
-                            action();
-                        };
-                        if (img.complete) {
+                        if (img.complete && img.naturalWidth > 0) {
                             action();
                         } else {
                             img.onload = function () {
@@ -671,27 +678,7 @@
                         );
                         if (code) {
                             let inputElement = selector(captchaPath.input);
-                            // Angular 表单特殊处理
-                            if (inputElement.hasAttribute('formcontrolname') || inputElement.className.includes('ng-')) {
-                                inputElement.value = code.trim();
-                                inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-                                inputElement.dispatchEvent(new Event('change', { bubbles: true }));
-                                inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
-                                inputElement.dispatchEvent(new Event('focus', { bubbles: true }));
-                                inputElement.dispatchEvent(new Event('keyup', { bubbles: true }));
-                                console.log('[验证码助手] 检测到 Angular 表单（用户自定义），已触发完整事件链');
-                            }
-                            // Naive UI 特殊处理：Vue 响应式需要通过 nativeInputValueSetter 触发
-                            else if (inputElement.classList.contains('n-input__input-el') || inputElement.closest('.n-input')) {
-                                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-                                nativeInputValueSetter.call(inputElement, code.trim());
-                                inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-                                inputElement.dispatchEvent(new Event('change', { bubbles: true }));
-                                inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
-                                console.log('[验证码助手] 检测到 Naive UI 表单（用户自定义），已触发完整事件链');
-                            } else {
-                                inputElement.value = code.trim();
-                            }
+                            fillInput(inputElement, code.trim());
                             console.log("正在使用用户自定义验证码位置数据获取验证码");
                             return;
                         } else {
@@ -735,13 +722,13 @@
                 let imgHeight = img.naturalHeight || img.height;
 
                 // 验证码图片通常宽度大于高度（横向长条形）
-                let isValidSize = imgWidth > 20 &&
-                    imgWidth < 200 &&
-                    imgHeight >= 20 &&
-                    imgHeight < 100;
+                let isValidSize = imgWidth > 10 &&
+                    imgWidth < 600 &&
+                    imgHeight > 10 &&
+                    imgHeight < 300;
 
                 // 优先匹配 src 中包含明确验证码路径的图片
-                let isCaptchaSrc = /createimage|captcha|verify|checkcode|validatecode|rand|vcode|authcode/i.test(imgSrc);
+                let isCaptchaSrc = /createimage|captcha|verify|checkcode|validatecode|rand|vcode|authcode|kaptcha|imagecode|seccode|piccode|yzm|verifycode|picvalidcode/i.test(imgSrc);
                 //console.log(`[验证码助手] 图片src: ${imgSrc}, 验证码路径检查: ${isCaptchaSrc}`);
 
                 // Element UI 特殊处理：检查是否在 el-input-group__append 内
@@ -784,14 +771,14 @@
                 // 对于非明确路径的图片，需要更严格的检查
                 for (let i = 0; i < checkList.length; i++) {
                     if (
-                        /.*(code|captcha|验证码|login|点击|verify|yzm|yanzhengma|换一张).*/im.test(
+                        /.*(code|captcha|验证码|login|点击|verify|yzm|yanzhengma|换一张|security|challenge|kaptcha|seccode|piccode).*/im.test(
                             checkList[i].toLowerCase()
                         ) &&
                         isValidSize &&
                         !isInvalid
                     ) {
                         // 需要宽高比合理（宽度至少是高度的1.5倍，排除正方形图片如二维码）
-                        if (imgWidth / imgHeight >= 1.5) {
+                        if (imgWidth / imgHeight >= 0.8) {
                             console.log(`[验证码助手] 通过属性检测到验证码图片: ${img.getAttribute("id") || imgSrc}, 尺寸: ${imgWidth}x${imgHeight}`);
                             captchaMap.push({ img: img, input: null });
                             break;
@@ -977,38 +964,7 @@
                             item.img.getAttribute("src")
                         );
                         if (code) {
-                            // Angular 表单特殊处理
-                            if (item.input.hasAttribute('formcontrolname') || item.input.className.includes('ng-')) {
-                                // 设置值
-                                item.input.value = code;
-                                // 触发 Angular 的输入事件（必须按顺序触发）
-                                item.input.dispatchEvent(new Event('input', { bubbles: true }));
-                                item.input.dispatchEvent(new Event('change', { bubbles: true }));
-                                item.input.dispatchEvent(new Event('blur', { bubbles: true }));
-                                // 额外触发 focus 和 keyup 事件以确保 Angular 检测到变化
-                                item.input.dispatchEvent(new Event('focus', { bubbles: true }));
-                                item.input.dispatchEvent(new Event('keyup', { bubbles: true }));
-                                console.log('[验证码助手] 检测到 Angular 表单，已触发完整事件链');
-                            }
-                            // Element UI 特殊处理
-                            else if (item.input.closest('.el-input-group')) {
-                                // 触发Element UI的输入事件
-                                item.input.value = code;
-                                item.input.dispatchEvent(new Event('input', { bubbles: true }));
-                                item.input.dispatchEvent(new Event('change', { bubbles: true }));
-                                item.input.dispatchEvent(new Event('blur', { bubbles: true }));
-                            }
-                            // Naive UI 特殊处理：Vue 响应式需要通过 nativeInputValueSetter 触发
-                            else if (item.input.classList.contains('n-input__input-el') || item.input.closest('.n-input')) {
-                                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-                                nativeInputValueSetter.call(item.input, code);
-                                item.input.dispatchEvent(new Event('input', { bubbles: true }));
-                                item.input.dispatchEvent(new Event('change', { bubbles: true }));
-                                item.input.dispatchEvent(new Event('blur', { bubbles: true }));
-                                console.log('[验证码助手] 检测到 Naive UI 表单，已触发完整事件链');
-                            } else {
-                                item.input.value = code;
-                            }
+                            fillInput(item.input, code);
 
                             if (typeof Vue !== "undefined") {
                                 new Vue().$message.success("获取验证码成功");

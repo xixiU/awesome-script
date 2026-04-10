@@ -104,6 +104,29 @@ GM_xmlhttpRequest({
 
 ## 更新记录
 
+### v4.3.1 (2026-04-11)
+
+**问题修复与兼容性增强**
+
+- ✅ 新增通用 `fillInput()` 辅助函数，统一处理所有框架的输入框填值
+- ✅ 修复 React（Ant Design、Arco Design 等）表单验证码填入后表单校验失败的问题
+- ✅ 扩展验证码图片尺寸范围（宽 10~600px，高 10~300px），兼容更多网站
+- ✅ 放宽宽高比限制（从 1.5 降至 0.8），支持接近正方形的验证码图片
+- ✅ 扩展 src 路径关键词匹配（新增 kaptcha、imagecode、seccode、piccode、yzm、verifycode、picvalidcode）
+- ✅ 扩展属性关键词匹配（新增 security、challenge、kaptcha、seccode、piccode）
+- ✅ 将 MutationObserver 防抖延迟从 2000ms 降至 600ms，提升 SPA 页面响应速度
+
+**技术改进**
+
+- `fillInput(el, value)` 使用原生 `HTMLInputElement.prototype.value` setter 绕过框架响应式拦截，触发完整事件链（`input` → `change` → `blur`），Angular 表单额外触发 `focus` + `keyup`
+- 三处重复的框架分支填值代码（~80 行）统一替换为单行 `fillInput()` 调用，消除代码重复
+
+**影响范围**
+
+- 修复 React 生态（Ant Design、Arco Design、Material UI 等）验证码填值后表单校验失败的问题
+- 大幅提升对国内政务、教育、金融类网站的开箱即用兼容性
+- 不影响已支持框架（Vue 2/3、Angular）的正常使用
+
 ### v4.2.6 (2026-04-11)
 
 **问题修复**
