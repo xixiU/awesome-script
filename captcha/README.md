@@ -104,6 +104,37 @@ GM_xmlhttpRequest({
 
 ## 更新记录
 
+### v4.2.6 (2026-04-11)
+
+**问题修复**
+
+- ✅ 修复 Naive UI（Vue 3）表单验证码填入后表单校验失败的问题
+- ✅ 修复 el-image 组件刷新验证码后插件停止响应的问题
+
+**问题描述**
+
+**问题一：Naive UI 表单填值失效**
+
+在使用 Naive UI（Vue 3）的网站上，验证码被填入输入框，但表单校验仍提示验证码为空或无效。
+
+根本原因：Naive UI 的输入框通过 Vue 3 响应式系统绑定，直接设置 `input.value` 不会触发 Vue 的响应式更新，导致表单控件内部状态未同步。
+
+解决方案：检测到 Naive UI 输入框（`.n-input__input-el` 或 `.n-input`）时，使用 `Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set` 获取原生 setter，通过原生 setter 赋值后再触发完整事件链（`input` → `change` → `blur`），确保 Vue 响应式系统正确感知值的变化。修复覆盖自动识别、共享验证码、用户自定义三条路径。
+
+**问题二：el-image 组件刷新后插件停止响应**
+
+在使用 Element UI `el-image` 组件的网站（如 scjg.hubei.gov.cn）上，初始验证码可以正常识别，但用户手动多次点击刷新验证码后，插件不再响应。
+
+根本原因：`el-image` 组件刷新验证码时，不是修改原有 `<img>` 的 `src` 属性，而是直接删除旧 `<img>` 元素、插入新 `<img>` 元素（childList 变化）。原有的 MutationObserver 只处理了 `attributes` 类型的 src 变化，对 childList 类型的 img 替换没有响应，导致 `doCheckTask()` 未被触发。同时 `imgCache` 未清空，即使偶尔触发也会因缓存命中而跳过识别。
+
+解决方案：在 MutationObserver 回调中新增 childList 分支，检测 `addedNodes` 中是否有新 `<img>` 元素插入，若有则清空 `imgCache` 并触发 `doCheckTask()`，与 src 属性变化的处理逻辑保持一致。
+
+**影响范围**
+
+- 修复 Naive UI 框架网站验证码填值后表单校验失败的问题
+- 修复使用 el-image 组件的网站反复刷新验证码后插件失效的问题
+- 不影响其他框架和网站的正常使用
+
 ### v4.2.5(2026-04-03)
 
 **问题修复**

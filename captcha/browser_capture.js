@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.2.5
+// @version      4.2.6
 // @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。修复跨域图片处理问题。
 // @author       xixiu
 // @thanks       哈士奇
@@ -140,11 +140,18 @@
             window.addEventListener("load", async () => {
                 this.listenLoadSuccess = true;
                 this.init();
+                // Vue SPA 异步渲染验证码，load 后多次重试
+                [1000, 2000, 3000, 5000].forEach(delay => {
+                    setTimeout(() => this.doCheckTask(), delay);
+                });
             });
             setTimeout(() => {
                 if (!this.listenLoadSuccess) {
                     this.listenLoadSuccess = true;
                     this.init();
+                    [1000, 2000, 3000, 5000].forEach(delay => {
+                        setTimeout(() => this.doCheckTask(), delay);
+                    });
                 }
             }, 5000);
         }
@@ -177,17 +184,34 @@
                     // 特殊处理：检查是否是图片src属性变化
                     if (tagName === "img" && mutations[i].type === "attributes" && mutations[i].attributeName === "src") {
                         console.log('[验证码助手] 检测到图片src变化，重新识别验证码');
-                        if (!this.checkTimer) {
-                            this.checkTimer = setTimeout(() => {
-                                this.doCheckTask();
-                            }, 500); // 延迟500ms，等待图片加载完成
-                        } else {
+                        this.imgCache = []; // 清空缓存，确保新验证码不被误判为重复
+                        window.clearTimeout(this.checkTimer);
+                        this.checkTimer = setTimeout(() => {
+                            this.checkTimer = null;
+                            this.doCheckTask();
+                        }, 500); // 延迟500ms，等待图片加载完成
+                        continue;
+                    }
+
+                    // 特殊处理：el-image 等组件刷新时直接替换 img 元素（childList），而非修改 src 属性
+                    if (mutations[i].type === "childList" && mutations[i].addedNodes.length > 0) {
+                        let hasNewImg = false;
+                        for (const node of mutations[i].addedNodes) {
+                            if (node.nodeType === 1 && node.tagName && node.tagName.toLowerCase() === "img") {
+                                hasNewImg = true;
+                                break;
+                            }
+                        }
+                        if (hasNewImg) {
+                            console.log('[验证码助手] 检测到新img元素插入，清空缓存重新识别');
+                            this.imgCache = [];
                             window.clearTimeout(this.checkTimer);
                             this.checkTimer = setTimeout(() => {
+                                this.checkTimer = null;
                                 this.doCheckTask();
                             }, 500);
+                            continue;
                         }
-                        continue;
                     }
 
                     let checkList = [];
@@ -207,12 +231,16 @@
                             tagName === "iframe"
                         ) {
                             if (!this.checkTimer) {
+                                // 首次触发立即执行
+                                this.doCheckTask();
                                 this.checkTimer = setTimeout(() => {
-                                    this.doCheckTask();
-                                }, 0);
+                                    this.checkTimer = null;
+                                }, 2000);
                             } else {
+                                // SPA 持续变更期间，重置静默计时器，静默结束后再执行一次
                                 window.clearTimeout(this.checkTimer);
                                 this.checkTimer = setTimeout(() => {
+                                    this.checkTimer = null;
                                     this.doCheckTask();
                                 }, 2000);
                             }
@@ -291,6 +319,15 @@
                                                     inputElement.dispatchEvent(new Event('input', { bubbles: true }));
                                                     inputElement.dispatchEvent(new Event('change', { bubbles: true }));
                                                     inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
+                                                }
+                                                // Naive UI 特殊处理：Vue 响应式需要通过 nativeInputValueSetter 触发
+                                                else if (inputElement.classList.contains('n-input__input-el') || inputElement.closest('.n-input')) {
+                                                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                                                    nativeInputValueSetter.call(inputElement, code);
+                                                    inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+                                                    inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+                                                    inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
+                                                    console.log('[验证码助手] 检测到 Naive UI 表单（共享验证码），已触发完整事件链');
                                                 } else {
                                                     inputElement.value = code;
                                                 }
@@ -643,6 +680,15 @@
                                 inputElement.dispatchEvent(new Event('focus', { bubbles: true }));
                                 inputElement.dispatchEvent(new Event('keyup', { bubbles: true }));
                                 console.log('[验证码助手] 检测到 Angular 表单（用户自定义），已触发完整事件链');
+                            }
+                            // Naive UI 特殊处理：Vue 响应式需要通过 nativeInputValueSetter 触发
+                            else if (inputElement.classList.contains('n-input__input-el') || inputElement.closest('.n-input')) {
+                                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                                nativeInputValueSetter.call(inputElement, code.trim());
+                                inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+                                inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+                                inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
+                                console.log('[验证码助手] 检测到 Naive UI 表单（用户自定义），已触发完整事件链');
                             } else {
                                 inputElement.value = code.trim();
                             }
@@ -704,8 +750,13 @@
                     imgSrc.startsWith('data:image/');
                 //console.log(`[验证码助手] Element UI检查: ${isElementUICaptcha}`);
 
+                // Naive UI 特殊处理：检查是否在 n-input__suffix 内
+                let isNaiveUICaptcha = img.closest('.n-input__suffix') &&
+                    imgSrc.startsWith('data:image/');
+                //console.log(`[验证码助手] Naive UI检查: ${isNaiveUICaptcha}`);
+
                 // 对于明确是验证码路径的图片，放宽尺寸限制（图片可能还在加载中）
-                if ((isCaptchaSrc || isElementUICaptcha) && !isInvalid) {
+                if ((isCaptchaSrc || isElementUICaptcha || isNaiveUICaptcha) && !isInvalid) {
                     console.log(`[验证码助手] 验证码路径匹配成功，开始处理...`);
                     // 检查是否已经添加过
                     let alreadyAdded = captchaMap.some(item => item.img === img);
@@ -751,6 +802,7 @@
             captchaMap.forEach((item) => {
                 let imgEle = item.img;
                 let parentNode = imgEle.parentNode;
+                let childNode = imgEle; // 跟踪当前层级的子节点（用于 Method 1 的兄弟节点遍历）
 
                 for (let i = 0; i < 5; i++) {
                     // 以当前可能是验证码的图片为基点，向上遍历五层查找可能的Input输入框
@@ -773,10 +825,40 @@
                             }
                         }
 
+                        // 方法0b: Naive UI 特殊处理
+                        if (!nearbyInput) {
+                            let nInputSuffix = imgEle.closest('.n-input__suffix');
+                            if (nInputSuffix) {
+                                // 找到最近的 n-input 容器，在其中查找 placeholder 含"验证码"的输入框
+                                let nInput = nInputSuffix.closest('.n-input');
+                                if (nInput) {
+                                    let captchaInput = nInput.querySelector('input[placeholder*="验证码"]');
+                                    if (!captchaInput) {
+                                        captchaInput = nInput.querySelector('input.n-input__input-el[type="text"]');
+                                    }
+                                    if (captchaInput) {
+                                        nearbyInput = captchaInput;
+                                        console.log(`[验证码助手] 找到Naive UI输入框: ${captchaInput.getAttribute("placeholder") || captchaInput.getAttribute("id")}`);
+                                    }
+                                }
+                                // 如果 n-input 内没找到，向上查找 form 中 placeholder 含"验证码"的输入框
+                                if (!nearbyInput) {
+                                    let form = imgEle.closest('form');
+                                    if (form) {
+                                        let captchaInput = form.querySelector('input[placeholder*="验证码"]');
+                                        if (captchaInput) {
+                                            nearbyInput = captchaInput;
+                                            console.log(`[验证码助手] 找到Naive UI表单验证码输入框: ${captchaInput.getAttribute("placeholder")}`);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // 方法1: 查找图片的前一个兄弟节点中的输入框
                         if (!nearbyInput && (i === 0 || i === 1)) {
-                            // 在前两层（直接父节点和父父节点）查找
-                            let currentNode = imgEle;
+                            // 在前两层（直接父节点和父父节点）查找，从当前层级的子节点开始遍历兄弟
+                            let currentNode = childNode;
                             // 向前查找兄弟节点
                             while (currentNode.previousElementSibling) {
                                 let prevSibling = currentNode.previousElementSibling;
@@ -852,6 +934,7 @@
                             }
                         }
                     }
+                    childNode = parentNode;
                     parentNode = parentNode.parentNode;
                 }
             });
@@ -914,6 +997,15 @@
                                 item.input.dispatchEvent(new Event('input', { bubbles: true }));
                                 item.input.dispatchEvent(new Event('change', { bubbles: true }));
                                 item.input.dispatchEvent(new Event('blur', { bubbles: true }));
+                            }
+                            // Naive UI 特殊处理：Vue 响应式需要通过 nativeInputValueSetter 触发
+                            else if (item.input.classList.contains('n-input__input-el') || item.input.closest('.n-input')) {
+                                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                                nativeInputValueSetter.call(item.input, code);
+                                item.input.dispatchEvent(new Event('input', { bubbles: true }));
+                                item.input.dispatchEvent(new Event('change', { bubbles: true }));
+                                item.input.dispatchEvent(new Event('blur', { bubbles: true }));
+                                console.log('[验证码助手] 检测到 Naive UI 表单，已触发完整事件链');
                             } else {
                                 item.input.value = code;
                             }
@@ -1422,10 +1514,9 @@
     var captchaInstance = null;
 
     function main() {
-        window.addEventListener("DOMContentLoaded", function () {
-            init();
-            captchaInstance = new Captcha();
-        });
+        // @run-at document-end 时 DOMContentLoaded 已触发，直接初始化
+        init();
+        captchaInstance = new Captcha();
     }
 
     const actions = {
