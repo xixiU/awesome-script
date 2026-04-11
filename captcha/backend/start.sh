@@ -306,7 +306,7 @@ start_service() {
     gunicorn_cmd="$gunicorn_cmd --pid ${PID_FILE}"
     gunicorn_cmd="$gunicorn_cmd --daemon"
     gunicorn_cmd="$gunicorn_cmd --chdir ${SCRIPT_DIR}"
-    gunicorn_cmd="$gunicorn_cmd ${PYTHON_APP}:app"
+    gunicorn_cmd="$gunicorn_cmd ${PYTHON_APP%.py}:app"
     
     log_debug "执行命令: $gunicorn_cmd"
     
