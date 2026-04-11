@@ -3,7 +3,7 @@ import base64
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import io
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image, ImageEnhance, ImageOps, ImageFilter
 import traceback
 
 # ==================== 第一性原理：验证码识别的本质 ====================
@@ -105,69 +105,193 @@ def validate_image_bytes(image_bytes):
         return False
 
 
-def preprocess_captcha(image_bytes):
-    """
-    验证码图像预处理：提升 ddddocr 识别准确率
-
-    处理流程：
-    1. 放大图像（小图 OCR 效果差）
-    2. 白色背景合并（处理透明通道）
-    3. 转灰度
-    4. 适度增强对比度
-    5. 高阈值二值化（仅保留深色笔画，排除干扰线）
-
-    注意：不使用 MedianFilter，避免干扰曲线与字符笔画合并
-    导致拉丁字母被误识别为汉字。
-
-    返回：处理后的 PNG 字节数据
-    """
-    try:
-        img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
-
-        # 白色背景合并（处理透明 PNG/SVG 转换结果）
+def _composite_white_bg(img):
+    """将带透明通道的图像合成到白色背景"""
+    if img.mode == 'RGBA':
         background = Image.new("RGBA", img.size, (255, 255, 255, 255))
         background.paste(img, mask=img.split()[3])
-        img = background.convert("RGB")
+        return background.convert("RGB")
+    return img.convert("RGB")
 
-        w, h = img.size
 
-        # 1. 放大：小于 100px 宽的图片放大，提升 OCR 精度
-        if w < 100:
-            scale = 3
-        elif w < 200:
-            scale = 2
-        else:
-            scale = 1
-        if scale > 1:
-            img = img.resize((w * scale, h * scale), Image.LANCZOS)
+def _scale_up(img):
+    """放大小图，提升 OCR 精度"""
+    w, h = img.size
+    if w < 100:
+        scale = 3
+    elif w < 200:
+        scale = 2
+    else:
+        scale = 1
+    if scale > 1:
+        img = img.resize((w * scale, h * scale), Image.LANCZOS)
+    return img
 
-        # 2. 转灰度
-        img = img.convert("L")
 
-        # 3. 适度增强对比度
-        img = ImageEnhance.Contrast(img).enhance(1.5)
+def _binarize(img_gray, threshold=180):
+    """固定阈值二值化，返回黑字白底图"""
+    return img_gray.point(lambda p: 0 if p < threshold else 255, 'L')
 
-        # 4. 高固定阈值二值化：只保留最深色的笔画像素（阈值180），
-        #    干扰线通常比字符笔画浅，可被过滤掉，避免与字符笔画合并
-        img = img.point(lambda p: 0 if p < 180 else 255, 'L')
 
-        out = io.BytesIO()
-        img.save(out, format="PNG")
-        return out.getvalue()
-    except Exception as e:
-        # 预处理失败时返回原始数据，不影响识别流程
-        app.logger.warning(f"图像预处理失败，使用原始图像: {e}")
-        return image_bytes
+def _morphological_open(img_binary, kernel_size=3):
+    """
+    形态学开运算（腐蚀→膨胀），去除细干扰线。
+    对黑字白底图：先 MaxFilter（腐蚀黑色特征），再 MinFilter（膨胀黑色特征）。
+    细于 kernel_size 的特征（干扰线）被腐蚀掉后无法恢复，而粗字符笔画可以恢复。
+    """
+    img = img_binary.filter(ImageFilter.MaxFilter(kernel_size))  # 腐蚀黑色
+    img = img.filter(ImageFilter.MinFilter(kernel_size))          # 膨胀黑色
+    return img
+
+
+def _otsu_threshold(img_gray):
+    """Otsu 自适应阈值：统计灰度直方图，找最大类间方差的最优分割点"""
+    hist = img_gray.histogram()
+    total = sum(hist)
+    sum_b, w_b, max_var, threshold = 0, 0, 0, 128
+    sum_all = sum(i * hist[i] for i in range(256))
+    for i in range(256):
+        w_b += hist[i]
+        if w_b == 0:
+            continue
+        w_f = total - w_b
+        if w_f == 0:
+            break
+        sum_b += i * hist[i]
+        m_b = sum_b / w_b
+        m_f = (sum_all - sum_b) / w_f
+        var = w_b * w_f * (m_b - m_f) ** 2
+        if var > max_var:
+            max_var = var
+            threshold = i
+    return threshold
+
+
+def _get_candidates(image_bytes):
+    """
+    专业多策略预处理候选图像生成器。
+    覆盖场景：干扰线、彩色背景噪声、细体字、扭曲字符、彩色文字等。
+    返回：list[bytes]，每项为 PNG 字节数据
+    """
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
+    img = _composite_white_bg(img)
+    img = _scale_up(img)
+    gray = img.convert("L")
+
+    # 彩色通道分离（针对彩色噪点背景，文字可能在某个颜色通道更清晰）
+    r_ch, g_ch, b_ch = img.split()
+
+    pil_candidates = []
+
+    # ── 策略组 A：灰度 + 自适应 Otsu 阈值（适应各种亮度分布）──
+    # A1: AutoContrast 归一化 + Otsu 二值化 + 形态学去干扰线
+    ac = ImageOps.autocontrast(gray, cutoff=2)
+    t_otsu = _otsu_threshold(ac)
+    b_a1 = _binarize(ac, threshold=t_otsu)
+    pil_candidates.append(_morphological_open(b_a1, kernel_size=3))
+
+    # A2: AutoContrast + Otsu + 更大核形态学（去粗干扰线）
+    pil_candidates.append(_morphological_open(b_a1, kernel_size=5))
+
+    # ── 策略组 B：固定阈值覆盖不同灰度区间 ──
+    # B1: 轻微对比度增强 + 低阈值（保留细笔画，避免 r/p 混淆）
+    g_b1 = ImageEnhance.Contrast(gray).enhance(1.5)
+    pil_candidates.append(_binarize(g_b1, threshold=140))
+
+    # B2: 中等对比度 + 中阈值 + 形态学
+    g_b2 = ImageEnhance.Contrast(gray).enhance(2.0)
+    b_b2 = _binarize(g_b2, threshold=180)
+    pil_candidates.append(_morphological_open(b_b2, kernel_size=3))
+
+    # B3: 强对比度 + 高阈值（白背景黑字，消除浅色噪点）
+    g_b3 = ImageEnhance.Contrast(gray).enhance(2.5)
+    pil_candidates.append(_binarize(g_b3, threshold=210))
+
+    # ── 策略组 C：高斯去噪预处理（针对椒盐噪点/密集干扰点）──
+    # C1: 高斯模糊去噪 → 对比度增强 → Otsu 二值化
+    blurred = gray.filter(ImageFilter.GaussianBlur(radius=1))
+    g_c1 = ImageEnhance.Contrast(blurred).enhance(2.0)
+    t_c1 = _otsu_threshold(g_c1)
+    pil_candidates.append(_binarize(g_c1, threshold=t_c1))
+
+    # C2: 高斯模糊 → 强对比 → 形态学去干扰线
+    blurred2 = gray.filter(ImageFilter.GaussianBlur(radius=0.8))
+    g_c2 = ImageEnhance.Contrast(blurred2).enhance(2.5)
+    b_c2 = _binarize(g_c2, threshold=170)
+    pil_candidates.append(_morphological_open(b_c2, kernel_size=3))
+
+    # ── 策略组 D：锐化增强（针对模糊验证码）──
+    # D1: UnsharpMask 锐化 + AutoContrast + 二值化
+    sharp = gray.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+    ac_d1 = ImageOps.autocontrast(sharp, cutoff=1)
+    t_d1 = _otsu_threshold(ac_d1)
+    pil_candidates.append(_binarize(ac_d1, threshold=t_d1))
+
+    # D2: 多次锐化 + 中等阈值（增强笔画边缘）
+    sharp2 = gray.filter(ImageFilter.SHARPEN).filter(ImageFilter.SHARPEN)
+    g_d2 = ImageEnhance.Contrast(sharp2).enhance(1.8)
+    pil_candidates.append(_binarize(g_d2, threshold=160))
+
+    # ── 策略组 E：彩色通道分离（针对彩色验证码）──
+    # E1: 取最暗通道（文字通常是深色，取 R/G/B 最小值近似）
+    def _min_channel(r, g, b):
+        pixels_r = list(r.getdata())
+        pixels_g = list(g.getdata())
+        pixels_b = list(b.getdata())
+        min_ch = Image.new('L', r.size)
+        min_ch.putdata([min(pr, pg, pb) for pr, pg, pb in zip(pixels_r, pixels_g, pixels_b)])
+        return min_ch
+    dark_ch = _min_channel(r_ch, g_ch, b_ch)
+    g_e1 = ImageEnhance.Contrast(dark_ch).enhance(2.0)
+    t_e1 = _otsu_threshold(g_e1)
+    pil_candidates.append(_binarize(g_e1, threshold=t_e1))
+
+    # E2: 绿色通道（文字多为非绿色，绿通道背景白，文字暗）
+    g_e2 = ImageEnhance.Contrast(g_ch).enhance(2.0)
+    pil_candidates.append(_binarize(g_e2, threshold=_otsu_threshold(g_e2)))
+
+    # ── 策略 F：原始灰度保底（不二值化，保留灰度层次）──
+    g_f = ImageEnhance.Contrast(gray).enhance(1.8)
+    pil_candidates.append(g_f.filter(ImageFilter.UnsharpMask(radius=1, percent=100, threshold=2)))
+
+    result = []
+    for candidate in pil_candidates:
+        buf = io.BytesIO()
+        candidate.save(buf, format="PNG")
+        result.append(buf.getvalue())
+    return result
 
 
 # ==================== 核心识别函数 ====================
 
 def do_recognize(image_bytes):
     """
-    核心识别逻辑：预处理 + OCR，供各接口复用
-    返回识别结果字符串，失败时抛出异常
+    核心识别逻辑：多策略预处理 + 投票 OCR，供各接口复用。
+    返回识别结果字符串，失败时抛出异常。
     """
-    return ocr.classification(preprocess_captcha(image_bytes))
+    from collections import Counter
+    try:
+        candidates = _get_candidates(image_bytes)
+    except Exception as e:
+        app.logger.warning(f"图像预处理失败，使用原始图像: {e}")
+        return ocr.classification(image_bytes)
+
+    results = []
+    for candidate_bytes in candidates:
+        try:
+            text = ocr.classification(candidate_bytes)
+            if text:
+                results.append(text)
+        except Exception:
+            pass
+
+    if not results:
+        # 所有策略均失败，回退到原始图像
+        return ocr.classification(image_bytes)
+
+    # 投票：选出现次数最多的结果；平局时取第一个策略的结果
+    vote_counter = Counter(results)
+    return vote_counter.most_common(1)[0][0]
 
 
 # ==================== API 路由 ====================
@@ -391,12 +515,6 @@ if __name__ == '__main__':
         file_path = sys.argv[1]
         with open(file_path, 'rb') as f:
             image_bytes = f.read()
-        # 保存预处理后的图像，方便调试
-        preprocessed = preprocess_captcha(image_bytes)
-        debug_path = file_path + '.preprocessed.png'
-        with open(debug_path, 'wb') as f:
-            f.write(preprocessed)
-        print(f"预处理图像已保存: {debug_path}")
         result = do_recognize(image_bytes)
         print(f"识别结果: {result}")
     else:
