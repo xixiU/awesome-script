@@ -3,7 +3,8 @@ import base64
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import io
-from PIL import Image
+from PIL import Image, ImageFilter, ImageEnhance, ImageOps
+import numpy as np
 import traceback
 
 # ==================== 第一性原理：验证码识别的本质 ====================
@@ -101,6 +102,81 @@ def validate_image_bytes(image_bytes):
         return False
 
 
+def preprocess_captcha(image_bytes):
+    """
+    验证码图像预处理：提升 ddddocr 识别准确率
+
+    处理流程：
+    1. 放大图像（小图 OCR 效果差）
+    2. 转灰度
+    3. 增强对比度
+    4. 自适应二值化（去除干扰线背景）
+    5. 轻度去噪
+
+    返回：处理后的 PNG 字节数据
+    """
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
+
+        # 白色背景合并（处理透明 PNG/SVG 转换结果）
+        background = Image.new("RGBA", img.size, (255, 255, 255, 255))
+        background.paste(img, mask=img.split()[3])
+        img = background.convert("RGB")
+
+        w, h = img.size
+
+        # 1. 放大：小于 100px 宽的图片放大 2 倍，提升 OCR 精度
+        if w < 100:
+            scale = 3
+        elif w < 200:
+            scale = 2
+        else:
+            scale = 1
+        if scale > 1:
+            img = img.resize((w * scale, h * scale), Image.LANCZOS)
+
+        # 2. 转灰度
+        img = img.convert("L")
+
+        # 3. 增强对比度
+        img = ImageEnhance.Contrast(img).enhance(2.0)
+
+        # 4. 自适应二值化（Otsu 阈值）
+        arr = np.array(img)
+        # 简单 Otsu：找最优阈值
+        hist, bins = np.histogram(arr.flatten(), 256, [0, 256])
+        total = arr.size
+        sum_total = np.dot(np.arange(256), hist)
+        sum_b, w_b, max_var, threshold = 0, 0, 0, 128
+        for t in range(256):
+            w_b += hist[t]
+            if w_b == 0:
+                continue
+            w_f = total - w_b
+            if w_f == 0:
+                break
+            sum_b += t * hist[t]
+            m_b = sum_b / w_b
+            m_f = (sum_total - sum_b) / w_f
+            var = w_b * w_f * (m_b - m_f) ** 2
+            if var > max_var:
+                max_var = var
+                threshold = t
+        img = img.point(lambda p: 255 if p > threshold else 0, '1')
+        img = img.convert("L")
+
+        # 5. 轻度中值滤波去噪（去除孤立噪点）
+        img = img.filter(ImageFilter.MedianFilter(size=3))
+
+        out = io.BytesIO()
+        img.save(out, format="PNG")
+        return out.getvalue()
+    except Exception as e:
+        # 预处理失败时返回原始数据，不影响识别流程
+        app.logger.warning(f"图像预处理失败，使用原始图像: {e}")
+        return image_bytes
+
+
 # ==================== API 路由 ====================
 @app.route('/recognize_captcha', methods=['POST'])
 def recognize_captcha():
@@ -142,8 +218,8 @@ def recognize_captcha():
         if not image_bytes:
             return jsonify({"error": "解码后的图像数据为空。"}), 400
 
-        # 使用ddddocr进行识别
-        result = ocr.classification(image_bytes)
+        # 使用ddddocr进行识别（预处理提升准确率）
+        result = ocr.classification(preprocess_captcha(image_bytes))
 
         # 直接返回识别结果字符串
         return jsonify({"result": result})
@@ -210,8 +286,8 @@ def captcha():
                 "msg": "Invalid image file"
             }), 400
         
-        # 4. 使用 OCR 引擎识别验证码
-        result = ocr.classification(image_bytes)
+        # 4. 使用 OCR 引擎识别验证码（预处理提升准确率）
+        result = ocr.classification(preprocess_captcha(image_bytes))
         
         # 5. 获取额外的详情信息（可选）
         detail_str = request.form.get('detail', '{}')
