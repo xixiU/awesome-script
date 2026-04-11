@@ -3,8 +3,7 @@ import base64
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import io
-from PIL import Image, ImageFilter, ImageEnhance, ImageOps
-import numpy as np
+from PIL import Image, ImageEnhance, ImageOps
 import traceback
 
 # ==================== 第一性原理：验证码识别的本质 ====================
@@ -20,13 +19,17 @@ import traceback
 # 2. 目标检测：识别滑动验证码的缺口位置
 # 3. 点选验证码：识别需要点击的目标位置
 try:
-    # 普通验证码 OCR 引擎
-    ocr = ddddocr.DdddOcr(show_ad=False)
-    print("✓ 普通验证码 OCR 引擎初始化成功")
-except Exception as e:
-    print(f"✗ 初始化普通 OCR 引擎失败: {e}")
-    print("请确保已正确安装 ddddocr: pip install ddddocr")
-    ocr = None
+    # 优先尝试 beta 模型（更新、对英文字母识别更准确）
+    ocr = ddddocr.DdddOcr(beta=True, show_ad=False)
+    print("✓ 普通验证码 OCR 引擎初始化成功 (beta 模型)")
+except Exception:
+    try:
+        ocr = ddddocr.DdddOcr(show_ad=False)
+        print("✓ 普通验证码 OCR 引擎初始化成功")
+    except Exception as e:
+        print(f"✗ 初始化普通 OCR 引擎失败: {e}")
+        print("请确保已正确安装 ddddocr: pip install ddddocr")
+        ocr = None
 
 try:
     # 滑动验证码检测引擎（用于检测缺口位置）
@@ -108,10 +111,13 @@ def preprocess_captcha(image_bytes):
 
     处理流程：
     1. 放大图像（小图 OCR 效果差）
-    2. 转灰度
-    3. 增强对比度
-    4. 自适应二值化（去除干扰线背景）
-    5. 轻度去噪
+    2. 白色背景合并（处理透明通道）
+    3. 转灰度
+    4. 适度增强对比度
+    5. 高阈值二值化（仅保留深色笔画，排除干扰线）
+
+    注意：不使用 MedianFilter，避免干扰曲线与字符笔画合并
+    导致拉丁字母被误识别为汉字。
 
     返回：处理后的 PNG 字节数据
     """
@@ -125,7 +131,7 @@ def preprocess_captcha(image_bytes):
 
         w, h = img.size
 
-        # 1. 放大：小于 100px 宽的图片放大 2 倍，提升 OCR 精度
+        # 1. 放大：小于 100px 宽的图片放大，提升 OCR 精度
         if w < 100:
             scale = 3
         elif w < 200:
@@ -138,35 +144,12 @@ def preprocess_captcha(image_bytes):
         # 2. 转灰度
         img = img.convert("L")
 
-        # 3. 增强对比度
-        img = ImageEnhance.Contrast(img).enhance(2.0)
+        # 3. 适度增强对比度
+        img = ImageEnhance.Contrast(img).enhance(1.5)
 
-        # 4. 自适应二值化（Otsu 阈值）
-        arr = np.array(img)
-        # 简单 Otsu：找最优阈值
-        hist, bins = np.histogram(arr.flatten(), 256, [0, 256])
-        total = arr.size
-        sum_total = np.dot(np.arange(256), hist)
-        sum_b, w_b, max_var, threshold = 0, 0, 0, 128
-        for t in range(256):
-            w_b += hist[t]
-            if w_b == 0:
-                continue
-            w_f = total - w_b
-            if w_f == 0:
-                break
-            sum_b += t * hist[t]
-            m_b = sum_b / w_b
-            m_f = (sum_total - sum_b) / w_f
-            var = w_b * w_f * (m_b - m_f) ** 2
-            if var > max_var:
-                max_var = var
-                threshold = t
-        img = img.point(lambda p: 255 if p > threshold else 0, '1')
-        img = img.convert("L")
-
-        # 5. 轻度中值滤波去噪（去除孤立噪点）
-        img = img.filter(ImageFilter.MedianFilter(size=3))
+        # 4. 高固定阈值二值化：只保留最深色的笔画像素（阈值180），
+        #    干扰线通常比字符笔画浅，可被过滤掉，避免与字符笔画合并
+        img = img.point(lambda p: 0 if p < 180 else 255, 'L')
 
         out = io.BytesIO()
         img.save(out, format="PNG")
@@ -177,21 +160,26 @@ def preprocess_captcha(image_bytes):
         return image_bytes
 
 
+# ==================== 核心识别函数 ====================
+
+def do_recognize(image_bytes):
+    """
+    核心识别逻辑：预处理 + OCR，供各接口复用
+    返回识别结果字符串，失败时抛出异常
+    """
+    return ocr.classification(preprocess_captcha(image_bytes))
+
+
 # ==================== API 路由 ====================
+
 @app.route('/recognize_captcha', methods=['POST'])
 def recognize_captcha():
     """
-    【原始接口 - 保持向后兼容】
-    识别普通验证码（接收 JSON 格式的 base64 图像）
-    
-    请求格式:
-        POST /recognize_captcha
-        Content-Type: application/json
-        Body: {"image_base64": "base64编码的图像数据"}
-    
-    响应格式:
-        成功: {"result": "识别结果"}
-        失败: {"error": "错误信息"}
+    识别普通验证码（JSON 格式，供 enetedu.js 调用）
+
+    请求: POST /recognize_captcha  Content-Type: application/json
+          {"image_base64": "base64编码的图像数据"}
+    响应: {"result": "识别结果"} 或 {"error": "错误信息"}
     """
     if ocr is None:
         return jsonify({"error": "OCR服务未初始化，请检查服务器日志。"}), 500
@@ -201,31 +189,16 @@ def recognize_captcha():
         if not data or 'image_base64' not in data:
             return jsonify({"error": "请求体中未找到 'image_base64' 字段或请求体不是有效的JSON。"}), 400
 
-        image_base64_string = data['image_base64']
-
-        # 移除可能的 data URI scheme 前缀 (例如 "data:image/jpeg;base64,")
-        if ',' in image_base64_string:
-            image_base64_string = image_base64_string.split(',', 1)[1]
-
-        # Base64解码
-        try:
-            image_bytes = base64.b64decode(image_base64_string)
-        except base64.binascii.Error as e:
-            return jsonify({"error": f"Base64解码失败: {e}"}), 400
-        except Exception as e:
-            return jsonify({"error": f"Base64解码时发生未知错误: {e}"}), 400
-
+        image_bytes = parse_base64_image(data['image_base64'])
         if not image_bytes:
             return jsonify({"error": "解码后的图像数据为空。"}), 400
 
-        # 使用ddddocr进行识别（预处理提升准确率）
-        result = ocr.classification(preprocess_captcha(image_bytes))
-
-        # 直接返回识别结果字符串
+        result = do_recognize(image_bytes)
         return jsonify({"result": result})
 
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        # 记录更详细的错误信息到服务器日志
         app.logger.error(f"处理请求时发生错误: {e}", exc_info=True)
         return jsonify({"error": f"处理请求时发生内部错误: {str(e)}"}), 500
 
@@ -233,73 +206,44 @@ def recognize_captcha():
 @app.route('/captcha', methods=['POST'])
 def captcha():
     """
-    【通用验证码识别接口】
-    识别普通文字验证码（接收 multipart/form-data 格式的图像文件）
-    
-    这是前端浏览器脚本主要调用的接口
-    
-    请求格式:
-        POST /captcha
-        Content-Type: multipart/form-data
-        Fields:
-            - img: 图像文件
-            - detail: JSON 字符串，包含额外信息（可选）
-    
-    响应格式:
-        成功: {"data": {"code": "识别结果"}, "msg": "success"}
-        失败: {"error": "错误信息", "msg": "fail"}
+    识别普通验证码（multipart/form-data 格式，供 browser_capture.js 调用）
+
+    请求: POST /captcha  Content-Type: multipart/form-data
+          img: 图像文件  detail: JSON 字符串（可选，含来源 href）
+    响应: {"data": {"code": "识别结果"}, "msg": "success"}
+          {"error": "错误信息", "msg": "fail"}
     """
     if ocr is None:
-        return jsonify({
-            "error": "OCR 服务未初始化",
-            "msg": "OCR service not initialized"
-        }), 500
+        return jsonify({"error": "OCR 服务未初始化", "msg": "OCR service not initialized"}), 500
 
     try:
-        # 1. 获取上传的图像文件
         if 'img' not in request.files:
-            return jsonify({
-                "error": "请求中未找到 'img' 字段",
-                "msg": "Missing 'img' field in request"
-            }), 400
-        
+            return jsonify({"error": "请求中未找到 'img' 字段", "msg": "Missing 'img' field in request"}), 400
+
         img_file = request.files['img']
         if img_file.filename == '':
-            return jsonify({
-                "error": "未选择文件",
-                "msg": "No file selected"
-            }), 400
-        
-        # 2. 读取图像字节数据
+            return jsonify({"error": "未选择文件", "msg": "No file selected"}), 400
+
         try:
             image_bytes = file_to_bytes(img_file)
         except ValueError as e:
-            return jsonify({
-                "error": str(e),
-                "msg": "Failed to read file"
-            }), 400
-        
-        # 3. 可选：验证图像有效性
+            return jsonify({"error": str(e), "msg": "Failed to read file"}), 400
+
         if not validate_image_bytes(image_bytes):
-            return jsonify({
-                "error": "上传的文件不是有效的图像",
-                "msg": "Invalid image file"
-            }), 400
-        
-        # 4. 使用 OCR 引擎识别验证码（预处理提升准确率）
-        result = ocr.classification(preprocess_captcha(image_bytes))
-        
-        # 5. 获取额外的详情信息（可选）
+            return jsonify({"error": "上传的文件不是有效的图像", "msg": "Invalid image file"}), 400
+
+        result = do_recognize(image_bytes)
+
+        # 记录来源（可选）
         detail_str = request.form.get('detail', '{}')
+
         try:
             import json
-            detail = json.loads(detail_str)
-            href = detail.get('href', '')
+            href = json.loads(detail_str).get('href', '')
             app.logger.info(f"识别成功 - 来源: {href}, 结果: {result}")
-        except:
+        except Exception:
             pass
-        
-        # 6. 返回识别结果（前端期望的格式）
+
         return jsonify({
             "data": {
                 "code": result.strip() if result else ""
@@ -441,8 +385,19 @@ def import_time():
 
 
 if __name__ == '__main__':
-    # 确保在开发环境中运行，生产环境请使用 Gunicorn 或 uWSGI 等WSGI服务器
-    # 例如: flask run --host=0.0.0.0 --port=5000
-    # 或者在代码中指定:
-    app.run(host='0.0.0.0', port=9876, debug=True)
-    # 注意：debug=True 不应在生产环境中使用
+    import sys
+    if len(sys.argv) > 1:
+        # 测试模式：python recognize_captcha.py <图片路径>
+        file_path = sys.argv[1]
+        with open(file_path, 'rb') as f:
+            image_bytes = f.read()
+        # 保存预处理后的图像，方便调试
+        preprocessed = preprocess_captcha(image_bytes)
+        debug_path = file_path + '.preprocessed.png'
+        with open(debug_path, 'wb') as f:
+            f.write(preprocessed)
+        print(f"预处理图像已保存: {debug_path}")
+        result = do_recognize(image_bytes)
+        print(f"识别结果: {result}")
+    else:
+        app.run(host='0.0.0.0', port=9876, debug=True)
