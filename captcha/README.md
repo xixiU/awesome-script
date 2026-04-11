@@ -104,7 +104,7 @@ GM_xmlhttpRequest({
 
 ## 更新记录
 
-### v4.3.1 (2026-04-11)
+### v4.2.7 (2026-04-11)
 
 **问题修复与兼容性增强**
 
@@ -185,6 +185,7 @@ GM_xmlhttpRequest({
 3. **共享验证码功能**
 
 修复逻辑：
+
 - 检测 Angular 表单（通过 `formcontrolname` 属性或 `ng-` 类名）
 - 按顺序触发完整的事件链：`input` → `change` → `blur` → `focus` → `keyup`
 - 确保 Angular 的变更检测机制被正确触发，表单状态从 `ng-invalid` 变为 `ng-valid`
