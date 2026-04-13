@@ -28,6 +28,8 @@
     let isBlocking = false;
     let blockedCount = 0;
     let failedCount = 0;
+    let blockedUsers = [];
+    let failedUsers = [];
     let isSummarizing = false;
 
     // Internationalization (i18n) text dictionary
@@ -44,7 +46,7 @@
             alertNotDetailPage: 'Please use this feature on a tweet detail page!',
             confirmBlock: 'Are you sure you want to block commenters under this tweet?\n\nIf keywords are configured, only commenters whose comments contain those keywords will be blocked.\n\nWarning: This action is irreversible, please use with caution!',
             alertNoCommenters: 'No commenters found matching the criteria!',
-            alertComplete: 'Blocking operation completed!\n\nSuccessful: {success}\nFailed: {failed}\nTotal: {total}',
+            alertComplete: 'Blocking operation completed!\n\nSuccessful ({success}): {successList}\n\nFailed ({failed}): {failedList}\n\nTotal: {total}',
             consoleLoading: 'Starting to load all comments...',
             consoleLoadComplete: 'Comments loading completed, extracting commenters list...',
             consoleFoundCommenters: 'Found {count} commenters, starting to block...',
@@ -106,7 +108,7 @@
             alertNotDetailPage: '请在推文详情页使用此功能！',
             confirmBlock: '确定要屏蔽这条推文下的评论者吗？\n\n如果配置了关键词，则只屏蔽评论中包含这些关键词的用户。\n\n注意：此操作不可撤销，请谨慎使用！',
             alertNoCommenters: '未找到符合条件的评论者！',
-            alertComplete: '屏蔽操作完成！\n\n成功: {success}\n失败: {failed}\n总计: {total}',
+            alertComplete: '屏蔽操作完成！\n\n成功 ({success})：{successList}\n\n失败 ({failed})：{failedList}\n\n总计：{total}',
             consoleLoading: '开始加载所有评论...',
             consoleLoadComplete: '评论加载完成，开始获取评论者列表...',
             consoleFoundCommenters: '找到 {count} 个评论者，开始屏蔽...',
@@ -1223,6 +1225,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         isBlocking = true;
         blockedCount = 0;
         failedCount = 0;
+        blockedUsers = [];
+        failedUsers = [];
         updateButtonStatus(t('buttonProcessing'), true);
 
         // Scroll to load more comments
@@ -1292,8 +1296,10 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
             if (success) {
                 blockedCount++;
+                blockedUsers.push(username);
             } else {
                 failedCount++;
+                failedUsers.push(username);
             }
 
             // Wait a while after each block to avoid rate limiting
@@ -1303,10 +1309,15 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         isBlocking = false;
         updateButtonStatus(t('buttonText'), false);
 
+        const successList = blockedUsers.length > 0 ? blockedUsers.map(u => '@' + u).join(', ') : 'None';
+        const failedList = failedUsers.length > 0 ? failedUsers.map(u => '@' + u).join(', ') : 'None';
+
         alert(t('alertComplete', {
             success: blockedCount,
             failed: failedCount,
-            total: commenters.length
+            total: commenters.length,
+            successList: successList,
+            failedList: failedList
         }));
 
         console.log(t('consoleComplete'));
