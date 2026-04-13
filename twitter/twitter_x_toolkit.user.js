@@ -2,7 +2,7 @@
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结等，未来将持续扩展更多功能
 // @author       xixiU
@@ -67,6 +67,10 @@
             configExcludeOriginalHelp: 'Do not block the person who posted the tweet',
             configScrollAttemptsLabel: 'Max Scroll Attempts',
             configScrollAttemptsHelp: 'Maximum scroll attempts for loading content (blocking/AI summarization, default: 10)',
+            configBlockKeywordsLabel: 'Block Keywords',
+            configBlockKeywordsHelp: 'Only block commenters whose comments contain these keywords (one per line). Leave empty to block all.',
+            consoleKeywordMatched: 'Keyword matched [{keyword}] for @{username}: {text}',
+            consoleKeywordSkipped: 'Skipped @{username}: no keywords matched',
 
             // AI总结功能相关
             summarizeButtonText: '🤖 AI Summary',
@@ -125,6 +129,10 @@
             configExcludeOriginalHelp: '不屏蔽发推文的人',
             configScrollAttemptsLabel: '最大滚动次数',
             configScrollAttemptsHelp: '加载内容的最大滚动尝试次数（用于屏蔽和AI总结，默认：10）',
+            configBlockKeywordsLabel: '拉黑关键词',
+            configBlockKeywordsHelp: '只拉黑评论中包含这些关键词的用户（每行一个）。留空则拉黑所有评论者。',
+            consoleKeywordMatched: '关键词匹配 [{keyword}] @{username}: {text}',
+            consoleKeywordSkipped: '跳过 @{username}: 未匹配关键词',
 
             // AI总结功能相关
             summarizeButtonText: '🤖 AI总结',
@@ -175,6 +183,7 @@
         // Block功能配置
         excludeOriginalPoster: true,
         scrollAttempts: 10,
+        blockKeywords: '主人\n线下蹲个弟弟\n有线下吗\n加v\n加微\n私聊\n约吗\n处吗',
         // AI总结功能配置
         aiBaseUrl: 'https://api.openai.com/v1',
         aiApiKey: '',
@@ -203,6 +212,13 @@
                 const num = parseInt(value);
                 return num >= 1 && num <= 50;
             }
+        },
+        {
+            key: 'blockKeywords',
+            label: t('configBlockKeywordsLabel'),
+            type: 'textarea',
+            placeholder: '主人\n线下蹲个弟弟\n有线下吗',
+            help: t('configBlockKeywordsHelp')
         },
         // AI总结功能配置项
         {
@@ -998,9 +1014,9 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         return null;
     }
 
-    // Get all commenters
-    function getAllCommenters() {
-        const commenters = new Set();
+    // Get all commenters with their comment text
+    function getAllCommentersWithText() {
+        const commentersMap = new Map(); // username -> comment text
         const excludeOriginal = config.get('excludeOriginalPoster');
         const originalPoster = excludeOriginal ? getOriginalPosterUsername() : null;
 
@@ -1013,23 +1029,44 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         articles.forEach(article => {
             // Find username links
             const userLinks = article.querySelectorAll('a[href^="/"][role="link"]');
+            let username = null;
+
             userLinks.forEach(link => {
                 const href = link.getAttribute('href');
                 if (href && href.match(/^\/[^\/]+$/)) {
-                    const username = href.substring(1);
-                    if (username &&
-                        username !== 'home' &&
-                        username !== 'explore' &&
-                        username !== 'notifications' &&
-                        username !== 'messages' &&
-                        (!excludeOriginal || username !== originalPoster)) {
-                        commenters.add(username);
+                    const user = href.substring(1);
+                    if (user &&
+                        user !== 'home' &&
+                        user !== 'explore' &&
+                        user !== 'notifications' &&
+                        user !== 'messages' &&
+                        (!excludeOriginal || user !== originalPoster)) {
+                        username = user;
                     }
                 }
             });
+
+            // Get comment text
+            if (username) {
+                const tweetTextElement = article.querySelector('[data-testid="tweetText"]');
+                const tweetText = tweetTextElement ? tweetTextElement.innerText : '';
+
+                // Store username and text (append if user has multiple comments)
+                if (commentersMap.has(username)) {
+                    commentersMap.set(username, commentersMap.get(username) + '\n' + tweetText);
+                } else {
+                    commentersMap.set(username, tweetText);
+                }
+            }
         });
 
-        return Array.from(commenters);
+        return commentersMap;
+    }
+
+    // Get all commenters (legacy function for backward compatibility)
+    function getAllCommenters() {
+        const commentersMap = getAllCommentersWithText();
+        return Array.from(commentersMap.keys());
     }
 
     // Block a single user 暂时没用到
@@ -1211,7 +1248,28 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         console.log(t('consoleLoadComplete'));
 
-        const commenters = getAllCommenters();
+        const commentersMap = getAllCommentersWithText();
+
+        // Parse block keywords from config
+        const keywordsRaw = config.get('blockKeywords') || '';
+        const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
+
+        // Filter commenters by keywords (if keywords are set)
+        let commenters;
+        if (keywords.length > 0) {
+            commenters = [];
+            for (const [username, text] of commentersMap) {
+                const matchedKeyword = keywords.find(kw => text.includes(kw));
+                if (matchedKeyword) {
+                    console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: text.substring(0, 50) }));
+                    commenters.push(username);
+                } else {
+                    console.log(t('consoleKeywordSkipped', { username }));
+                }
+            }
+        } else {
+            commenters = Array.from(commentersMap.keys());
+        }
 
         if (commenters.length === 0) {
             alert(t('alertNoCommenters'));
