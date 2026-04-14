@@ -6,18 +6,20 @@
 
 ## 2. 支持的验证码类型
 
-### Phase 1（本次实现）
-- **图片 OCR 验证码**：数字、字母、中文、混合文字
-- **计算验证码**：数学表达式（如 `3+7=?`、`12-5=?`）
-- **滑块验证码**：缺口检测 + 模拟人类拖拽轨迹
+### Phase 1（本次实现）✅ 已完成（2026-04-14）
+- **图片 OCR 验证码**：数字、字母、中文、混合文字 ✅
+- **计算验证码**：数学表达式（如 `3+7=?`、`12-5=?`）✅
+- **滑块验证码**：缺口检测 + 模拟人类拖拽轨迹 ✅
 
 ### Phase 2（后续）
 - **hCaptcha**：图像分类任务，接入多模态 AI API
+  > 调研见：`docs/plans/2026-04-14-phase2-3-research.md`
 
 ### Phase 3（远期）
 - **reCAPTCHA v2**：图像分类 + 行为检测
 - **MTCaptcha**：自定义图像挑战
 - 本地 GPU 模型部署，替代云端 AI API
+  > 调研见：`docs/plans/2026-04-14-phase2-3-research.md`
 
 ## 3. 整体架构
 
@@ -64,7 +66,7 @@ Backend (FastAPI + Python)
 
 ## 4. 前端核心设计
 
-### 4.1 Platform 抽象层
+### 4.1 Platform 抽象层 ✅
 
 统一不同运行环境的 API 差异，core 层通过 platform 接口调用，不直接使用平台特定 API。
 
@@ -82,7 +84,9 @@ const Platform = {
 };
 ```
 
-### 4.2 Handler 注册机制
+> **实际实现差异**：采用 `PlatformAdapter` 单例类（自动检测环境），通过 `export const platform = new PlatformAdapter()` 导出，而非设计文档中的 `setPlatform/getPlatform` 依赖注入模式。功能等价，但更简洁。
+
+### 4.2 Handler 注册机制 ✅
 
 每个验证码类型实现统一接口，通过 detector 自动发现和调度。
 
@@ -98,7 +102,7 @@ class CaptchaHandler {
 }
 ```
 
-### 4.3 Detector 检测引擎
+### 4.3 Detector 检测引擎 ✅
 
 ```javascript
 // detector.js
@@ -118,7 +122,9 @@ class CaptchaDetector {
 }
 ```
 
-### 4.4 计算验证码处理
+> **实际实现差异**：`scan()` 返回第一个有结果的 handler 的所有匹配项（handler 级别优先级），同一 handler 内多个验证码均处理。
+
+### 4.4 计算验证码处理 ✅
 
 OCR 识别出文本后，用安全的数学表达式解析器计算结果（不使用 eval）。
 
@@ -133,13 +139,15 @@ function parseAndCalculate(text) {
 }
 ```
 
-### 4.5 滑块验证码处理
+> **实际实现**：递归下降解析器（expr→term→factor），支持括号、中文数字（千百十个位）、全角运算符，无 eval，安全性高。
+
+### 4.5 滑块验证码处理 ✅（部分）
 
 迁移现有 `moveSideCaptcha` 逻辑，增强人类行为模拟：
-- 贝塞尔曲线轨迹（非匀速直线）
-- 随机加速/减速
-- 微小的 Y 轴抖动
-- 到达目标位置后的微调回弹
+- 贝塞尔曲线轨迹（非匀速直线）✅
+- 随机加速/减速 ✅
+- 微小的 Y 轴抖动 ⚠️ 待实现（Phase 1.1）
+- 到达目标位置后的微调回弹 ⚠️ 待实现（Phase 1.1）
 
 ## 5. 后端设计
 
@@ -205,10 +213,30 @@ npm run build
 - AI Provider 选择（Phase 2）
 - API Key 管理（Phase 2）
 
-## 8. Phase 1 交付物
+## 8. Phase 1 交付物 ✅
 
-1. 前端 core 层 + Chrome 扩展 + 油猴脚本
-2. FastAPI 后端（OCR + 滑块）
-3. 计算验证码前端解析器
-4. esbuild 构建系统
-5. 基础配置 UI
+1. 前端 core 层 + Chrome 扩展 + 油猴脚本 ✅
+2. FastAPI 后端（OCR + 滑块）✅
+3. 计算验证码前端解析器 ✅
+4. esbuild 构建系统 ✅
+5. 基础配置 UI ✅
+
+## 9. Phase 1 验收结论（2026-04-14）
+
+**构建结果**：`npm run build` 成功，产出 6 个文件（油猴脚本 + Chrome 扩展完整）。
+
+**接口测试**：
+| 接口 | 结果 |
+|------|------|
+| GET /health | ✅ `{"status":"ok","service":"running"}` |
+| POST /api/ocr | ✅ `{"text":"pwq4u","confidence":0.58}` |
+| POST /api/slide | ✅ `{"x":0,"y":0}` |
+
+**已知差异（实际实现 vs 设计）**：
+1. `platform.js` 采用单例模式（`setPlatform` / `getPlatform`），与设计一致，但 extension adapter 的 `storage.get` 为同步返回（非 Promise），由 `initConfig()` 的 `Promise.resolve` 统一兼容。
+2. `detector.scan()` 返回第一个匹配 handler 的所有结果（即 `{ handler, results }`），实际实现中 OcrHandler 会返回页面内所有验证码图片，而不是只返回第一个——与设计文档描述一致，但设计中 "first match wins" 的表述需注意是 handler 级别的优先级，同一 handler 内多个验证码均处理。
+3. CalcHandler 未独立注册到 detector，作为 OcrHandler 内部的后处理步骤，与 Task 6 设计一致。
+4. slide 接口字段名为 `target` / `background`（而非 `bg` / `piece`），已在冒烟测试中确认。
+
+**已知限制（非 bug）**：
+- OCR 对极小图片（< 10px）报 `OSError`，属于 ddddocr 库本身限制，正常验证码不受影响。

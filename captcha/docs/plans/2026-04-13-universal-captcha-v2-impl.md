@@ -10,7 +10,7 @@
 
 ---
 
-## Task 1: Project Scaffolding & Build System
+## Task 1: Project Scaffolding & Build System ✅
 
 **Files:**
 - Create: `captcha/v2/package.json`
@@ -154,7 +154,7 @@ git commit -m "feat(v2): project scaffolding and esbuild build system"
 
 ---
 
-## Task 2: Core — Platform Abstraction Layer
+## Task 2: Core — Platform Abstraction Layer ✅
 
 **Files:**
 - Create: `captcha/v2/src/core/platform.js`
@@ -292,7 +292,7 @@ git commit -m "feat(v2): platform abstraction layer (TM + extension adapters)"
 
 ---
 
-## Task 3: Core — Utility Modules
+## Task 3: Core — Utility Modules ✅
 
 **Files:**
 - Create: `captcha/v2/src/core/utils/image.js`
@@ -660,7 +660,7 @@ git commit -m "feat(v2): core utility modules (image, dom, math-parser)"
 
 ---
 
-## Task 4: Core — Handler System (Base + Detector + Solver)
+## Task 4: Core — Handler System (Base + Detector + Solver) ✅
 
 **Files:**
 - Create: `captcha/v2/src/core/handlers/base.js`
@@ -872,7 +872,7 @@ git commit -m "feat(v2): core handler system (base, detector, solver, config)"
 
 ---
 
-## Task 5: Core — OCR Handler
+## Task 5: Core — OCR Handler ✅
 
 **Files:**
 - Create: `captcha/v2/src/core/handlers/ocr.js`
@@ -964,7 +964,7 @@ git commit -m "feat(v2): OCR captcha handler (migrated detection logic)"
 
 ---
 
-## Task 6: Core — Calculation Handler
+## Task 6: Core — Calculation Handler ✅
 
 **Files:**
 - Create: `captcha/v2/src/core/handlers/calc.js`
@@ -1043,7 +1043,7 @@ git commit -m "feat(v2): calculation captcha handler (OCR + math parser)"
 
 ---
 
-## Task 7: Core — Slider Handler
+## Task 7: Core — Slider Handler ✅
 
 **Files:**
 - Create: `captcha/v2/src/core/handlers/slider.js`
@@ -1171,7 +1171,7 @@ git commit -m "feat(v2): slider captcha handler with human-like drag simulation"
 
 ---
 
-## Task 8: Core — Main Entry (Bootstrap)
+## Task 8: Core — Main Entry (Bootstrap) ✅
 
 **Files:**
 - Create: `captcha/v2/src/core/index.js`
@@ -1275,7 +1275,7 @@ git commit -m "feat(v2): core bootstrap and DOM observer"
 
 ---
 
-## Task 9: Chrome Extension
+## Task 9: Chrome Extension ✅
 
 **Files:**
 - Create: `captcha/v2/src/extension/manifest.json`
@@ -1419,7 +1419,7 @@ git commit -m "feat(v2): Chrome extension (MV3 manifest, content script, popup)"
 
 ---
 
-## Task 10: Tampermonkey Entry
+## Task 10: Tampermonkey Entry ✅
 
 **Files:**
 - Create: `captcha/v2/src/tampermonkey/entry.js`
@@ -1480,7 +1480,7 @@ git commit -m "feat(v2): Tampermonkey entry with GM_* adapter"
 
 ---
 
-## Task 11: Backend — FastAPI Rewrite
+## Task 11: Backend — FastAPI Rewrite ✅
 
 **Files:**
 - Create: `captcha/v2/backend/main.py`
@@ -1764,7 +1764,7 @@ git commit -m "feat(v2): FastAPI backend with provider abstraction and OCR/slide
 
 ---
 
-## Task 12: Verify Build & Smoke Test
+## Task 12: Verify Build & Smoke Test ✅
 
 **Step 1: Build frontend**
 

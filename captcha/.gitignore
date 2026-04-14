@@ -1,3 +1,7 @@
 
 # npm lock file (use pnpm)
 # captcha/v2/package-lock.json
+config.yaml
+v2/node_modules
+v2/build
+v2/dist
