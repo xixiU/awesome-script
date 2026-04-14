@@ -1,0 +1,26 @@
+# Captcha Recognition Service v2 配置文件
+# 复制此文件为 config.yaml 并按需修改
+
+# 服务配置
+host: "0.0.0.0"
+port: 9876
+debug: false
+
+# Provider 配置：按接口独立选择
+# 可选值：ddddocr | openai | ollama
+providers:
+  ocr: ddddocr       # 文字验证码识别
+  slide: ddddocr     # 滑块缺口检测
+  classify: openai   # 图像分类（hCaptcha/reCAPTCHA）
+
+# OpenAI 配置（providers.classify = openai 时使用）
+openai:
+  api_key: ""        # 也可通过环境变量 OPENAI_API_KEY 设置
+  model: "gpt-4o"
+  base_url: ""       # 留空使用 OpenAI 官方地址
+
+# Ollama 本地模型配置（providers.classify = ollama 时使用）
+# 需先安装 Ollama 并拉取模型：ollama pull qwen2-vl
+ollama:
+  base_url: "http://localhost:11434/v1"
+  model: "qwen2-vl"
