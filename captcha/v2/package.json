@@ -1,0 +1,14 @@
+{
+  "name": "captcha-helper-v2",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node build/build.js",
+    "build:watch": "node build/build.js --watch",
+    "build:ext": "node build/build.js --target=extension",
+    "build:tm": "node build/build.js --target=tampermonkey"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  }
+}
