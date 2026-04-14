@@ -104,6 +104,31 @@ GM_xmlhttpRequest({
 
 ## 更新记录
 
+### v4.2.8 (2026-04-13)
+
+**关键词匹配精度优化**
+
+- ✅ 修复牛客网（nowcoder.com）等域名含 `code` 的网站误触发验证码检测的问题
+- ✅ 修复 `data:image/` base64 图片内容被关键词误匹配导致的误报
+- ✅ 优化关键词匹配策略：`code` 改为单词边界匹配 `\bcode\b`，避免匹配 `nowcoder`、`leetcode`、`barcode` 等子串
+- ✅ 移除过于宽泛的关键词：`login`、`点击`、裸 `rand`
+- ✅ 新增精确复合词：`randcode`、`rand_code`、`captchacode`、`verifycode`
+- ✅ 属性检测跳过 `data:` 开头的值，避免 base64 编码内容产生随机误匹配
+- ✅ 提高验证码图片最小尺寸阈值：从 10x10 提升至 40x15（属性检测）和 30x15（路径检测），排除图标、emoji
+
+**技术细节**
+
+- MutationObserver 和 findCaptcha 两处正则同步优化，确保检测逻辑一致性
+- `isCaptchaSrc` 路径匹配跳过 `data:` 开头的 src，避免 base64 内容参与 URL 路径匹配
+- Element UI / Naive UI 的 `data:image/` 验证码检测路径（DOM 结构检测）不受影响
+- 单词边界 `\bcode\b` 正确匹配 `alt="code"`、`class="code pointer"`，但不匹配 URL 中的子串
+
+**影响范围**
+
+- 修复：牛客网、LeetCode、CodePen 等域名含 `code` 的网站不再误报
+- 修复：政务网站（yunpan.gdcourts.gov.cn）等使用 `alt="code"` 的验证码恢复正常识别
+- 保持：Element UI、Naive UI 框架的 `data:image/` 验证码检测不受影响
+
 ### v4.2.7 (2026-04-11)
 
 **问题修复与兼容性增强**

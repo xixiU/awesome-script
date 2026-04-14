@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.2.7
+// @version      4.2.8
 // @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。修复跨域图片处理问题。
 // @author       xixiu
 // @thanks       哈士奇
@@ -262,7 +262,7 @@
 
                     for (let x = 0; x < checkList.length; x++) {
                         if (
-                            /.*(code|captcha|验证码|login|点击|verify|yzm|yanzhengma|滑块|拖动|拼图|yidun|slide).*/im.test(
+                            /.*(captcha|验证码|verify|yzm|yanzhengma|滑块|拖动|拼图|yidun|slide|checkcode|authcode|vcode|seccode|captchacode|verifycode|\bcode\b).*/im.test(
                                 checkList[x].toString().toLowerCase()
                             ) ||
                             tagName === "img" ||
@@ -728,7 +728,9 @@
                     imgHeight < 300;
 
                 // 优先匹配 src 中包含明确验证码路径的图片
-                let isCaptchaSrc = /createimage|captcha|verify|checkcode|validatecode|rand|vcode|authcode|kaptcha|imagecode|seccode|piccode|yzm|verifycode|picvalidcode/i.test(imgSrc);
+                // 注意：不对 data:image/ 开头的 base64 src 做路径匹配（base64 编码内容会产生误匹配）
+                let isCaptchaSrc = !imgSrc.startsWith('data:') &&
+                    /createimage|captcha|verify|checkcode|validatecode|randcode|rand_code|vcode|authcode|kaptcha|imagecode|seccode|piccode|yzm|verifycode|picvalidcode/i.test(imgSrc);
                 //console.log(`[验证码助手] 图片src: ${imgSrc}, 验证码路径检查: ${isCaptchaSrc}`);
 
                 // Element UI 特殊处理：检查是否在 el-input-group__append 内
@@ -744,14 +746,13 @@
 
                 // 对于明确是验证码路径的图片，放宽尺寸限制（图片可能还在加载中）
                 if ((isCaptchaSrc || isElementUICaptcha || isNaiveUICaptcha) && !isInvalid) {
-                    console.log(`[验证码助手] 验证码路径匹配成功，开始处理...`);
                     // 检查是否已经添加过
                     let alreadyAdded = captchaMap.some(item => item.img === img);
                     if (!alreadyAdded) {
                         // 对于明确是验证码路径的图片，放宽尺寸限制（图片可能还在加载中）
-                        // 只要不是明显无效的尺寸就添加
-                        if (imgWidth === 0 || imgHeight === 0 || (imgWidth > 10 && imgHeight > 10)) {
-                            console.log(`[验证码助手] 通过 src 检测到验证码图片: ${img.getAttribute("id") || imgSrc}, 尺寸: ${imgWidth}x${imgHeight}`);
+                        // 但排除明显太小的图片（图标、emoji 等通常 < 30px）
+                        if (imgWidth === 0 || imgHeight === 0 || (imgWidth >= 30 && imgHeight >= 15)) {
+                            console.log(`[验证码助手] 通过 src 检测到验证码图片: ${img.getAttribute("id") || imgSrc.slice(0, 80)}, 尺寸: ${imgWidth}x${imgHeight}`);
                             captchaMap.push({ img: img, input: null });
                             return;  // 已添加，跳过后续检查
                         }
@@ -770,15 +771,18 @@
 
                 // 对于非明确路径的图片，需要更严格的检查
                 for (let i = 0; i < checkList.length; i++) {
+                    let attrValue = checkList[i].toString().toLowerCase();
+                    // 跳过 data: 开头的属性值（base64 编码内容会产生误匹配）
+                    if (attrValue.startsWith('data:')) continue;
                     if (
-                        /.*(code|captcha|验证码|login|点击|verify|yzm|yanzhengma|换一张|security|challenge|kaptcha|seccode|piccode).*/im.test(
-                            checkList[i].toLowerCase()
+                        /.*(captcha|验证码|verify|yzm|yanzhengma|换一张|security|challenge|kaptcha|seccode|piccode|checkcode|authcode|vcode|captchacode|verifycode|\bcode\b).*/im.test(
+                            attrValue
                         ) &&
                         isValidSize &&
                         !isInvalid
                     ) {
-                        // 需要宽高比合理（宽度至少是高度的1.5倍，排除正方形图片如二维码）
-                        if (imgWidth / imgHeight >= 0.8) {
+                        // 需要宽高比合理，且尺寸足够大（排除图标、emoji）
+                        if (imgWidth / imgHeight >= 0.8 && imgWidth >= 40 && imgHeight >= 15) {
                             console.log(`[验证码助手] 通过属性检测到验证码图片: ${img.getAttribute("id") || imgSrc}, 尺寸: ${imgWidth}x${imgHeight}`);
                             captchaMap.push({ img: img, input: null });
                             break;
