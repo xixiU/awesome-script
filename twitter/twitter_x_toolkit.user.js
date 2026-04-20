@@ -2,7 +2,7 @@
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
 // @namespace    http://tampermonkey.net/
-// @version      2.2
+// @version      2.3
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结等，未来将持续扩展更多功能
 // @author       xixiU
@@ -185,7 +185,7 @@
         // Block功能配置
         excludeOriginalPoster: true,
         scrollAttempts: 10,
-        blockKeywords: '主人\n线下蹲个弟弟\n有线下吗\n加v\n加微\n私聊\n约吗\n处吗',
+        blockKeywords: '主人\n线下蹲个弟弟\n有弟弟线下吗\n有万达广场附近的吗\n蹲一个男搭子\n线下蹲个弟弟\n主人快来领我\n有哥哥线下吗',
         // AI总结功能配置
         aiBaseUrl: 'https://api.openai.com/v1',
         aiApiKey: '',
@@ -1094,33 +1094,89 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         }
     }
 
-    // Block user via API 暂时没用到 有bug 鉴权方式有问题 https://github.com/daymade/Twitter-Block-Porn
+    // Block user via API (后台拉黑，无UI干扰)
     async function blockUserByAPI(username) {
         try {
             console.log(t('consoleTryBlockAPI', { username }));
 
-            // Get user ID
-            const userResponse = await fetch(`https://api.twitter.com/2/users/by/username/${username}`, {
+            // 从页面中获取用户ID（避免额外的API请求）
+            const articles = document.querySelectorAll('article[data-testid="tweet"]');
+            let userId = null;
+
+            for (const article of articles) {
+                const userLink = article.querySelector(`a[href="/${username}"]`);
+                if (userLink) {
+                    // 尝试从article的data属性或其他地方获取userId
+                    // 如果无法直接获取，则从用户链接的父元素中查找
+                    const timeLink = article.querySelector('a[href*="/status/"]');
+                    if (timeLink) {
+                        const href = timeLink.getAttribute('href');
+                        const match = href.match(/\/status\/(\d+)/);
+                        if (match) {
+                            // 通过推文ID反查用户ID（需要额外请求）
+                            // 更简单的方法：直接使用用户名查询
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 获取CSRF token
+            const csrfToken = document.cookie.match(/ct0=([^;]+)/)?.[1];
+            if (!csrfToken) {
+                throw new Error('Failed to get CSRF token');
+            }
+
+            // 先通过用户名获取用户ID
+            const userInfoResponse = await fetch(`https://x.com/i/api/graphql/G3KGOASz96M-Qu0nwmGXNg/UserByScreenName?variables=${encodeURIComponent(JSON.stringify({
+                screen_name: username,
+                withSafetyModeUserFields: true
+            }))}&features=${encodeURIComponent(JSON.stringify({
+                hidden_profile_subscriptions_enabled: true,
+                rweb_tipjar_consumption_enabled: true,
+                responsive_web_graphql_exclude_directive_enabled: true,
+                verified_phone_label_enabled: false,
+                subscriptions_verification_info_is_identity_verified_enabled: true,
+                subscriptions_verification_info_verified_since_enabled: true,
+                highlights_tweets_tab_ui_enabled: true,
+                responsive_web_twitter_article_notes_tab_enabled: true,
+                subscriptions_feature_can_gift_premium: true,
+                creator_subscriptions_tweet_preview_api_enabled: true,
+                responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+                responsive_web_graphql_timeline_navigation_enabled: true
+            }))}`, {
                 method: 'GET',
+                headers: {
+                    'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+                    'x-csrf-token': csrfToken,
+                    'x-twitter-auth-type': 'OAuth2Session',
+                    'x-twitter-active-user': 'yes',
+                    'x-twitter-client-language': 'en'
+                },
                 credentials: 'include'
             });
 
-            if (!userResponse.ok) {
+            if (!userInfoResponse.ok) {
                 throw new Error('Failed to get user info');
             }
 
-            const userData = await userResponse.json();
-            const userId = userData.data?.id;
+            const userInfoData = await userInfoResponse.json();
+            userId = userInfoData.data?.user?.result?.rest_id;
 
             if (!userId) {
                 throw new Error('Failed to get user ID');
             }
 
-            // Execute block
-            const blockResponse = await fetch(`https://api.twitter.com/1.1/blocks/create.json`, {
+            // 执行拉黑
+            const blockResponse = await fetch(`https://x.com/i/api/1.1/blocks/create.json`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
+                    'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+                    'x-csrf-token': csrfToken,
+                    'x-twitter-auth-type': 'OAuth2Session',
+                    'x-twitter-active-user': 'yes',
+                    'x-twitter-client-language': 'en',
+                    'content-type': 'application/x-www-form-urlencoded'
                 },
                 body: `user_id=${userId}`,
                 credentials: 'include'
@@ -1130,7 +1186,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 console.log(t('consoleBlockSuccess', { username }));
                 return true;
             } else {
-                throw new Error('Block request failed');
+                const errorText = await blockResponse.text();
+                throw new Error(`Block request failed: ${blockResponse.status} ${errorText}`);
             }
         } catch (error) {
             console.error(t('consoleBlockFailed', { username }), error);
@@ -1138,10 +1195,13 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         }
     }
 
-    // Block user by clicking UI elements
+    // Block user by clicking UI elements (优化：在视野外操作)
     async function blockUserByUI(username) {
         try {
             console.log(t('consoleTryBlockUI', { username }));
+
+            // 保存当前滚动位置
+            const originalScrollY = window.scrollY;
 
             // Find the user's comment element
             const articles = document.querySelectorAll('article[data-testid="tweet"]');
@@ -1160,15 +1220,21 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 return false;
             }
 
+            // 滚动到页面底部，让操作发生在视野外
+            window.scrollTo(0, document.body.scrollHeight);
+            await sleep(100);
+
             // Find and click the more options button (three dots)
             const moreButton = targetArticle.querySelector('[data-testid="caret"]');
             if (!moreButton) {
                 console.log(t('consoleNotFoundButton', { username }));
+                // 恢复滚动位置
+                window.scrollTo(0, originalScrollY);
                 return false;
             }
 
             moreButton.click();
-            await sleep(500);
+            await sleep(300);
 
             // Find and click the block button
             const blockMenuItem = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
@@ -1179,11 +1245,13 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 console.log(t('consoleNotFoundMenuItem'));
                 // Close menu
                 document.body.click();
+                // 恢复滚动位置
+                window.scrollTo(0, originalScrollY);
                 return false;
             }
 
             blockMenuItem.click();
-            await sleep(500);
+            await sleep(300);
 
             // Confirm block
             const confirmButton = Array.from(document.querySelectorAll('[data-testid="confirmationSheetConfirm"]')).find(
@@ -1192,11 +1260,15 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
             if (confirmButton) {
                 confirmButton.click();
-                await sleep(1000);
+                await sleep(500);
                 console.log(t('consoleBlockSuccess', { username }));
+                // 恢复滚动位置
+                window.scrollTo(0, originalScrollY);
                 return true;
             } else {
                 console.log(t('consoleNotFoundConfirm'));
+                // 恢复滚动位置
+                window.scrollTo(0, originalScrollY);
                 return false;
             }
         } catch (error) {
@@ -1237,7 +1309,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         let scrollAttempts = 0;
         const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 3;
 
-        while (scrollAttempts < maxScrollAttempts) {
+        // 优化：连续2次高度不变就停止，避免不必要的等待
+        while (scrollAttempts < 2) {
             window.scrollTo(0, document.body.scrollHeight);
             await sleep(1000);
 
@@ -1291,8 +1364,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             const username = commenters[i];
             updateButtonStatus(`🔄 ${i + 1}/${commenters.length}`, true);
 
-            // const success = await blockUserByAPI(username);
-            const success = await blockUserByUI(username);
+            // 先尝试API后台拉黑，失败则降级到UI操作
+            const success = await blockUserByAPI(username) || await blockUserByUI(username);
 
             if (success) {
                 blockedCount++;
