@@ -261,53 +261,46 @@
         }
     ]);
 
-    // Custom styles for config panel layout
-    GM_addStyle(`
-        /* config-content uses flex layout to control item widths */
-        #TwitterXToolkit-config-panel .config-content {
-            display: flex;
-            flex-wrap: wrap;
-        }
+    // Restructure config panel: put checkbox items side by side
+    function restructureConfigPanel() {
+        const content = document.querySelector('#TwitterXToolkit-config-panel .config-content');
+        if (!content) return;
 
-        /* Non-checkbox items take full width */
-        #TwitterXToolkit-config-panel .config-form-group:not(:has(input[type="checkbox"])) {
-            width: 100%;
-        }
+        const checkboxGroups = Array.from(content.querySelectorAll('.config-form-group'))
+            .filter(g => g.querySelector('input[type="checkbox"]'));
+        if (checkboxGroups.length < 2) return;
 
-        /* Checkbox items take 50% width and lay out internally as flex row */
-        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) {
-            width: 50%;
-            box-sizing: border-box;
-            padding-right: 12px;
-            display: flex;
-            flex-direction: row;
-            flex-wrap: wrap;
-            align-items: flex-start;
-        }
+        // Fix internal layout of each checkbox group: [checkbox] [label] on one row
+        checkboxGroups.forEach(group => {
+            const label = group.querySelector('.config-label');
+            const input = group.querySelector('input[type="checkbox"]');
+            const help = group.querySelector('.config-help');
 
-        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) .config-label {
-            order: 2;
-            flex: 1;
-            margin-bottom: 0;
-            margin-left: 8px;
-            cursor: pointer;
-            font-weight: 500;
-        }
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+            input.style.cssText = 'width:auto;margin:0;cursor:pointer;flex-shrink:0;';
+            label.style.cssText = 'margin:0;cursor:pointer;font-weight:500;';
+            row.appendChild(input);
+            row.appendChild(label);
 
-        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) input[type="checkbox"] {
-            order: 1;
-            width: auto;
-            margin-top: 2px;
-            flex-shrink: 0;
-            cursor: pointer;
-        }
+            // Rebuild group: row + help
+            group.innerHTML = '';
+            group.appendChild(row);
+            if (help) {
+                help.style.marginLeft = '24px';
+                group.appendChild(help);
+            }
+            group.style.cssText = 'flex:1;margin-bottom:0;';
+        });
 
-        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) .config-help {
-            order: 3;
-            width: 100%;
-            margin-left: 24px;
-        }
-    `);
+        // Wrap all checkbox groups in a single flex row
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'display:flex;gap:16px;margin-bottom:20px;';
+        content.insertBefore(wrapper, checkboxGroups[0]);
+        checkboxGroups.forEach(g => wrapper.appendChild(g));
+    }
+
+    restructureConfigPanel();
 
     // Utility function: delay
     function sleep(ms) {
