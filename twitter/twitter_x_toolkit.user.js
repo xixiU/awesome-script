@@ -261,6 +261,31 @@
         }
     ]);
 
+    // Custom styles for config panel layout
+    GM_addStyle(`
+        /* Make checkbox config items display inline */
+        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) {
+            display: inline-block;
+            width: 48%;
+            margin-right: 2%;
+            vertical-align: top;
+        }
+
+        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]):nth-of-type(2n) {
+            margin-right: 0;
+        }
+
+        /* Ensure non-checkbox items take full width */
+        #TwitterXToolkit-config-panel .config-form-group:has(input[type="number"]),
+        #TwitterXToolkit-config-panel .config-form-group:has(textarea),
+        #TwitterXToolkit-config-panel .config-form-group:has(input[type="text"]),
+        #TwitterXToolkit-config-panel .config-form-group:has(input[type="password"]) {
+            display: block;
+            width: 100%;
+            margin-right: 0;
+        }
+    `);
+
     // Utility function: delay
     function sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
