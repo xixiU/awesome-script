@@ -193,7 +193,7 @@
         // Block功能配置
         excludeOriginalPoster: true,
         scrollAttempts: 5,
-        blockKeywords: '主人\n线下蹲个弟弟\n有弟弟线下吗\n有万达广场附近的吗\n蹲一个男搭子\n线下蹲个弟弟\n主人快来领我\n有哥哥线下吗',
+        blockKeywords: '有弟弟线下吗\n有万达广场附近的吗\n蹲一个男搭子\n线下蹲个弟弟\n主人快来领我\n有哥哥线下吗',
         autoBlock: false,
         // AI总结功能配置
         aiBaseUrl: 'https://api.openai.com/v1',
@@ -1478,7 +1478,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         // Watch for new comments using MutationObserver
         const observer = new MutationObserver(() => {
-            if (!isBlocking) {
+            if (!isBlocking && isOnTweetDetailPage()) {
                 processCurrentComments(keywords);
             }
         });
@@ -1496,6 +1496,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     // Process currently visible comments
     async function processCurrentComments(keywords) {
         if (isBlocking) return;
+        if (!isOnTweetDetailPage()) return; // Only run on tweet detail pages
+
         isBlocking = true;
 
         const commentersMap = getAllCommentersWithText();
