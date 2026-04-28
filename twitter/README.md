@@ -9,8 +9,10 @@ A powerful multi-functional toolkit for Twitter/X, integrating commenter blockin
 ### 🚫 Block All Commenters
 
 - 🎯 Block all commenters under a tweet with one click
+- 🔍 **Keyword Filtering**: Only block commenters whose comments contain specific keywords
+- 🤖 **Auto-Block Mode**: Automatically block commenters with keywords in the background (optional)
 - 🔄 Automatically scroll and load all comments
-- 📊 Real-time progress display
+- 📊 Real-time progress display with detailed user lists
 - ✅ Statistics on successful and failed operations
 - ⚙️ Configurable option to exclude original poster
 
@@ -108,7 +110,14 @@ Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterXToolkit Conf
 ### General Configuration
 
 - **Exclude Original Poster**: Don't block the person who posted the tweet (default: enabled)
-- **Max Scroll Attempts**: Maximum scroll attempts for loading content, used for both blocking and AI summarization (default: 10, range: 1-50)
+- **Auto Block**: Automatically block keyword-matching commenters in the background when opening a tweet detail page (default: disabled, requires keywords to be set)
+- **Max Scroll Attempts**: Maximum scroll attempts for loading content, used for both blocking and AI summarization (default: 5, range: 1-50)
+
+### Block Keywords Configuration
+
+- **Block Keywords**: Only block commenters whose comments contain these keywords (one per line). Leave empty to block all commenters.
+  - Default keywords include common spam/solicitation phrases
+  - The confirmation dialog shows the active keywords before blocking
 
 ### AI Summarization Configuration
 
@@ -239,6 +248,18 @@ A: Regardless of the original language, summaries are output in **Chinese** usin
 A: The current version doesn't support custom prompts and uses built-in optimized prompts. This feature may be added in future versions.
 
 ## Changelog
+
+### v2.3.1 (2026-04-29)
+
+- 🔍 **Keyword Filtering**: Only block commenters whose comments contain configured keywords
+- 🤖 **Auto-Block Mode**: Automatically block in background when opening tweet detail pages (uses MutationObserver, no page scrolling)
+- 📋 **Confirmation Dialog**: Shows active keywords before blocking so you know what will be filtered
+- 📊 **Detailed Results**: Block result dialog now lists all successfully blocked and failed usernames
+- 🎨 **Config Panel Layout**: Checkbox options (Exclude Original Poster / Auto Block) displayed side by side
+- 🐛 **Fixed**: Auto-block no longer triggers on timeline pages, only on tweet detail pages
+- 🐛 **Fixed**: Auto-block no longer forces page scroll (silent mode)
+- 🐛 **Fixed**: Manual block now respects max scroll attempts to prevent infinite loops
+- ⚡ **Optimized**: Default max scroll attempts reduced from 10 to 5; scroll interval reduced to 800ms
 
 ### v2.1 (2026-02-09)
 
