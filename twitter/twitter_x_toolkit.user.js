@@ -71,8 +71,12 @@
             configScrollAttemptsHelp: 'Maximum scroll attempts for loading content (blocking/AI summarization, default: 10)',
             configBlockKeywordsLabel: 'Block Keywords',
             configBlockKeywordsHelp: 'Only block commenters whose comments contain these keywords (one per line). Leave empty to block all.',
+            configAutoBlockLabel: 'Auto Block',
+            configAutoBlockHelp: 'Automatically block commenters with keywords when opening tweet detail page (runs in background)',
             consoleKeywordMatched: 'Keyword matched [{keyword}] for @{username}: {text}',
             consoleKeywordSkipped: 'Skipped @{username}: no keywords matched',
+            consoleAutoBlockStart: 'Auto-block started in background...',
+            consoleAutoBlockComplete: 'Auto-block completed: {success} blocked, {failed} failed',
 
             // AI总结功能相关
             summarizeButtonText: '🤖 AI Summary',
@@ -133,8 +137,12 @@
             configScrollAttemptsHelp: '加载内容的最大滚动尝试次数（用于屏蔽和AI总结，默认：10）',
             configBlockKeywordsLabel: '拉黑关键词',
             configBlockKeywordsHelp: '只拉黑评论中包含这些关键词的用户（每行一个）。留空则拉黑所有评论者。',
+            configAutoBlockLabel: '自动拉黑',
+            configAutoBlockHelp: '打开推文详情页时，自动在后台根据关键词拉黑评论者（需配置关键词）',
             consoleKeywordMatched: '关键词匹配 [{keyword}] @{username}: {text}',
             consoleKeywordSkipped: '跳过 @{username}: 未匹配关键词',
+            consoleAutoBlockStart: '后台自动拉黑已启动...',
+            consoleAutoBlockComplete: '自动拉黑完成：成功 {success} 个，失败 {failed} 个',
 
             // AI总结功能相关
             summarizeButtonText: '🤖 AI总结',
@@ -186,6 +194,7 @@
         excludeOriginalPoster: true,
         scrollAttempts: 10,
         blockKeywords: '主人\n线下蹲个弟弟\n有弟弟线下吗\n有万达广场附近的吗\n蹲一个男搭子\n线下蹲个弟弟\n主人快来领我\n有哥哥线下吗',
+        autoBlock: false,
         // AI总结功能配置
         aiBaseUrl: 'https://api.openai.com/v1',
         aiApiKey: '',
@@ -221,6 +230,12 @@
             type: 'textarea',
             placeholder: '主人\n线下蹲个弟弟\n有线下吗',
             help: t('configBlockKeywordsHelp')
+        },
+        {
+            key: 'autoBlock',
+            label: t('configAutoBlockLabel'),
+            type: 'checkbox',
+            help: t('configAutoBlockHelp')
         },
         // AI总结功能配置项
         {
@@ -1289,7 +1304,11 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             return;
         }
 
-        const confirmed = confirm(t('confirmBlock'));
+        const keywordsRaw = config.get('blockKeywords') || '';
+        const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
+        const keywordsDisplay = keywords.length > 0 ? keywords.join(', ') : (currentLang === 'zh' ? '（未设置，将拉黑所有评论者）' : '(none set, will block all commenters)');
+        const confirmMsg = t('confirmBlock') + '\n\n' + (currentLang === 'zh' ? `关键词：${keywordsDisplay}` : `Keywords: ${keywordsDisplay}`);
+        const confirmed = confirm(confirmMsg);
         if (!confirmed) {
             return;
         }
@@ -1327,11 +1346,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         const commentersMap = getAllCommentersWithText();
 
-        // Parse block keywords from config
-        const keywordsRaw = config.get('blockKeywords') || '';
-        const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
-
-        // Filter commenters by keywords (if keywords are set)
+        // Filter commenters by keywords (if keywords are set, reuse parsed keywords from confirm step)
         let commenters;
         if (keywords.length > 0) {
             commenters = [];
@@ -1399,6 +1414,57 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         console.log(t('consoleTotal', { count: commenters.length }));
     }
 
+    // ==================== 自动拉黑 ====================
+
+    // Auto block in background (no confirm dialog, no alert)
+    async function autoBlockCommenters() {
+        if (isBlocking) return;
+        if (!isOnTweetDetailPage()) return;
+
+        const keywordsRaw = config.get('blockKeywords') || '';
+        const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
+        if (keywords.length === 0) return; // auto block requires keywords
+
+        isBlocking = true;
+        console.log(t('consoleAutoBlockStart'));
+
+        // Wait for page to load comments
+        let previousHeight = 0;
+        let scrollAttempts = 0;
+        const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 3;
+        while (scrollAttempts < maxScrollAttempts) {
+            window.scrollTo(0, document.body.scrollHeight);
+            await sleep(1000);
+            const currentHeight = document.body.scrollHeight;
+            if (currentHeight === previousHeight) {
+                scrollAttempts++;
+            } else {
+                scrollAttempts = 0;
+            }
+            previousHeight = currentHeight;
+        }
+
+        const commentersMap = getAllCommentersWithText();
+        const commenters = [];
+        for (const [username, text] of commentersMap) {
+            const matchedKeyword = keywords.find(kw => text.includes(kw));
+            if (matchedKeyword) {
+                console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: text.substring(0, 50) }));
+                commenters.push(username);
+            }
+        }
+
+        let autoBlocked = 0, autoFailed = 0;
+        for (let i = 0; i < commenters.length; i++) {
+            const success = await blockUserByUI(commenters[i]);
+            if (success) autoBlocked++; else autoFailed++;
+            await sleep(1000);
+        }
+
+        isBlocking = false;
+        console.log(t('consoleAutoBlockComplete', { success: autoBlocked, failed: autoFailed }));
+    }
+
     // ==================== 初始化 ====================
 
     // Initialize
@@ -1411,6 +1477,11 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         // Create result panel (only once)
         if (!document.getElementById('ai-result-panel')) {
             createResultPanel();
+        }
+
+        // Auto block if enabled and on tweet detail page
+        if (config.get('autoBlock') && isOnTweetDetailPage()) {
+            setTimeout(autoBlockCommenters, 2000);
         }
 
         console.log(t('consoleScriptLoaded'));
