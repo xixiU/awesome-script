@@ -263,24 +263,26 @@
 
     // Custom styles for config panel layout
     GM_addStyle(`
-        /* Make checkbox config items display inline */
-        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) {
-            display: inline-block;
-            width: 48%;
-            margin-right: 2%;
-            vertical-align: top;
-        }
-
-        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]):nth-of-type(2n) {
-            margin-right: 0;
-        }
-
-        /* Checkbox and label on same line */
-        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) {
-            display: inline-flex;
-            flex-direction: row;
-            align-items: flex-start;
+        /* config-content uses flex layout to control item widths */
+        #TwitterXToolkit-config-panel .config-content {
+            display: flex;
             flex-wrap: wrap;
+        }
+
+        /* Non-checkbox items take full width */
+        #TwitterXToolkit-config-panel .config-form-group:not(:has(input[type="checkbox"])) {
+            width: 100%;
+        }
+
+        /* Checkbox items take 50% width and lay out internally as flex row */
+        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) {
+            width: 50%;
+            box-sizing: border-box;
+            padding-right: 12px;
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: flex-start;
         }
 
         #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) .config-label {
@@ -289,29 +291,21 @@
             margin-bottom: 0;
             margin-left: 8px;
             cursor: pointer;
+            font-weight: 500;
         }
 
         #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) input[type="checkbox"] {
             order: 1;
             width: auto;
             margin-top: 2px;
+            flex-shrink: 0;
             cursor: pointer;
         }
 
         #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) .config-help {
             order: 3;
             width: 100%;
-            margin-left: 28px;
-        }
-
-        /* Ensure non-checkbox items take full width */
-        #TwitterXToolkit-config-panel .config-form-group:has(input[type="number"]),
-        #TwitterXToolkit-config-panel .config-form-group:has(textarea),
-        #TwitterXToolkit-config-panel .config-form-group:has(input[type="text"]),
-        #TwitterXToolkit-config-panel .config-form-group:has(input[type="password"]) {
-            display: block;
-            width: 100%;
-            margin-right: 0;
+            margin-left: 24px;
         }
     `);
 
