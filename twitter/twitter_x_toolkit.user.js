@@ -275,6 +275,35 @@
             margin-right: 0;
         }
 
+        /* Checkbox and label on same line */
+        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) {
+            display: inline-flex;
+            flex-direction: row;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) .config-label {
+            order: 2;
+            flex: 1;
+            margin-bottom: 0;
+            margin-left: 8px;
+            cursor: pointer;
+        }
+
+        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) input[type="checkbox"] {
+            order: 1;
+            width: auto;
+            margin-top: 2px;
+            cursor: pointer;
+        }
+
+        #TwitterXToolkit-config-panel .config-form-group:has(input[type="checkbox"]) .config-help {
+            order: 3;
+            width: 100%;
+            margin-left: 28px;
+        }
+
         /* Ensure non-checkbox items take full width */
         #TwitterXToolkit-config-panel .config-form-group:has(input[type="number"]),
         #TwitterXToolkit-config-panel .config-form-group:has(textarea),
