@@ -68,7 +68,7 @@
             configExcludeOriginalLabel: 'Exclude Original Poster',
             configExcludeOriginalHelp: 'Do not block the person who posted the tweet',
             configScrollAttemptsLabel: 'Max Scroll Attempts',
-            configScrollAttemptsHelp: 'Maximum scroll attempts for loading content (blocking/AI summarization, default: 10)',
+            configScrollAttemptsHelp: 'Maximum scroll attempts for loading content (blocking/AI summarization, default: 5)',
             configBlockKeywordsLabel: 'Block Keywords',
             configBlockKeywordsHelp: 'Only block commenters whose comments contain these keywords (one per line). Leave empty to block all.',
             configAutoBlockLabel: 'Auto Block',
@@ -134,7 +134,7 @@
             configExcludeOriginalLabel: '排除原推作者',
             configExcludeOriginalHelp: '不屏蔽发推文的人',
             configScrollAttemptsLabel: '最大滚动次数',
-            configScrollAttemptsHelp: '加载内容的最大滚动尝试次数（用于屏蔽和AI总结，默认：10）',
+            configScrollAttemptsHelp: '加载内容的最大滚动尝试次数（用于屏蔽和AI总结，默认：5）',
             configBlockKeywordsLabel: '拉黑关键词',
             configBlockKeywordsHelp: '只拉黑评论中包含这些关键词的用户（每行一个）。留空则拉黑所有评论者。',
             configAutoBlockLabel: '自动拉黑',
@@ -192,7 +192,7 @@
     const config = new ConfigManager('TwitterXToolkit', {
         // Block功能配置
         excludeOriginalPoster: true,
-        scrollAttempts: 10,
+        scrollAttempts: 5,
         blockKeywords: '主人\n线下蹲个弟弟\n有弟弟线下吗\n有万达广场附近的吗\n蹲一个男搭子\n线下蹲个弟弟\n主人快来领我\n有哥哥线下吗',
         autoBlock: false,
         // AI总结功能配置
@@ -1368,7 +1368,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         let previousHeight = 0;
         let stableCount = 0;
         let totalScrolls = 0;
-        const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 10;
+        const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 5;
 
         // Stop when height stable for 2 consecutive scrolls OR max scrolls reached
         while (stableCount < 2 && totalScrolls < maxScrollAttempts) {
