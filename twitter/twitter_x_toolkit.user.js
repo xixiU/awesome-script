@@ -1366,19 +1366,21 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         updateButtonStatus(t('buttonLoading'), true);
 
         let previousHeight = 0;
-        let scrollAttempts = 0;
-        const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 3;
+        let stableCount = 0;
+        let totalScrolls = 0;
+        const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 10;
 
-        // 优化：连续2次高度不变就停止，避免不必要的等待
-        while (scrollAttempts < 2) {
+        // Stop when height stable for 2 consecutive scrolls OR max scrolls reached
+        while (stableCount < 2 && totalScrolls < maxScrollAttempts) {
             window.scrollTo(0, document.body.scrollHeight);
-            await sleep(1000);
+            await sleep(800);
+            totalScrolls++;
 
             const currentHeight = document.body.scrollHeight;
             if (currentHeight === previousHeight) {
-                scrollAttempts++;
+                stableCount++;
             } else {
-                scrollAttempts = 0;
+                stableCount = 0;
             }
             previousHeight = currentHeight;
         }
