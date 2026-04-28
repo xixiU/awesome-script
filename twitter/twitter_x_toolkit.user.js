@@ -1251,12 +1251,12 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         }
     }
 
-    // Block user by clicking UI elements (优化：在视野外操作)
-    async function blockUserByUI(username) {
+    // Block user by clicking UI elements
+    // silent=true: skip scrolling (for auto-block, avoids disrupting user's scroll position)
+    async function blockUserByUI(username, silent = false) {
         try {
             console.log(t('consoleTryBlockUI', { username }));
 
-            // 保存当前滚动位置
             const originalScrollY = window.scrollY;
 
             // Find the user's comment element
@@ -1276,16 +1276,21 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 return false;
             }
 
-            // 滚动到页面底部，让操作发生在视野外
-            window.scrollTo(0, document.body.scrollHeight);
-            await sleep(100);
+            // Only scroll to bottom in manual mode (keeps UI operations out of view)
+            if (!silent) {
+                window.scrollTo(0, document.body.scrollHeight);
+                await sleep(100);
+            }
+
+            const restoreScroll = () => {
+                if (!silent) window.scrollTo(0, originalScrollY);
+            };
 
             // Find and click the more options button (three dots)
             const moreButton = targetArticle.querySelector('[data-testid="caret"]');
             if (!moreButton) {
                 console.log(t('consoleNotFoundButton', { username }));
-                // 恢复滚动位置
-                window.scrollTo(0, originalScrollY);
+                restoreScroll();
                 return false;
             }
 
@@ -1299,10 +1304,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
             if (!blockMenuItem) {
                 console.log(t('consoleNotFoundMenuItem'));
-                // Close menu
                 document.body.click();
-                // 恢复滚动位置
-                window.scrollTo(0, originalScrollY);
+                restoreScroll();
                 return false;
             }
 
@@ -1318,13 +1321,11 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 confirmButton.click();
                 await sleep(500);
                 console.log(t('consoleBlockSuccess', { username }));
-                // 恢复滚动位置
-                window.scrollTo(0, originalScrollY);
+                restoreScroll();
                 return true;
             } else {
                 console.log(t('consoleNotFoundConfirm'));
-                // 恢复滚动位置
-                window.scrollTo(0, originalScrollY);
+                restoreScroll();
                 return false;
             }
         } catch (error) {
@@ -1513,7 +1514,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         let autoBlocked = 0, autoFailed = 0;
         for (const username of toBlock) {
-            const success = await blockUserByUI(username);
+            const success = await blockUserByUI(username, true); // silent: no scroll
             if (success) autoBlocked++; else autoFailed++;
             await sleep(500); // Shorter delay for auto-block
         }
