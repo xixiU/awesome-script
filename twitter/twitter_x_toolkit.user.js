@@ -1457,7 +1457,9 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
     // ==================== 自动拉黑 ====================
 
-    // Auto block in background (no confirm dialog, no alert)
+    let autoBlockProcessed = new Set(); // Track processed users to avoid duplicates
+
+    // Auto block in background (no scrolling, no confirm dialog, no alert)
     async function autoBlockCommenters() {
         if (isBlocking) return;
         if (!isOnTweetDetailPage()) return;
@@ -1466,44 +1468,59 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
         if (keywords.length === 0) return; // auto block requires keywords
 
-        isBlocking = true;
         console.log(t('consoleAutoBlockStart'));
 
-        // Wait for page to load comments
-        let previousHeight = 0;
-        let scrollAttempts = 0;
-        const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 3;
-        while (scrollAttempts < maxScrollAttempts) {
-            window.scrollTo(0, document.body.scrollHeight);
-            await sleep(1000);
-            const currentHeight = document.body.scrollHeight;
-            if (currentHeight === previousHeight) {
-                scrollAttempts++;
-            } else {
-                scrollAttempts = 0;
+        // Process currently visible comments without scrolling
+        await processCurrentComments(keywords);
+
+        // Watch for new comments using MutationObserver
+        const observer = new MutationObserver(() => {
+            if (!isBlocking) {
+                processCurrentComments(keywords);
             }
-            previousHeight = currentHeight;
-        }
+        });
+
+        // Observe new tweets/comments being added
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Stop observing after 60 seconds to avoid memory leak
+        setTimeout(() => observer.disconnect(), 60000);
+    }
+
+    // Process currently visible comments
+    async function processCurrentComments(keywords) {
+        if (isBlocking) return;
+        isBlocking = true;
 
         const commentersMap = getAllCommentersWithText();
-        const commenters = [];
+        const toBlock = [];
+
         for (const [username, text] of commentersMap) {
+            if (autoBlockProcessed.has(username)) continue; // Skip already processed
+
             const matchedKeyword = keywords.find(kw => text.includes(kw));
             if (matchedKeyword) {
                 console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: text.substring(0, 50) }));
-                commenters.push(username);
+                toBlock.push(username);
+                autoBlockProcessed.add(username);
             }
         }
 
         let autoBlocked = 0, autoFailed = 0;
-        for (let i = 0; i < commenters.length; i++) {
-            const success = await blockUserByUI(commenters[i]);
+        for (const username of toBlock) {
+            const success = await blockUserByUI(username);
             if (success) autoBlocked++; else autoFailed++;
-            await sleep(1000);
+            await sleep(500); // Shorter delay for auto-block
+        }
+
+        if (toBlock.length > 0) {
+            console.log(t('consoleAutoBlockComplete', { success: autoBlocked, failed: autoFailed }));
         }
 
         isBlocking = false;
-        console.log(t('consoleAutoBlockComplete', { success: autoBlocked, failed: autoFailed }));
     }
 
     // ==================== 初始化 ====================
@@ -1544,6 +1561,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             // Remove old toolbar
             const oldToolbar = document.getElementById('x-toolkit-toolbar');
             if (oldToolbar) oldToolbar.remove();
+            // Reset auto-block state for new page
+            autoBlockProcessed = new Set();
             // Reinitialize
             setTimeout(init, 1000);
         }
