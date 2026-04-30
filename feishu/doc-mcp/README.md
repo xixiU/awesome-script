@@ -43,7 +43,16 @@ uv pip install fastmcp httpx certifi pyyaml
 
 ### 2. 创建配置文件
 
-复制示例配置文件并修改：
+配置文件加载优先级：`doc-mcp/config.yml` > `feishu/config.yml`（父目录）
+
+**方式一**：在 doc-mcp 目录下独立配置（推荐）
+
+```bash
+cd feishu/doc-mcp
+cp config.example.yml config.yml
+```
+
+**方式二**：使用父目录的共享配置
 
 ```bash
 cd feishu

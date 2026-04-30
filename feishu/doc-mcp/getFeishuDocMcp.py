@@ -4,15 +4,26 @@ import httpx
 import certifi
 import asyncio
 import json
+import yaml
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
-# 将父目录加入路径，以便导入共用 config.py
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import load_config
+
+def _load_config():
+    """加载配置文件，优先级：当前目录 config.yml > 父目录 config.py"""
+    local_dir = Path(__file__).parent
+    local_config = local_dir / "config.yml"
+    if local_config.exists():
+        with open(local_config, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f)
+    # 回退到父目录的 config.py
+    sys.path.insert(0, str(local_dir.parent))
+    from config import load_config
+    return load_config()
+
 
 # 加载配置
-config = load_config()
+config = _load_config()
 URL_PREFIX = config['feishu']['url_prefix']
 CONFIG = {
     "app_id": config['feishu']['app_id'],
