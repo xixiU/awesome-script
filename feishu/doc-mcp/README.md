@@ -6,6 +6,9 @@
 
 - 🔐 支持飞书开放平台 API 认证
 - 📄 读取飞书文档原始文本内容
+- 📚 列出和搜索知识库（Wiki）空间
+- 🔍 在知识库中搜索关键词
+- 📑 获取知识库文档节点列表
 - 🚀 基于 FastMCP 的 SSE 传输协议
 - ⚙️ 灵活的 YAML 配置管理
 
@@ -36,6 +39,7 @@ uv pip install fastmcp httpx certifi pyyaml
 4. 在「权限管理」中添加以下权限：
    - `docx:document` - 查看、评论和导出文档
    - `docx:document:readonly` - 查看和导出文档（只读）
+   - `wiki:wiki:readonly` - 查看知识库（只读）
 
 ### 2. 创建配置文件
 
@@ -102,6 +106,18 @@ python getFeishuDocMcp.py
 ```python
 # 读取飞书文档内容
 get_document_content(file_id="doxrzFVGxynmgH727mFFd1oThSb")
+
+# 列出所有可访问的知识库
+list_wiki_spaces()
+
+# 列出知识库中的文档节点
+list_wiki_nodes(space_id="xxx")
+
+# 在知识库中搜索关键词
+search_wiki_by_keyword(space_id="xxx", keyword="搜索词")
+
+# 获取知识库文档完整内容
+get_wiki_document_full_content(obj_token="xxx")
 ```
 
 **获取文档 ID**：
@@ -109,6 +125,12 @@ get_document_content(file_id="doxrzFVGxynmgH727mFFd1oThSb")
 - 从 URL 中提取文档 ID
 - 例如：`https://example.feishu.cn/docx/doxrzFVGxynmgH727mFFd1oThSb`
 - 文档 ID 为：`doxrzFVGxynmgH727mFFd1oThSb`
+
+**获取知识库 ID**：
+- 打开飞书知识库
+- 从 URL 中提取 space_id
+- 例如：`https://example.feishu.cn/wiki/xxx`
+- 或使用 `list_wiki_spaces()` 工具获取所有知识库列表
 
 ## 配置说明
 
@@ -156,7 +178,16 @@ get_document_content(file_id="doxrzFVGxynmgH727mFFd1oThSb")
 - 确认应用有权限访问该文档
 - 验证文档是否存在且未被删除
 
-### 4. 配置文件未找到
+### 4. 知识库访问失败
+
+**错误**: `403 Forbidden` 或 `404 Not Found`
+
+**解决方案**:
+- 确认已添加 `wiki:wiki:readonly` 权限
+- 检查知识库是否对应用开放访问权限
+- 验证 space_id 是否正确
+
+### 5. 配置文件未找到
 
 **错误**: `FileNotFoundError: 配置文件不存在`
 
