@@ -2,7 +2,7 @@
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
 // @namespace    http://tampermonkey.net/
-// @version      2.3
+// @version      2.3.1
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结等，未来将持续扩展更多功能
 // @author       xixiU
@@ -68,11 +68,15 @@
             configExcludeOriginalLabel: 'Exclude Original Poster',
             configExcludeOriginalHelp: 'Do not block the person who posted the tweet',
             configScrollAttemptsLabel: 'Max Scroll Attempts',
-            configScrollAttemptsHelp: 'Maximum scroll attempts for loading content (blocking/AI summarization, default: 10)',
+            configScrollAttemptsHelp: 'Maximum scroll attempts for loading content (blocking/AI summarization, default: 5)',
             configBlockKeywordsLabel: 'Block Keywords',
             configBlockKeywordsHelp: 'Only block commenters whose comments contain these keywords (one per line). Leave empty to block all.',
+            configAutoBlockLabel: 'Auto Block',
+            configAutoBlockHelp: 'Automatically block commenters with keywords when opening tweet detail page (runs in background)',
             consoleKeywordMatched: 'Keyword matched [{keyword}] for @{username}: {text}',
             consoleKeywordSkipped: 'Skipped @{username}: no keywords matched',
+            consoleAutoBlockStart: 'Auto-block started in background...',
+            consoleAutoBlockComplete: 'Auto-block completed: {success} blocked, {failed} failed',
 
             // AI总结功能相关
             summarizeButtonText: '🤖 AI Summary',
@@ -130,11 +134,15 @@
             configExcludeOriginalLabel: '排除原推作者',
             configExcludeOriginalHelp: '不屏蔽发推文的人',
             configScrollAttemptsLabel: '最大滚动次数',
-            configScrollAttemptsHelp: '加载内容的最大滚动尝试次数（用于屏蔽和AI总结，默认：10）',
+            configScrollAttemptsHelp: '加载内容的最大滚动尝试次数（用于屏蔽和AI总结，默认：5）',
             configBlockKeywordsLabel: '拉黑关键词',
             configBlockKeywordsHelp: '只拉黑评论中包含这些关键词的用户（每行一个）。留空则拉黑所有评论者。',
+            configAutoBlockLabel: '自动拉黑',
+            configAutoBlockHelp: '打开推文详情页时，自动在后台根据关键词拉黑评论者（需配置关键词）',
             consoleKeywordMatched: '关键词匹配 [{keyword}] @{username}: {text}',
             consoleKeywordSkipped: '跳过 @{username}: 未匹配关键词',
+            consoleAutoBlockStart: '后台自动拉黑已启动...',
+            consoleAutoBlockComplete: '自动拉黑完成：成功 {success} 个，失败 {failed} 个',
 
             // AI总结功能相关
             summarizeButtonText: '🤖 AI总结',
@@ -184,8 +192,9 @@
     const config = new ConfigManager('TwitterXToolkit', {
         // Block功能配置
         excludeOriginalPoster: true,
-        scrollAttempts: 10,
-        blockKeywords: '主人\n线下蹲个弟弟\n有弟弟线下吗\n有万达广场附近的吗\n蹲一个男搭子\n线下蹲个弟弟\n主人快来领我\n有哥哥线下吗',
+        scrollAttempts: 5,
+        blockKeywords: '有弟弟线下吗\n有万达广场附近的吗\n蹲一个男搭子\n线下蹲个弟弟\n主人快来领我\n有哥哥线下吗',
+        autoBlock: false,
         // AI总结功能配置
         aiBaseUrl: 'https://api.openai.com/v1',
         aiApiKey: '',
@@ -222,6 +231,12 @@
             placeholder: '主人\n线下蹲个弟弟\n有线下吗',
             help: t('configBlockKeywordsHelp')
         },
+        {
+            key: 'autoBlock',
+            label: t('configAutoBlockLabel'),
+            type: 'checkbox',
+            help: t('configAutoBlockHelp')
+        },
         // AI总结功能配置项
         {
             key: 'aiBaseUrl',
@@ -245,6 +260,47 @@
             help: t('configAiModelHelp')
         }
     ]);
+
+    // Restructure config panel: put checkbox items side by side
+    function restructureConfigPanel() {
+        const content = document.querySelector('#TwitterXToolkit-config-panel .config-content');
+        if (!content) return;
+
+        const checkboxGroups = Array.from(content.querySelectorAll('.config-form-group'))
+            .filter(g => g.querySelector('input[type="checkbox"]'));
+        if (checkboxGroups.length < 2) return;
+
+        // Fix internal layout of each checkbox group: [checkbox] [label] on one row
+        checkboxGroups.forEach(group => {
+            const label = group.querySelector('.config-label');
+            const input = group.querySelector('input[type="checkbox"]');
+            const help = group.querySelector('.config-help');
+
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+            input.style.cssText = 'width:auto;margin:0;cursor:pointer;flex-shrink:0;';
+            label.style.cssText = 'margin:0;cursor:pointer;font-weight:500;';
+            row.appendChild(input);
+            row.appendChild(label);
+
+            // Rebuild group: row + help
+            group.innerHTML = '';
+            group.appendChild(row);
+            if (help) {
+                help.style.marginLeft = '24px';
+                group.appendChild(help);
+            }
+            group.style.cssText = 'flex:1;margin-bottom:0;';
+        });
+
+        // Wrap all checkbox groups in a single flex row
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'display:flex;gap:16px;margin-bottom:20px;';
+        content.insertBefore(wrapper, checkboxGroups[0]);
+        checkboxGroups.forEach(g => wrapper.appendChild(g));
+    }
+
+    restructureConfigPanel();
 
     // Utility function: delay
     function sleep(ms) {
@@ -1195,12 +1251,12 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         }
     }
 
-    // Block user by clicking UI elements (优化：在视野外操作)
-    async function blockUserByUI(username) {
+    // Block user by clicking UI elements
+    // silent=true: skip scrolling (for auto-block, avoids disrupting user's scroll position)
+    async function blockUserByUI(username, silent = false) {
         try {
             console.log(t('consoleTryBlockUI', { username }));
 
-            // 保存当前滚动位置
             const originalScrollY = window.scrollY;
 
             // Find the user's comment element
@@ -1220,16 +1276,21 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 return false;
             }
 
-            // 滚动到页面底部，让操作发生在视野外
-            window.scrollTo(0, document.body.scrollHeight);
-            await sleep(100);
+            // Only scroll to bottom in manual mode (keeps UI operations out of view)
+            if (!silent) {
+                window.scrollTo(0, document.body.scrollHeight);
+                await sleep(100);
+            }
+
+            const restoreScroll = () => {
+                if (!silent) window.scrollTo(0, originalScrollY);
+            };
 
             // Find and click the more options button (three dots)
             const moreButton = targetArticle.querySelector('[data-testid="caret"]');
             if (!moreButton) {
                 console.log(t('consoleNotFoundButton', { username }));
-                // 恢复滚动位置
-                window.scrollTo(0, originalScrollY);
+                restoreScroll();
                 return false;
             }
 
@@ -1243,10 +1304,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
             if (!blockMenuItem) {
                 console.log(t('consoleNotFoundMenuItem'));
-                // Close menu
                 document.body.click();
-                // 恢复滚动位置
-                window.scrollTo(0, originalScrollY);
+                restoreScroll();
                 return false;
             }
 
@@ -1262,13 +1321,11 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 confirmButton.click();
                 await sleep(500);
                 console.log(t('consoleBlockSuccess', { username }));
-                // 恢复滚动位置
-                window.scrollTo(0, originalScrollY);
+                restoreScroll();
                 return true;
             } else {
                 console.log(t('consoleNotFoundConfirm'));
-                // 恢复滚动位置
-                window.scrollTo(0, originalScrollY);
+                restoreScroll();
                 return false;
             }
         } catch (error) {
@@ -1289,7 +1346,11 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             return;
         }
 
-        const confirmed = confirm(t('confirmBlock'));
+        const keywordsRaw = config.get('blockKeywords') || '';
+        const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
+        const keywordsDisplay = keywords.length > 0 ? keywords.join(', ') : (currentLang === 'zh' ? '（未设置，将拉黑所有评论者）' : '(none set, will block all commenters)');
+        const confirmMsg = t('confirmBlock') + '\n\n' + (currentLang === 'zh' ? `关键词：${keywordsDisplay}` : `Keywords: ${keywordsDisplay}`);
+        const confirmed = confirm(confirmMsg);
         if (!confirmed) {
             return;
         }
@@ -1306,19 +1367,21 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         updateButtonStatus(t('buttonLoading'), true);
 
         let previousHeight = 0;
-        let scrollAttempts = 0;
-        const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 3;
+        let stableCount = 0;
+        let totalScrolls = 0;
+        const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 5;
 
-        // 优化：连续2次高度不变就停止，避免不必要的等待
-        while (scrollAttempts < 2) {
+        // Stop when height stable for 2 consecutive scrolls OR max scrolls reached
+        while (stableCount < 2 && totalScrolls < maxScrollAttempts) {
             window.scrollTo(0, document.body.scrollHeight);
-            await sleep(1000);
+            await sleep(800);
+            totalScrolls++;
 
             const currentHeight = document.body.scrollHeight;
             if (currentHeight === previousHeight) {
-                scrollAttempts++;
+                stableCount++;
             } else {
-                scrollAttempts = 0;
+                stableCount = 0;
             }
             previousHeight = currentHeight;
         }
@@ -1327,11 +1390,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         const commentersMap = getAllCommentersWithText();
 
-        // Parse block keywords from config
-        const keywordsRaw = config.get('blockKeywords') || '';
-        const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
-
-        // Filter commenters by keywords (if keywords are set)
+        // Filter commenters by keywords (if keywords are set, reuse parsed keywords from confirm step)
         let commenters;
         if (keywords.length > 0) {
             commenters = [];
@@ -1399,6 +1458,76 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         console.log(t('consoleTotal', { count: commenters.length }));
     }
 
+    // ==================== 自动拉黑 ====================
+
+    let autoBlockProcessed = new Set(); // Track processed users to avoid duplicates
+
+    // Auto block in background (no scrolling, no confirm dialog, no alert)
+    async function autoBlockCommenters() {
+        if (isBlocking) return;
+        if (!isOnTweetDetailPage()) return;
+
+        const keywordsRaw = config.get('blockKeywords') || '';
+        const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
+        if (keywords.length === 0) return; // auto block requires keywords
+
+        console.log(t('consoleAutoBlockStart'));
+
+        // Process currently visible comments without scrolling
+        await processCurrentComments(keywords);
+
+        // Watch for new comments using MutationObserver
+        const observer = new MutationObserver(() => {
+            if (!isBlocking && isOnTweetDetailPage()) {
+                processCurrentComments(keywords);
+            }
+        });
+
+        // Observe new tweets/comments being added
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Stop observing after 60 seconds to avoid memory leak
+        setTimeout(() => observer.disconnect(), 60000);
+    }
+
+    // Process currently visible comments
+    async function processCurrentComments(keywords) {
+        if (isBlocking) return;
+        if (!isOnTweetDetailPage()) return; // Only run on tweet detail pages
+
+        isBlocking = true;
+
+        const commentersMap = getAllCommentersWithText();
+        const toBlock = [];
+
+        for (const [username, text] of commentersMap) {
+            if (autoBlockProcessed.has(username)) continue; // Skip already processed
+
+            const matchedKeyword = keywords.find(kw => text.includes(kw));
+            if (matchedKeyword) {
+                console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: text.substring(0, 50) }));
+                toBlock.push(username);
+                autoBlockProcessed.add(username);
+            }
+        }
+
+        let autoBlocked = 0, autoFailed = 0;
+        for (const username of toBlock) {
+            const success = await blockUserByUI(username, true); // silent: no scroll
+            if (success) autoBlocked++; else autoFailed++;
+            await sleep(500); // Shorter delay for auto-block
+        }
+
+        if (toBlock.length > 0) {
+            console.log(t('consoleAutoBlockComplete', { success: autoBlocked, failed: autoFailed }));
+        }
+
+        isBlocking = false;
+    }
+
     // ==================== 初始化 ====================
 
     // Initialize
@@ -1411,6 +1540,11 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         // Create result panel (only once)
         if (!document.getElementById('ai-result-panel')) {
             createResultPanel();
+        }
+
+        // Auto block if enabled and on tweet detail page
+        if (config.get('autoBlock') && isOnTweetDetailPage()) {
+            setTimeout(autoBlockCommenters, 2000);
         }
 
         console.log(t('consoleScriptLoaded'));
@@ -1432,6 +1566,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             // Remove old toolbar
             const oldToolbar = document.getElementById('x-toolkit-toolbar');
             if (oldToolbar) oldToolbar.remove();
+            // Reset auto-block state for new page
+            autoBlockProcessed = new Set();
             // Reinitialize
             setTimeout(init, 1000);
         }
