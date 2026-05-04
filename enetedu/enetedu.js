@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         教师网课助手
 // @namespace    https://onlinenew.enetedu.com/
-// @version      0.6.3.0
+// @version      0.6.3.1
 // @description  适用于网址是 https://onlinenew.enetedu.com/ 和 smartedu.cn 和 qchengkeji 的网站自动刷课，自动点击播放，检查视频进度，自动切换下一个视频。优先使用接口检测学习进度，页面元素检测作为兜底。已移除tab切换时视频自动停止的限制。
 // @author       xixiu
 // @match        onlinenew.enetedu.com/*/MyTrainCourse/*
@@ -12,8 +12,13 @@
 // @grant        unsafeWindow
 // @grant        window.close
 // @grant        GM.xmlHttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
+// @grant        GM_addStyle
 // @run-at       document-start
 // @require      https://cdn.bootcss.com/jquery/3.2.1/jquery.min.js
+// @require      https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/common/config_manager.js
 // @license MIT
 // @thanks        https://update.greasyfork.org/scripts/497263/%2A2024%E7%89%88%E7%BB%AD%E7%BB%AD%E6%95%99%E8%82%B2%2A%E5%85%A8%E5%9B%BD%E9%AB%98%E6%A0%A1%E6%95%99%E5%B8%88%E7%BD%91%E7%BB%9C%E5%9F%B9%E8%AE%AD%E4%B8%AD%E5%BF%83-%E8%87%AA%E5%8A%A8%E5%88%B7%E8%AF%BE.user.js
 // @downloadURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/enetedu/enetedu.js
@@ -22,6 +27,89 @@
 
 (function () {
     'use strict';
+
+    // ==================== 配置管理 ====================
+    const configManager = new ConfigManager('教师网课助手', {
+        cacheExpireHours: 8,           // 课程缓存过期时间（小时）
+        autoOpenCreditPage: true,      // 是否自动打开学分页面
+        autoFindCourseOnList: false    // 是否在课程列表页自动寻找未学完课程
+    });
+
+    // 注册配置菜单
+    try {
+        // 1. 缓存过期时间配置
+        const cacheExpireDialog = configManager.createSimpleDialog([
+            {
+                key: 'cacheExpireHours',
+                labelKey: '缓存过期时间（小时）',
+                type: 'text',
+                help: '课程开始学习时会记录到缓存，防止重复打开。如果学习中途异常退出，缓存会在过期后自动清除。建议设置为 4~12 小时。'
+            }
+        ], (updates) => {
+            if (updates.cacheExpireHours) {
+                const val = parseFloat(updates.cacheExpireHours);
+                if (!isNaN(val) && val > 0) {
+                    alert(`已设置缓存过期时间为 ${val} 小时，刷新页面后生效。`);
+                } else {
+                    alert('请输入大于0的数字');
+                }
+            }
+        });
+        configManager.registerMenuCommand('⏱ 缓存过期时间', cacheExpireDialog);
+
+        // 2. 自动打开学分页面（手动实现切换菜单，使用明显的图标）
+        const autoOpenCredit = GM_getValue('autoOpenCreditPage', true);
+        configManager.registerMenuCommand(
+            `${autoOpenCredit ? '✅' : '❌'} 自动打开学分页面`,
+            () => {
+                GM_setValue('autoOpenCreditPage', !autoOpenCredit);
+                alert(`已${!autoOpenCredit ? '开启' : '关闭'}自动打开学分页面，刷新页面后生效。`);
+                location.reload();
+            }
+        );
+
+        // 3. 列表页自动寻找未学完课程（手动实现切换菜单，使用明显的图标）
+        const autoFindCourse = GM_getValue('autoFindCourseOnList', false);
+        configManager.registerMenuCommand(
+            `${autoFindCourse ? '✅' : '❌'} 列表页自动寻找未学完课程`,
+            () => {
+                GM_setValue('autoFindCourseOnList', !autoFindCourse);
+                alert(`已${!autoFindCourse ? '开启' : '关闭'}列表页自动寻找未学完课程，刷新页面后生效。\n\n` +
+                      '开启后，进入"我的网培课程"或"培训课单"页面时，\n' +
+                      '会自动查找并打开未学完的课程。');
+                location.reload();
+            }
+        );
+
+        // 4. 手动清除课程缓存
+        configManager.registerMenuCommand('🗑 清除课程缓存', () => {
+            const cached = localStorage.getItem('enetedu_learning_courses');
+            if (!cached || cached === '{}') {
+                alert('当前没有缓存的课程记录。');
+                return;
+            }
+            try {
+                const map = JSON.parse(cached);
+                const ids = Object.keys(map);
+                const info = ids.map(id => {
+                    const time = new Date(map[id]).toLocaleString();
+                    return `  课程ID: ${id}  (添加时间: ${time})`;
+                }).join('\n');
+
+                if (confirm(`当前缓存了 ${ids.length} 门课程:\n\n${info}\n\n确定要清除所有缓存吗？`)) {
+                    localStorage.removeItem('enetedu_learning_courses');
+                    alert('课程缓存已清除。');
+                }
+            } catch (e) {
+                if (confirm('缓存数据格式异常，是否清除？')) {
+                    localStorage.removeItem('enetedu_learning_courses');
+                    alert('课程缓存已清除。');
+                }
+            }
+        });
+    } catch (e) {
+        console.warn('[配置菜单] 注册失败:', e);
+    }
 
     // Tab切换限制移除功能 - 专门针对szh.enetedu.com
     function removeTabSwitchRestrictions() {
@@ -495,38 +583,92 @@
             return window.location.href.includes('onlinenew.enetedu.com');
         },
         isOnlineNewListPage() {
-            return window.location.href.includes('onlinenew.enetedu.com') && window.location.href.includes('/MyTrainCourse/Index');
+            const url = window.location.href;
+            return url.includes('onlinenew.enetedu.com') && (url.includes('/MyTrainCourse/Index') || url.includes('/MyTrainCourse/MyCourseOrder'));
+        },
+        isCourseOrderListPage() {
+            return window.location.href.includes('onlinenew.enetedu.com') && window.location.href.includes('/MyTrainCourse/CourseOrderList');
         }
     };
 
-    // 课程缓存管理
+    // 课程缓存管理（带时间戳过期机制）
+    // 存储格式: { "课程ID": timestamp, ... }
     const CourseCache = {
         key: 'enetedu_learning_courses',
 
+        // 获取过期时间（毫秒），从配置读取
+        get expireMs() {
+            const hours = configManager.get('cacheExpireHours') || 8;
+            return hours * 60 * 60 * 1000;
+        },
+
         // 辅助：从URL提取课程ID
         getCourseId(url) {
-            // 匹配 ?id=123 或 &id=123
             const match = url.match(/[?&]id=(\d+)/);
             return match ? match[1] : null;
         },
 
-        getAll() {
+        // 读取缓存并自动清理过期项
+        _getMap() {
             try {
-                return JSON.parse(localStorage.getItem(this.key) || '[]');
+                const raw = JSON.parse(localStorage.getItem(this.key) || '{}');
+                // 兼容旧格式：数组 → 对象（旧缓存视为已过期，直接丢弃）
+                if (Array.isArray(raw)) {
+                    utils.log('[缓存] 检测到旧格式缓存，已清除');
+                    localStorage.removeItem(this.key);
+                    return {};
+                }
+                return raw;
             } catch (e) {
-                return [];
+                return {};
             }
         },
 
+        _save(map) {
+            localStorage.setItem(this.key, JSON.stringify(map));
+        },
+
+        // 清理过期缓存，返回清理后的map
+        _cleanup() {
+            const map = this._getMap();
+            const now = Date.now();
+            let cleaned = 0;
+            for (const id in map) {
+                if (now - map[id] > this.expireMs) {
+                    utils.log(`[缓存] 课程ID ${id} 已过期(${Math.round((now - map[id]) / 60000)}分钟前添加)，自动清除`);
+                    delete map[id];
+                    cleaned++;
+                }
+            }
+            if (cleaned > 0) this._save(map);
+            return map;
+        },
+
+        getAll() {
+            return Object.keys(this._cleanup());
+        },
+
         add(urlOrId) {
-            const id = this.getCourseId(urlOrId) || urlOrId; // 尝试提取ID，如果本身就是ID则直接使用
+            const id = this.getCourseId(urlOrId) || urlOrId;
             if (!id) return;
 
-            const list = this.getAll();
-            if (!list.includes(id)) {
-                list.push(id);
-                localStorage.setItem(this.key, JSON.stringify(list));
+            const map = this._cleanup();
+            if (!map[id]) {
+                map[id] = Date.now();
+                this._save(map);
                 utils.log(`[缓存] 添加课程ID: ${id}`);
+            }
+        },
+
+        // 刷新缓存时间戳（课程仍在学习中时调用，防止学习期间过期）
+        refresh(urlOrId) {
+            const id = this.getCourseId(urlOrId) || urlOrId;
+            if (!id) return;
+
+            const map = this._getMap();
+            if (map[id]) {
+                map[id] = Date.now();
+                this._save(map);
             }
         },
 
@@ -534,16 +676,17 @@
             const id = this.getCourseId(urlOrId) || urlOrId;
             if (!id) return;
 
-            const list = this.getAll();
-            const newList = list.filter(item => item !== id);
-            localStorage.setItem(this.key, JSON.stringify(newList));
+            const map = this._getMap();
+            delete map[id];
+            this._save(map);
             utils.log(`[缓存] 移除课程ID: ${id}`);
         },
 
         has(urlOrId) {
             const id = this.getCourseId(urlOrId) || urlOrId;
             if (!id) return false;
-            return this.getAll().includes(id);
+            const map = this._cleanup();
+            return id in map;
         }
     };
 
@@ -554,12 +697,19 @@
             setTimeout(() => {
                 // 动态获取院校代码
                 const pathParts = window.location.pathname.split('/');
-                // url like /nnsy/MyTrainCourse/ChoiceCourse
-                // pathParts[0] is empty string, pathParts[1] is 'nnsy'
                 const schoolCode = pathParts[1];
                 if (schoolCode) {
-                    const listUrl = `${window.location.origin}/${schoolCode}/MyTrainCourse/Index?newSearchFlag=true`;
-                    utils.log(`跳转回列表: ${listUrl}`);
+                    // 检查当前URL是否包含orderid参数（从课单进入的课程）
+                    const orderIdMatch = window.location.href.match(/[?&]orderid=(\d+)/);
+                    let listUrl;
+                    if (orderIdMatch) {
+                        // 从课单进入的，返回课单页面
+                        listUrl = `${window.location.origin}/${schoolCode}/MyTrainCourse/CourseOrderList?id=${orderIdMatch[1]}`;
+                        utils.log(`检测到课单来源(orderid=${orderIdMatch[1]})，跳转回课单: ${listUrl}`);
+                    } else {
+                        listUrl = `${window.location.origin}/${schoolCode}/MyTrainCourse/Index?newSearchFlag=true`;
+                        utils.log(`跳转回列表: ${listUrl}`);
+                    }
                     window.location.href = listUrl;
                 } else {
                     utils.error('无法提取院校代码，执行默认关闭操作');
@@ -1889,8 +2039,8 @@
         // pathParts[0] is empty string, pathParts[1] is 'nnsy'
         const schoolCode = pathParts[1];
 
-        // 后台打开学分页面（防止重复打开）
-        if (schoolCode) {
+        // 后台打开学分页面（防止重复打开）- 根据配置决定是否打开
+        if (schoolCode && GM_getValue('autoOpenCreditPage', true)) {
             const creditUrl = `https://onlinenew.enetedu.com/${schoolCode}/MyCredit/Index`;
             // 使用 sessionStorage 记录是否已打开过学分页面，避免重复打开
             const creditPageKey = `creditPageOpened_${schoolCode}`;
@@ -1912,7 +2062,7 @@
                 // 已打开过，跳过重复打开
                 utils.log(`学分页面已打开过，跳过重复打开: ${creditUrl}`);
             }
-        } else {
+        } else if (!schoolCode) {
             utils.error('无法从地址栏提取院校代码，跳过学分页面打开');
         }
 
@@ -1958,6 +2108,60 @@
         }
     }
 
+    // 处理课单列表页面
+    function handleCourseOrderListPage() {
+        utils.log("进入课单列表处理逻辑");
+
+        // 收集所有"学习中"状态的课程
+        const learningCourses = [];
+        $("a[href*='OnlineCourse'], a[href*='ChoiceCourse']").each(function () {
+            const link = $(this);
+            const href = link.attr("href");
+            if (!href) return;
+
+            // 构造完整URL
+            const fullUrl = new URL(href, window.location.origin).href;
+
+            // 检查是否已在学习列表中
+            if (CourseCache.has(fullUrl)) {
+                utils.log(`课程已在学习中，跳过: ${fullUrl}`);
+                return true; // continue
+            }
+
+            // 查找父元素中的状态文本
+            let parent = link.parent();
+            for (let i = 0; i < 5; i++) {
+                const text = parent.text();
+                if (text.includes('学习状态')) {
+                    if (text.includes('学习中')) {
+                        learningCourses.push({
+                            url: fullUrl,
+                            name: link.text().trim() || '未知课程'
+                        });
+                        break;
+                    } else if (text.includes('已学完')) {
+                        break;
+                    }
+                }
+                parent = parent.parent();
+                if (parent.length === 0) break;
+            }
+        });
+
+        // 如果有"学习中"的课程，打开第一个
+        if (learningCourses.length > 0) {
+            const selectedCourse = learningCourses[0];
+            utils.log(`找到${learningCourses.length}门学习中的课程，正在打开第一门: ${selectedCourse.name}`);
+            utils.log(`课程URL: ${selectedCourse.url}`);
+            window.location.href = selectedCourse.url;
+        } else {
+            utils.log("课单中没有找到需要学习的课程，准备关闭页面");
+            setTimeout(() => {
+                window.close();
+            }, 3000);
+        }
+    }
+
     // 主程序修改
     window.onload = function () {
         const pageTitle = document.title;
@@ -1977,8 +2181,15 @@
             const liveController = new LiveController();
             liveController.init();
         } else if (utils.isEneteduPage()) {
-            if (utils.isOnlineNewListPage()) {
-                handleOnlineNewListPage();
+            if (utils.isCourseOrderListPage()) {
+                handleCourseOrderListPage();
+            } else if (utils.isOnlineNewListPage()) {
+                // MyTrainCourse/Index 和 MyCourseOrder 页面：根据配置决定是否自动寻找课程
+                if (GM_getValue('autoFindCourseOnList', false)) {
+                    handleOnlineNewListPage();
+                } else {
+                    utils.log('列表页自动寻找课程已关闭（可在油猴菜单中开启）');
+                }
             } else {
                 // 原有的视频课程处理 (包括 onlinenew 的播放页面)
                 const controller = new VideoController();
