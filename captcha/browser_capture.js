@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.2.8
+// @version      4.2.9
 // @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。修复跨域图片处理问题。
 // @author       xixiu
 // @thanks       哈士奇
@@ -50,7 +50,8 @@
 
     // ==================== 配置管理 ====================
     const configManager = new ConfigManager('captchaConfig', {
-        routePrefix: 'http://localhost:9876'
+        routePrefix: 'http://localhost:9876',
+        silentMode: false
     });
 
     // 配置项定义
@@ -74,6 +75,12 @@
             },
             transform: (value) => value.trim(),
             showStatus: true
+        },
+        {
+            key: 'silentMode',
+            label: '静默模式（识别成功后不显示提示）',
+            type: 'checkbox',
+            help: '开启后验证码识别成功将静默填充，不弹出提示'
         }
     ];
 
@@ -82,6 +89,13 @@
 
     // 获取当前配置
     const routePrefix = configManager.get('routePrefix');
+
+    function showSuccess(msg) {
+        if (configManager.get('silentMode')) return;
+        if (typeof Vue !== 'undefined') {
+            new Vue().$message({ message: msg, type: 'success', duration: 1500 });
+        }
+    }
 
     function getStyle(el) {
         // 获取元素样式
@@ -342,9 +356,7 @@
                                                 let inputElement = selector(inputSelector);
                                                 fillInput(inputElement, code);
 
-                                                if (typeof Vue !== "undefined") {
-                                                    new Vue().$message.success("获取验证码成功");
-                                                }
+                                                showSuccess("获取验证码成功");
                                                 console.log("正在使用共享验证码功能获取验证码");
                                             } else {
                                                 console.error("验证码为空，请检查图片是否正确");
@@ -944,9 +956,7 @@
                                     path,
                                     item.img.getAttribute("src")
                                 );
-                                if (typeof Vue !== "undefined") {
-                                    new Vue().$message.success("获取验证码成功");
-                                }
+                                showSuccess("获取验证码成功");
                             }
                         } catch (error) {
                             console.log(error);
@@ -970,9 +980,7 @@
                         if (code) {
                             fillInput(item.input, code);
 
-                            if (typeof Vue !== "undefined") {
-                                new Vue().$message.success("获取验证码成功");
-                            }
+                            showSuccess("获取验证码成功");
                             console.log("正在使用自动寻找验证码功能获取验证码");
                         } else {
                             if (index === captchaMap.length - 1) {

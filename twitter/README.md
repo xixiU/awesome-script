@@ -2,7 +2,7 @@
 
 [中文文档](README_zh.md) | English
 
-A powerful multi-functional toolkit for Twitter/X, integrating commenter blocking, AI-powered summarization, and more features to come.
+A powerful multi-functional toolkit for Twitter/X, integrating commenter blocking, AI-powered summarization, AI comment filtering, and more features to come.
 
 ## Features
 
@@ -23,6 +23,17 @@ A powerful multi-functional toolkit for Twitter/X, integrating commenter blockin
 - 🌐 Support custom OpenAI-compatible APIs (OpenAI, Azure, self-hosted, etc.)
 - 📊 Configurable max pages to load
 - 🎨 Beautiful result panel with fullscreen and copy features
+
+### 🔍 AI Comment Filtering (NEW!)
+
+- 🤖 **Intelligent Classification**: AI automatically categorizes comments into blacklist, spam, or normal
+- 🚫 **Auto-Block Blacklist**: Automatically block users with blacklist comments (porn, scams, hate speech)
+- ⚠️ **Hide Spam**: Hide spam comments with option to manually reveal (prevents AI misjudgment)
+- 👁️ **Show All Spam**: One-click to reveal all hidden spam comments
+- ⚡ **Non-Blocking UX**: Comments display first, AI filters in background
+- 🎯 **Batch Processing**: Process up to 20 comments per API call for efficiency
+- 🔄 **Auto-Watch**: Automatically filter new comments as they load
+- 📊 **Real-time Status**: Visual indicator shows filtering progress
 
 ### 🌍 General Features
 
@@ -103,6 +114,51 @@ After summarization completes, a result panel will appear, supporting:
 - 🖥️ **Fullscreen**: View summary in fullscreen mode
 - ❌ **Close**: Close the result panel
 
+### Feature 3: AI Comment Filtering
+
+#### 1. Configure AI API (Same as AI Summarization)
+
+Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterXToolkit Configuration, and set:
+
+- **OpenAI API Base URL**: API base URL (e.g., `https://api.openai.com/v1` or Ollama `http://localhost:11434/v1`)
+- **API Key**: Your OpenAI API Key (or any text for Ollama)
+- **AI Model**: Model name (e.g., `gpt-3.5-turbo`, `gpt-4`, or Ollama model like `llama3`)
+- **AI Comment Filter**: Enable/disable automatic AI filtering (default: disabled)
+- **AI Filter Prompt**: Custom prompt for comment classification (optional, leave empty for default)
+
+#### 2. How It Works
+
+**Automatic Mode** (when enabled):
+
+- Opens a tweet detail page
+- Comments display immediately (no waiting)
+- AI filters comments in background (2-3 seconds delay)
+- Real-time status indicator shows progress
+- Blacklist comments: automatically hidden and user blocked
+- Spam comments: hidden with "Show" button overlay
+- Normal comments: no changes
+
+**Manual Mode**:
+
+- Click the **"🔍 AI Filter Comments"** button
+- Script scrolls to load all comments first
+- Then runs AI filtering on all comments
+- Same classification and hiding behavior as automatic mode
+
+**Show Hidden Comments**:
+
+- Click the **"👁️ Show All Spam"** button
+- Reveals all hidden spam and blacklist comments
+- Useful if you suspect AI misjudgment
+
+#### 3. Comment Categories
+
+AI classifies comments into three types:
+
+1. **Blacklist** (🚫): Porn, scams, hate speech, severe harassment → Auto-block user + hide comment
+2. **Spam** (⚠️): Ads, off-topic, low-quality → Hide with "Show" button
+3. **Normal** (✅): Legitimate discussion → No action
+
 ## Configuration Options
 
 Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterXToolkit Configuration:
@@ -125,6 +181,13 @@ Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterXToolkit Conf
 - **API Key**: Your OpenAI API Key (required)
 - **AI Model**: Model name to use (default: `gpt-3.5-turbo`)
 
+### AI Comment Filtering Configuration
+
+- **AI Comment Filter**: Enable automatic AI filtering of comments (default: disabled)
+- **AI Filter Prompt**: Custom prompt for AI comment classification (optional, leave empty for default)
+  - The default prompt classifies comments into blacklist, spam, and normal categories
+  - You can customize the classification criteria by providing your own prompt
+
 ## Important Notes
 
 ⚠️ **Important**:
@@ -144,6 +207,16 @@ Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterXToolkit Conf
 4. **Loading Time**: Depending on content volume and network conditions, summarization may take 10-60 seconds
 5. **Login Required**: Need to be logged into Twitter to view content
 
+### AI Comment Filtering Feature
+
+1. **API Costs**: Each filtering session calls the AI API, monitor your usage and costs
+2. **Accuracy**: AI classification may have false positives/negatives, always review before trusting
+3. **Batch Processing**: Processes up to 20 comments per API call to reduce costs
+4. **Auto-Block**: Blacklist comments trigger automatic user blocking (irreversible)
+5. **Manual Review**: Use "Show All Spam" button to review hidden comments if needed
+6. **Ollama Support**: Works with local Ollama models (e.g., `http://localhost:11434/v1` + `llama3`)
+7. **Custom Prompts**: Advanced users can customize classification criteria via AI Filter Prompt setting
+
 ## How It Works
 
 ### Block Feature
@@ -162,6 +235,18 @@ Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterXToolkit Conf
 3. **Content Organization**: Format extracted content into structured data
 4. **API Call**: Call OpenAI-compatible API for intelligent summarization
 5. **Result Display**: Display Markdown-formatted summary results in a beautiful panel
+
+### AI Comment Filtering Feature
+
+1. **Non-Blocking Display**: Comments render immediately, AI filtering runs in background
+2. **Comment Extraction**: Parse DOM to extract all visible comments with usernames and text
+3. **Batch Classification**: Send comments to AI API in batches of 20 for efficiency
+4. **Result Processing**:
+   - Blacklist: Hide comment + auto-block user via Twitter API
+   - Spam: Add semi-transparent overlay with "Show" button
+   - Normal: No action
+5. **Real-time Updates**: Status indicator shows filtering progress
+6. **Auto-Watch**: MutationObserver monitors new comments and filters them automatically
 
 ## Tech Stack
 
@@ -248,6 +333,20 @@ A: Regardless of the original language, summaries are output in **Chinese** usin
 A: The current version doesn't support custom prompts and uses built-in optimized prompts. This feature may be added in future versions.
 
 ## Changelog
+
+### v2.4.0 (2026-05-06)
+
+- 🔍 **AI Comment Filtering**: Intelligent comment classification using AI (blacklist/spam/normal)
+- 🚫 **Auto-Block Blacklist**: Automatically block users with blacklist comments (porn, scams, hate speech)
+- ⚠️ **Hide Spam**: Hide spam comments with "Show" button overlay to prevent AI misjudgment
+- 👁️ **Show All Spam**: One-click button to reveal all hidden spam comments
+- ⚡ **Non-Blocking UX**: Comments display first, AI filters in background (2-3s delay)
+- 🎯 **Batch Processing**: Process up to 20 comments per API call for efficiency
+- 🔄 **Auto-Watch**: Automatically filter new comments as they load
+- 📊 **Real-time Status**: Visual indicator shows filtering progress
+- 🎨 **Manual Trigger**: "🔍 AI Filter Comments" button for manual filtering
+- 🌐 **Ollama Support**: Works with local Ollama models (e.g., llama3)
+- ⚙️ **Custom Prompts**: Advanced users can customize classification criteria
 
 ### v2.3.1 (2026-04-29)
 
