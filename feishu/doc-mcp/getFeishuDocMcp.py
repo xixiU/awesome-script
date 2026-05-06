@@ -86,6 +86,88 @@ async def get_document_content(file_id: str) -> str:
 
 
 @mcp.tool()
+async def search_all_docs(
+    keyword: str,
+    count: int = 20,
+    offset: int = 0,
+    docs_types: list = None,
+) -> str:
+    """全局搜索所有有权限的飞书云文档（包括 docx、sheet、知识库等）。
+    无需指定 wiki_token，会搜索当前应用有权限访问的所有文档。
+
+    参数:
+        keyword: 搜索关键词
+        count: 返回结果数量（默认 20，范围 [0, 50]）
+        offset: 分页偏移量（默认 0，offset + count < 200）
+        docs_types: 文档类型过滤（可选），如 ['docx', 'doc', 'sheet', 'bitable', 'mindnote', 'file']
+    返回:
+        匹配的文档列表，包含 docs_token、docs_type、title、owner_id
+    """
+    token = await get_tenant_auth()
+    url = f"{URL_PREFIX}/open-apis/suite/docs-api/search/object"
+    body = {
+        "search_key": keyword,
+        "count": min(max(count, 1), 50),
+        "offset": offset,
+    }
+    if docs_types:
+        body["docs_types"] = docs_types
+
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        resp = await client.post(url, headers=_make_headers(token), json=body)
+        resp.raise_for_status()
+        data = resp.json().get("data", {})
+
+    return json.dumps({
+        "total": data.get("total", 0),
+        "has_more": data.get("has_more", False),
+        "docs": data.get("docs_entities", []),
+    }, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+async def list_drive_folder(folder_token: str = None) -> str:
+    """列出云空间文件夹中的文件和子文件夹。
+
+    参数:
+        folder_token: 文件夹 token（从云空间 URL 中提取，如 /drive/folder/xxx）
+                     不填则列出根目录
+    返回:
+        文件夹内的文件列表，包含 token、type、name、owner_id 等信息
+    """
+    token = await get_tenant_auth()
+    url = f"{URL_PREFIX}/open-apis/drive/v1/files"
+    params = {"page_size": 200}
+    if folder_token:
+        params["folder_token"] = folder_token
+
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        # Drive API 返回的是 files 而不是 items，需要特殊处理
+        files = []
+        while True:
+            resp = await client.get(url, headers=_make_headers(token), params=params)
+            resp.raise_for_status()
+            data = resp.json().get("data", {})
+            files.extend(data.get("files") or [])
+            if not data.get("has_more"):
+                break
+            params["page_token"] = data.get("page_token")
+
+    results = []
+    for f in files:
+        results.append({
+            "token": f.get("token"),
+            "name": f.get("name"),
+            "type": f.get("type"),  # folder, doc, sheet, bitable, docx, file 等
+            "parent_token": f.get("parent_token"),
+            "owner_id": f.get("owner_id"),
+            "created_time": f.get("created_time"),
+            "modified_time": f.get("modified_time"),
+        })
+    return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
 async def list_wiki_spaces() -> str:
     """列出当前应用可访问的所有知识库(Wiki)空间。
     返回每个知识库的 space_id、名称、描述等信息。

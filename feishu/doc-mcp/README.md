@@ -6,6 +6,8 @@
 
 - 🔐 支持飞书开放平台 API 认证
 - 📄 读取飞书文档原始文本内容
+- 🌐 **全局搜索所有有权限的云文档**（无需指定知识库）
+- 📁 **列出云空间文件夹内容**（支持文件夹遍历）
 - 📚 列出和搜索知识库（Wiki）空间
 - 🔍 在知识库中搜索关键词
 - 📑 获取知识库文档节点列表
@@ -40,6 +42,8 @@ uv pip install fastmcp httpx certifi pyyaml
    - `docx:document` - 查看、评论和导出文档
    - `docx:document:readonly` - 查看和导出文档（只读）
    - `wiki:wiki:readonly` - 查看知识库（只读）
+   - `drive:drive:readonly` - 查看、评论和下载云文档所有文件（全局搜索需要）
+   - `search:docs:read` - 搜索用户有权限的云文档（全局搜索需要）
 
 ### 2. 创建配置文件
 
@@ -116,14 +120,21 @@ python getFeishuDocMcp.py
 # 读取飞书文档内容
 get_document_content(file_id="doxrzFVGxynmgH727mFFd1oThSb")
 
+# 全局搜索所有有权限的云文档（推荐，无需指定知识库）
+search_all_docs(keyword="智慧法庭", count=20)
+
+# 列出云空间文件夹内容
+list_drive_folder(folder_token="HRfkf7lPDlQbqqdswOsrKPsezAd")  # 指定文件夹
+list_drive_folder()  # 不填则列出根目录
+
 # 列出所有可访问的知识库
 list_wiki_spaces()
 
 # 列出知识库中的文档节点
-list_wiki_nodes(space_id="xxx")
+list_wiki_nodes(wiki_token="xxx")
 
-# 在知识库中搜索关键词
-search_wiki_by_keyword(space_id="xxx", keyword="搜索词")
+# 在指定知识库中搜索关键词
+search_wiki_by_keyword(wiki_token="xxx", keyword="搜索词")
 
 # 获取知识库文档完整内容
 get_wiki_document_full_content(obj_token="xxx")

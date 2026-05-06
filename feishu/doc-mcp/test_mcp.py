@@ -7,7 +7,9 @@
     python test_mcp.py                    # 列出所有工具
     python test_mcp.py doc <file_id>      # 测试读取文档
     python test_mcp.py spaces             # 列出所有知识库
-    python test_mcp.py nodes <space_id>   # 列出知识库节点
+    python test_mcp.py nodes <space_id>   # 列出知识库节点 
+    python test_mcp.py nodes C5RNwyHtWikA4LkBN9trd4u8zFd   # 列出知识库C5RNwyHtWikA4LkBN9trd4u8zFd节点
+    python test_mcp.py folder [folder_token]  # 列出云空间的文档
     python test_mcp.py search <space_id> <keyword>  # 搜索知识库
     python test_mcp.py content <obj_token>  # 获取知识库文档内容
 """
@@ -73,6 +75,32 @@ async def main():
                 result = await session.call_tool("list_wiki_nodes", {"wiki_token": wiki_token})
                 print_json(str(result.content[0].text))
 
+            elif cmd == "folder":
+                folder_token = sys.argv[2] if len(sys.argv) > 2 else None
+                if folder_token:
+                    print(f"--- 云空间文件夹: {folder_token} ---")
+                else:
+                    print("--- 云空间根目录 ---")
+                result = await session.call_tool(
+                    "list_drive_folder",
+                    {"folder_token": folder_token} if folder_token else {}
+                )
+                print_json(str(result.content[0].text))
+
+            elif cmd == "search_all":
+                if len(sys.argv) < 3:
+                    print("用法: python test_mcp.py search_all <keyword> [count]")
+                    print("示例: python test_mcp.py search_all 智慧法庭")
+                    return
+                keyword = sys.argv[2]
+                count = int(sys.argv[3]) if len(sys.argv) > 3 else 20
+                print(f"--- 全局搜索: keyword={keyword}, count={count} ---")
+                result = await session.call_tool(
+                    "search_all_docs",
+                    {"keyword": keyword, "count": count}
+                )
+                print_json(str(result.content[0].text))
+
             elif cmd == "search":
                 if len(sys.argv) < 4:
                     print("用法: python test_mcp.py search <wiki_token> <keyword>")
@@ -100,12 +128,13 @@ async def main():
 
             else:
                 print("用法:")
-                print("  python test_mcp.py spaces                      # 列出知识库")
-                print("  python test_mcp.py info <wiki_token>           # 获取节点信息")
-                print("  python test_mcp.py nodes <wiki_token>          # 列出子节点")
-                print("  python test_mcp.py search <wiki_token> <keyword>  # 搜索")
-                print("  python test_mcp.py content <obj_token>         # 获取内容")
-                print("  python test_mcp.py doc <file_id>               # 读取文档")
+                print("  python test_mcp.py spaces                         # 列出知识库")
+                print("  python test_mcp.py info <wiki_token>              # 获取节点信息")
+                print("  python test_mcp.py nodes <wiki_token>             # 列出子节点")
+                print("  python test_mcp.py search_all <keyword>           # 全局搜索所有有权限的文档")
+                print("  python test_mcp.py search <wiki_token> <keyword>  # 在指定知识库中搜索")
+                print("  python test_mcp.py content <obj_token>            # 获取内容")
+                print("  python test_mcp.py doc <file_id>                  # 读取文档")
 
 
 if __name__ == "__main__":
