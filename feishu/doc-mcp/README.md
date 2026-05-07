@@ -149,43 +149,60 @@ list_children(token="xxx", type="drive")  # 强制云空间
 
 ### 所有工具
 
-在 Claude 中可以使用以下工具：
+工具按「归属系统」分为三类：**统一入口**（token 类型不明时用）、**云空间专用**（`drive_` 前缀）、**知识库专用**（`wiki_` 前缀）。当用户给出完整 URL 时，优先调用对应的专用工具，省去自动识别的试探开销。
+
+**URL → 工具对照**
+
+| URL 形如 | 类型 | 推荐工具 |
+|----------|------|----------|
+| `/docx/doxrzXXX` | 云空间 docx | `drive_read_document(file_id)` |
+| `/drive/folder/HRfkf7XXX` | 云空间文件夹 | `drive_list_folder(folder_token)` |
+| `/wiki/CQv6wuyXXX` | 知识库节点 | `wiki_read_document(wiki_token)` 或 `wiki_list_nodes(wiki_token)` |
+| 仅有 token 不知来源 | 未知 | `read_document(token)` / `list_children(token)` |
 
 ```python
-# === 推荐（统一入口） ===
+# === 统一入口（无前缀，token 类型不明时使用） ===
 
-# 列出目录子内容（自动识别知识库或云空间）
-list_children(token="C5RNwyHtWikA4LkBN9trd4u8zFd")           # 自动识别
-list_children(token="HRfkf7lPDlQbqqdswOsrKPsezAd", type="drive")  # 指定云空间
-
-# 读取文档内容（统一入口）
-read_document(token="doxrzzXKNz3qKBsTD7MNpEiMDHh")
-
-# 全局搜索所有有权限的云文档
+# 全局搜索所有有权限的文档（云空间 + 知识库）
 search_all_docs(keyword="智慧法庭", count=20)
 
-# === 知识库专用 ===
+# 列出目录子内容（auto 先试知识库再回落云空间）
+list_children(token="C5RNwyHtWikA4LkBN9trd4u8zFd")                  # 自动识别
+list_children(token="HRfkf7lPDlQbqqdswOsrKPsezAd", type="drive")    # 强制云空间
+list_children(token="C5RNwyHtWikA4LkBN9trd4u8zFd", type="wiki")     # 强制知识库
 
-# 列出知识库中的文档节点
-list_wiki_nodes(wiki_token="C5RNwyHtWikA4LkBN9trd4u8zFd")
+# 读取文档（支持 obj_token 和 wiki_token，内部自动适配）
+read_document(token="doxrzzXKNz3qKBsTD7MNpEiMDHh")
+read_document(token="CQv6wuy5qiNGVIkyaetrbzOrzdf")
 
-# 在指定知识库中搜索关键词（全文检索）
-search_wiki_by_keyword(wiki_token="C5RNwyHtWikA4LkBN9trd4u8zFd", keyword="搜索词")
+# === 云空间专用（drive_ 前缀） ===
 
-# 获取知识库节点信息
-get_wiki_node_info(wiki_token="C5RNwyHtWikA4LkBN9trd4u8zFd")
+# 列出云空间文件夹内容（URL 形如 /drive/folder/xxx）
+drive_list_folder(folder_token="HRfkf7lPDlQbqqdswOsrKPsezAd")
+drive_list_folder()  # 列根目录
 
-# 获取知识库文档完整内容
-get_wiki_document_full_content(obj_token="doxrz96ndo0KbHWQG7je8rs6MJb")
+# 读取云空间 docx 文档（URL 形如 /docx/xxx）
+drive_read_document(file_id="doxrzFVGxynmgH727mFFd1oThSb")
 
-# === 云空间专用 ===
+# === 知识库专用（wiki_ 前缀） ===
 
-# 列出云空间文件夹内容
-list_drive_folder(folder_token="HRfkf7lPDlQbqqdswOsrKPsezAd")
+# 列出当前应用可访问的所有知识库空间
+wiki_list_spaces()
 
-# 读取飞书文档内容
-get_document_content(file_id="doxrzFVGxynmgH727mFFd1oThSb")
+# 获取知识库节点元信息（node_token / space_id / obj_token 等）
+wiki_get_node_info(wiki_token="C5RNwyHtWikA4LkBN9trd4u8zFd")
+
+# 列出知识库子节点（URL 形如 /wiki/xxx）
+wiki_list_nodes(wiki_token="C5RNwyHtWikA4LkBN9trd4u8zFd")
+
+# 读取知识库文档（URL 形如 /wiki/xxx）
+wiki_read_document(wiki_token="CQv6wuy5qiNGVIkyaetrbzOrzdf")
+
+# 知识库全文检索（递归遍历节点 + 读取 docx 内容匹配关键词）
+wiki_search(wiki_token="C5RNwyHtWikA4LkBN9trd4u8zFd", keyword="搜索词")
 ```
+
+> 说明：旧工具名 → 新工具名映射：`get_document_content` → `drive_read_document`、`list_drive_folder` → `drive_list_folder`、`list_wiki_nodes` → `wiki_list_nodes`、`get_wiki_document_full_content` → `wiki_read_document`、`list_wiki_spaces` → `wiki_list_spaces`、`get_wiki_node_info` → `wiki_get_node_info`、`search_wiki_by_keyword` → `wiki_search`。
 
 **获取文档 ID**：
 - 打开飞书文档
@@ -197,7 +214,7 @@ get_document_content(file_id="doxrzFVGxynmgH727mFFd1oThSb")
 - 打开飞书知识库
 - 从 URL 中提取 space_id
 - 例如：`https://example.feishu.cn/wiki/xxx`
-- 或使用 `list_wiki_spaces()` 工具获取所有知识库列表
+- 或使用 `wiki_list_spaces()` 工具获取所有知识库列表
 
 ## 配置说明
 
