@@ -352,6 +352,103 @@ async def get_wiki_document_full_content(obj_token: str) -> str:
         return response.json().get("data", {}).get("content", "")
 
 
+# --- 统一工具（推荐使用） ---
+
+@mcp.tool()
+async def list_children(token: str, type: str = "auto") -> str:
+    """列出目录/节点下的子内容（自动识别知识库或云空间）。
+
+    参数:
+        token: 知识库 wiki_token（如 /wiki/xxx 中的 xxx）
+               或云空间 folder_token（如 /drive/folder/xxx 中的 xxx）
+        type: 类型提示
+              - "wiki": 知识库节点
+              - "drive": 云空间文件夹
+              - "auto"（默认）: 自动识别，先尝试知识库，失败后尝试云空间
+    返回:
+        子节点/文件列表（JSON 格式）
+    """
+    auth_token = await get_tenant_auth()
+
+    # 尝试知识库
+    if type in ("wiki", "auto"):
+        try:
+            node_url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/get_node"
+            async with httpx.AsyncClient(verify=certifi.where(), timeout=10.0) as client:
+                resp = await client.get(node_url, headers=_make_headers(auth_token), params={"token": token})
+                resp.raise_for_status()
+                node_info = resp.json().get("data", {}).get("node", {})
+
+            space_id = node_info.get("space_id")
+            if space_id:
+                nodes_url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/{space_id}/nodes"
+                params = {"page_size": 50, "parent_node_token": token}
+                async with httpx.AsyncClient(verify=certifi.where(), timeout=10.0) as client:
+                    nodes = await _get_all_pages(client, nodes_url, _make_headers(auth_token), params)
+
+                results = []
+                for n in nodes:
+                    results.append({
+                        "token": n.get("node_token"),
+                        "name": n.get("title"),
+                        "type": n.get("obj_type"),
+                        "has_child": n.get("has_child"),
+                        "obj_token": n.get("obj_token"),
+                        "source": "wiki",
+                    })
+                return json.dumps(results, ensure_ascii=False, indent=2)
+        except Exception:
+            if type == "wiki":
+                raise
+
+    # 尝试云空间
+    if type in ("drive", "auto"):
+        url = f"{URL_PREFIX}/open-apis/drive/v1/files"
+        params = {"page_size": 200, "folder_token": token}
+        async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+            files = []
+            while True:
+                resp = await client.get(url, headers=_make_headers(auth_token), params=params)
+                resp.raise_for_status()
+                data = resp.json().get("data", {})
+                files.extend(data.get("files") or [])
+                if not data.get("has_more"):
+                    break
+                params["page_token"] = data.get("page_token")
+
+        results = []
+        for f in files:
+            results.append({
+                "token": f.get("token"),
+                "name": f.get("name"),
+                "type": f.get("type"),
+                "has_child": f.get("type") == "folder",
+                "obj_token": f.get("token"),
+                "source": "drive",
+            })
+        return json.dumps(results, ensure_ascii=False, indent=2)
+
+    return json.dumps({"error": "无法识别 token 类型"}, ensure_ascii=False)
+
+
+@mcp.tool()
+async def read_document(token: str) -> str:
+    """读取文档内容（统一入口，支持知识库文档和云空间文档）。
+
+    参数:
+        token: 文档 token（obj_token 或 file_id，从 list_children / search_all_docs 获取）
+    返回:
+        文档的纯文本内容
+    """
+    auth_token = await get_tenant_auth()
+    url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{token}/raw_content"
+    async with httpx.AsyncClient(verify=certifi.where()) as client:
+        resp = await client.get(url, headers=_make_headers(auth_token))
+        resp.raise_for_status()
+        data = resp.json().get("data", {})
+        return data.get("content", resp.text)
+
+
 if __name__ == "__main__":
     import asyncio
 

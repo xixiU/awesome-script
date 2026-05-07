@@ -90,6 +90,36 @@ python getFeishuDocMcp.py
 
 服务器将在 `http://0.0.0.0:50070` 启动，支持 SSE 传输协议。
 
+### 快速使用（推荐）
+
+飞书有两种文档体系，本工具提供统一入口：
+
+| URL 格式 | 类型 | token 提取 |
+|-----------|------|-----------|
+| `/wiki/C5RNwy...` | 知识库节点 | `C5RNwy...` |
+| `/drive/folder/HRfkf7...` | 云空间文件夹 | `HRfkf7...` |
+| `/docx/doxrz...` | 文档 | `doxrz...` |
+
+**推荐工作流**：
+
+```python
+# 1. 搜索文档（全局，无需指定位置）
+search_all_docs(keyword="智慧法庭")
+
+# 2. 浏览目录（自动识别知识库或云空间）
+list_children(token="C5RNwyHtWikA4LkBN9trd4u8zFd")  # 知识库
+list_children(token="HRfkf7lPDlQbqqdswOsrKPsezAd")  # 云空间
+
+# 3. 读取文档内容
+read_document(token="doxrzzXKNz3qKBsTD7MNpEiMDHh")
+```
+
+`list_children` 会自动识别 token 类型（知识库 or 云空间），也可以手动指定：
+```python
+list_children(token="xxx", type="wiki")   # 强制知识库
+list_children(token="xxx", type="drive")  # 强制云空间
+```
+
 ### 在 Claude Desktop 中配置
 
 编辑 Claude Desktop 配置文件：
@@ -112,32 +142,44 @@ python getFeishuDocMcp.py
 }
 ```
 
-### 使用工具
+### 所有工具
 
 在 Claude 中可以使用以下工具：
 
 ```python
-# 读取飞书文档内容
-get_document_content(file_id="doxrzFVGxynmgH727mFFd1oThSb")
+# === 推荐（统一入口） ===
 
-# 全局搜索所有有权限的云文档（推荐，无需指定知识库）
+# 列出目录子内容（自动识别知识库或云空间）
+list_children(token="C5RNwyHtWikA4LkBN9trd4u8zFd")           # 自动识别
+list_children(token="HRfkf7lPDlQbqqdswOsrKPsezAd", type="drive")  # 指定云空间
+
+# 读取文档内容（统一入口）
+read_document(token="doxrzzXKNz3qKBsTD7MNpEiMDHh")
+
+# 全局搜索所有有权限的云文档
 search_all_docs(keyword="智慧法庭", count=20)
 
-# 列出云空间文件夹内容
-list_drive_folder(folder_token="HRfkf7lPDlQbqqdswOsrKPsezAd")  # 指定文件夹
-list_drive_folder()  # 不填则列出根目录
-
-# 列出所有可访问的知识库
-list_wiki_spaces()
+# === 知识库专用 ===
 
 # 列出知识库中的文档节点
-list_wiki_nodes(wiki_token="xxx")
+list_wiki_nodes(wiki_token="C5RNwyHtWikA4LkBN9trd4u8zFd")
 
-# 在指定知识库中搜索关键词
-search_wiki_by_keyword(wiki_token="xxx", keyword="搜索词")
+# 在指定知识库中搜索关键词（全文检索）
+search_wiki_by_keyword(wiki_token="C5RNwyHtWikA4LkBN9trd4u8zFd", keyword="搜索词")
+
+# 获取知识库节点信息
+get_wiki_node_info(wiki_token="C5RNwyHtWikA4LkBN9trd4u8zFd")
 
 # 获取知识库文档完整内容
-get_wiki_document_full_content(obj_token="xxx")
+get_wiki_document_full_content(obj_token="doxrz96ndo0KbHWQG7je8rs6MJb")
+
+# === 云空间专用 ===
+
+# 列出云空间文件夹内容
+list_drive_folder(folder_token="HRfkf7lPDlQbqqdswOsrKPsezAd")
+
+# 读取飞书文档内容
+get_document_content(file_id="doxrzFVGxynmgH727mFFd1oThSb")
 ```
 
 **获取文档 ID**：

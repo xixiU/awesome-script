@@ -10,6 +10,7 @@
     python test_mcp.py nodes <space_id>   # 列出知识库节点 
     python test_mcp.py nodes C5RNwyHtWikA4LkBN9trd4u8zFd   # 列出知识库C5RNwyHtWikA4LkBN9trd4u8zFd节点
     python test_mcp.py folder [folder_token]  # 列出云空间的文档
+    python test_mcp.py folder HRfkf7lPDlQbqqdswOsrKPsezAd  # 列出云空间HRfkf7lPDlQbqqdswOsrKPsezAd节点
     python test_mcp.py search <space_id> <keyword>  # 搜索知识库
     python test_mcp.py content <obj_token>  # 获取知识库文档内容
 """
@@ -44,7 +45,32 @@ async def main():
 
             cmd = sys.argv[1] if len(sys.argv) > 1 else "help"
 
-            if cmd == "doc":
+            if cmd == "ls":
+                token = sys.argv[2] if len(sys.argv) > 2 else None
+                if not token:
+                    print("用法: python test_mcp.py ls <token> [wiki|drive|auto]")
+                    print("示例: python test_mcp.py ls C5RNwyHtWikA4LkBN9trd4u8zFd")
+                    print("      python test_mcp.py ls HRfkf7lPDlQbqqdswOsrKPsezAd drive")
+                    return
+                type_hint = sys.argv[3] if len(sys.argv) > 3 else "auto"
+                print(f"--- 列出子内容: {token} (type={type_hint}) ---")
+                result = await session.call_tool(
+                    "list_children",
+                    {"token": token, "type": type_hint}
+                )
+                print_json(str(result.content[0].text))
+
+            elif cmd == "read":
+                token = sys.argv[2] if len(sys.argv) > 2 else None
+                if not token:
+                    print("用法: python test_mcp.py read <token>")
+                    print("示例: python test_mcp.py read doxrzzXKNz3qKBsTD7MNpEiMDHh")
+                    return
+                print(f"--- 读取文档: {token} ---")
+                result = await session.call_tool("read_document", {"token": token})
+                print(str(result.content[0].text)[:500])
+
+            elif cmd == "doc":
                 file_id = sys.argv[2] if len(sys.argv) > 2 else "doxrzFVGxynmgH727mFFd1oThSb"
                 print(f"--- 读取文档: {file_id} ---")
                 result = await session.call_tool("get_document_content", {"file_id": file_id})
@@ -128,13 +154,24 @@ async def main():
 
             else:
                 print("用法:")
-                print("  python test_mcp.py spaces                         # 列出知识库")
-                print("  python test_mcp.py info <wiki_token>              # 获取节点信息")
-                print("  python test_mcp.py nodes <wiki_token>             # 列出子节点")
-                print("  python test_mcp.py search_all <keyword>           # 全局搜索所有有权限的文档")
-                print("  python test_mcp.py search <wiki_token> <keyword>  # 在指定知识库中搜索")
-                print("  python test_mcp.py content <obj_token>            # 获取内容")
-                print("  python test_mcp.py doc <file_id>                  # 读取文档")
+                print()
+                print("  === 推荐（统一入口） ===")
+                print("  python test_mcp.py ls <token> [wiki|drive|auto]  # 列出子内容（自动识别）")
+                print("  python test_mcp.py read <token>                  # 读取文档内容")
+                print("  python test_mcp.py search_all <keyword>          # 全局搜索")
+                print()
+                print("  === 知识库 ===")
+                print("  python test_mcp.py nodes <wiki_token>            # 列出知识库子节点")
+                print("  python test_mcp.py info <wiki_token>             # 获取节点信息")
+                print("  python test_mcp.py search <wiki_token> <keyword> # 知识库全文搜索")
+                print("  python test_mcp.py content <obj_token>           # 获取文档内容")
+                print()
+                print("  === 云空间 ===")
+                print("  python test_mcp.py folder [folder_token]         # 列出文件夹内容")
+                print("  python test_mcp.py doc <file_id>                 # 读取文档")
+                print()
+                print("  === 其他 ===")
+                print("  python test_mcp.py spaces                        # 列出知识库空间")
 
 
 if __name__ == "__main__":
