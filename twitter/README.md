@@ -334,6 +334,16 @@ A: The current version doesn't support custom prompts and uses built-in optimize
 
 ## Changelog
 
+### v2.4.1 (2026-05-08)
+
+- 🐛 **Fix original poster detection**: Parse from URL `/username/status/id` instead of DOM order, so reply-chain pages no longer mis-identify the reply target as the OP
+- 🔇 **Stop log spam**: Move "excluded original poster" log out of the hot path; print once on auto/manual block entry instead of on every MutationObserver tick
+- 🎯 **Smarter AI filter prompt**: Pass the main tweet into the prompt and ask the model to treat off-topic / bot-style filler as spam; add explicit signals for emoji-heavy English filler and decorative-symbol spam (⦋ ✧ ⟡ 〥 ⋆ ...)
+- 📦 **Simpler AI filter contract**: Model now returns `{"blacklist":[...],"spam":[...]}` — two username arrays instead of per-comment objects — dramatically more robust on small models (Qwen 7B, etc.)
+- 🛟 **Salvage parser**: When the model outputs malformed JSON, extract username arrays via regex fallback instead of dropping the whole batch
+- 😀 **Emoji-aware comment extraction**: Walk child nodes and read `<img alt>` so Twitter's Twemoji renders as real emoji in the extracted text; applied to tweet body, comment scroll, and AI-filter comment map
+- 📝 **Log original comment text**: AI filter console logs now print the original comment body instead of an empty `reason` field, e.g. `⚠️ Spam detected @user: <original text>`
+
 ### v2.4.0 (2026-05-06)
 
 - 🔍 **AI Comment Filtering**: Intelligent comment classification using AI (blacklist/spam/normal)

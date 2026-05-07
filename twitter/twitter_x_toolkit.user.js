@@ -2,7 +2,7 @@
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
 // @namespace    http://tampermonkey.net/
-// @version      2.4.0
+// @version      2.4.1
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -108,8 +108,8 @@
             consoleAiFilterStart: 'AI comment filtering started...',
             consoleAiFilterProgress: 'AI filtering: {current}/{total} comments processed',
             consoleAiFilterComplete: 'AI filtering completed: {blacklist} blacklisted, {spam} spam, {normal} normal',
-            consoleAiFilterBlacklist: '🚫 Blacklisted @{username}: {reason}',
-            consoleAiFilterSpam: '⚠️ Spam detected @{username}: {reason}',
+            consoleAiFilterBlacklist: '🚫 Blacklisted @{username}: {text}',
+            consoleAiFilterSpam: '⚠️ Spam detected @{username}: {text}',
             consoleAiFilterNormal: '✅ Normal comment @{username}',
             consoleAiFilterError: '❌ AI filtering error: {error}',
             spamCommentLabel: '⚠️ Spam Comment',
@@ -197,8 +197,8 @@
             consoleAiFilterStart: 'AI评论过滤已启动...',
             consoleAiFilterProgress: 'AI过滤中：已处理 {current}/{total} 条评论',
             consoleAiFilterComplete: 'AI过滤完成：黑名单 {blacklist} 条，垃圾 {spam} 条，正常 {normal} 条',
-            consoleAiFilterBlacklist: '🚫 拉黑 @{username}：{reason}',
-            consoleAiFilterSpam: '⚠️ 垃圾评论 @{username}：{reason}',
+            consoleAiFilterBlacklist: '🚫 拉黑 @{username}：{text}',
+            consoleAiFilterSpam: '⚠️ 垃圾评论 @{username}：{text}',
             consoleAiFilterNormal: '✅ 正常评论 @{username}',
             consoleAiFilterError: '❌ AI过滤错误：{error}',
             spamCommentLabel: '⚠️ 垃圾评论',
@@ -394,6 +394,29 @@
 
     // ==================== 内容提取功能 ====================
 
+    // Extract text from an element, preserving emojis rendered as <img alt="😀">
+    // Twitter uses Twemoji-style <img> tags for emojis, which innerText skips.
+    function getElementTextWithEmoji(el) {
+        if (!el) return '';
+        let text = '';
+        el.childNodes.forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                text += node.textContent;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.tagName === 'IMG') {
+                    // Only take alt for emoji/sticker images, not arbitrary inline images.
+                    const alt = node.getAttribute('alt') || '';
+                    if (alt) text += alt;
+                } else if (node.tagName === 'BR') {
+                    text += '\n';
+                } else {
+                    text += getElementTextWithEmoji(node);
+                }
+            }
+        });
+        return text;
+    }
+
     // Extract main tweet content
     function extractTweetContent() {
         try {
@@ -402,7 +425,7 @@
 
             // Extract tweet text
             const tweetTextElement = firstArticle.querySelector('[data-testid="tweetText"]');
-            const tweetText = tweetTextElement ? tweetTextElement.innerText : '';
+            const tweetText = getElementTextWithEmoji(tweetTextElement);
 
             // Extract author info
             const userLink = firstArticle.querySelector('a[href^="/"][role="link"]');
@@ -455,7 +478,7 @@
 
                 try {
                     const tweetTextElement = article.querySelector('[data-testid="tweetText"]');
-                    const tweetText = tweetTextElement ? tweetTextElement.innerText : '';
+                    const tweetText = getElementTextWithEmoji(tweetTextElement);
 
                     const userLink = article.querySelector('a[href^="/"][role="link"]');
                     let author = '';
@@ -617,10 +640,66 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     /**
      * 使用AI对评论进行分类
      * @param {Array} comments - 评论数组 [{username, text}, ...]
-     * @returns {Promise<Array>} - 分类结果 [{username, category, reason}, ...]
-     *   category: 'blacklist' | 'spam' | 'normal'
+     * @param {Object} [mainTweet] - 原推内容 { author, text }，用于判断与原文的相关性
+     * @returns {Promise<Object>} - 分类结果 { blacklist: string[], spam: string[] }
      */
-    async function classifyCommentsByAI(comments) {
+    // 从 AI 输出中抢救出两个 username 数组
+    // 策略：先清理常见损坏模式 → 整体解析 → 失败则用正则抽字符串数组
+    function extractUsernameBuckets(raw) {
+        const empty = { blacklist: [], spam: [] };
+        if (!raw || typeof raw !== 'string') return empty;
+
+        const text = raw
+            .replace(/```json\n?/g, '')
+            .replace(/```\n?/g, '')
+            .replace(/,\s*,+/g, ',')
+            .replace(/,\s*([}\]])/g, '$1')
+            .trim();
+
+        // 尝试整体解析
+        try {
+            const parsed = JSON.parse(text);
+            if (parsed && typeof parsed === 'object') {
+                return {
+                    blacklist: sanitizeUsernameArray(parsed.blacklist),
+                    spam: sanitizeUsernameArray(parsed.spam)
+                };
+            }
+        } catch (_) { /* fall through */ }
+
+        // 正则兜底：分别抓 "blacklist": [...] 与 "spam": [...] 块
+        const pick = (key) => {
+            const m = text.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*)\\]`));
+            if (!m) return [];
+            const usernames = [];
+            const re = /"([^"\\]+)"/g;
+            let um;
+            while ((um = re.exec(m[1])) !== null) usernames.push(um[1]);
+            return sanitizeUsernameArray(usernames);
+        };
+
+        return {
+            blacklist: pick('blacklist'),
+            spam: pick('spam')
+        };
+    }
+
+    function sanitizeUsernameArray(arr) {
+        if (!Array.isArray(arr)) return [];
+        const seen = new Set();
+        const out = [];
+        for (const v of arr) {
+            if (typeof v !== 'string') continue;
+            const name = v.trim().replace(/^@/, '');
+            if (name && !seen.has(name)) {
+                seen.add(name);
+                out.push(name);
+            }
+        }
+        return out;
+    }
+
+    async function classifyCommentsByAI(comments, mainTweet) {
         return new Promise((resolve, reject) => {
             const baseUrl = config.get('aiBaseUrl') || 'https://api.openai.com/v1';
             const apiKey = config.get('aiApiKey');
@@ -632,42 +711,30 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 return;
             }
 
-            // 默认提示词
-            const defaultPrompt = `你是一个专业的社交媒体内容审核助手。请对以下推特评论进行分类，判断每条评论是否为垃圾评论或黑名单评论。
+            const tweetSection = mainTweet && mainTweet.text
+                ? `原推文（作者 @${mainTweet.author || 'unknown'}）：
+${mainTweet.text.substring(0, 500)}`
+                : '原推文：（未能获取）';
+
+            // 默认提示词：只让模型返回需要隐藏/拉黑的 username 列表，降低对小模型的要求
+            const defaultPrompt = `你是一个社交媒体内容审核助手。请结合原推文内容，从以下评论中筛选出需要处理的用户名，只输出 username，不需要解释。
+
+${tweetSection}
 
 分类标准：
-1. **blacklist（黑名单）**：包含以下特征的评论
-   - 色情、约炮、线下见面等性暗示内容
-   - 诈骗、钓鱼、恶意链接
-   - 严重人身攻击、辱骂、威胁
-   - 极端政治煽动、仇恨言论
-   - 明显的机器人刷屏
+- blacklist：色情、约炮、线下见面等性暗示；诈骗、钓鱼、恶意链接；严重人身攻击、辱骂、威胁；极端政治煽动、仇恨言论；明显的机器人刷屏。
+- spam：无意义重复内容；过度营销、广告推广；与原推文主题完全无关的内容（包括无意义的外文刷屏、与原文话题不相关的闲聊、大量 emoji/符号夹杂无实质内容的英文抒情句等）；低质量灌水；可疑引流。
+- 其它（与原推文相关的正常讨论、提问、赞同、批评等）视为 normal，不需要返回。
 
-2. **spam（垃圾评论）**：包含以下特征的评论
-   - 无意义的重复内容
-   - 过度营销、广告推广
-   - 与主题完全无关的内容
-   - 低质量的灌水评论
-   - 可疑的引流行为
-
-3. **normal（正常评论）**：不符合以上两类的评论
-   - 正常的讨论、观点表达
-   - 合理的批评或赞同
-   - 相关的提问或回复
-
-请以JSON数组格式返回结果，每个元素包含：username（用户名）、category（分类）、reason（简短理由，10字以内）
+判定"与原推文无关"时请宽松：只要评论明显偏离原推文的话题或语境，就归入 spam。典型机器人刷屏特征：大量装饰性符号（如 ⦋ ✧ ⟡ 〥 ⋆ 等）、整句英文诗 / 抒情语但与原文主题无关、emoji 与无意义英文短句夹杂的模板化文本。
 
 评论列表：
 ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`).join('\n')}
 
-返回格式示例：
-[
-  {"username": "user1", "category": "blacklist", "reason": "色情内容"},
-  {"username": "user2", "category": "spam", "reason": "无关广告"},
-  {"username": "user3", "category": "normal", "reason": "正常讨论"}
-]
+严格按以下 JSON 格式返回（不要任何解释文字，不要 markdown 代码块）：
+{"blacklist":["user1","user2"],"spam":["user3"]}
 
-请只返回JSON数组，不要包含其他文字说明。`;
+如果没有匹配的用户，返回：{"blacklist":[],"spam":[]}`;
 
             const prompt = customPrompt || defaultPrompt;
 
@@ -699,21 +766,9 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
                         if (response.status === 200) {
                             const data = JSON.parse(response.responseText);
-                            const content = data.choices?.[0]?.message?.content || '[]';
-
-                            // 尝试解析JSON结果
-                            let result;
-                            try {
-                                // 移除可能的markdown代码块标记
-                                const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-                                result = JSON.parse(cleanContent);
-                            } catch (e) {
-                                console.error('Failed to parse AI response as JSON:', e);
-                                // 如果解析失败，返回空数组
-                                result = [];
-                            }
-
-                            resolve(result);
+                            const content = data.choices?.[0]?.message?.content || '';
+                            const buckets = extractUsernameBuckets(content);
+                            resolve(buckets);
                         } else {
                             reject(new Error(`API request failed: ${response.status} ${response.statusText}\n${response.responseText}`));
                         }
@@ -850,47 +905,44 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
     /**
      * 处理AI过滤结果
-     * @param {Array} results - AI分类结果
+     * @param {Object} buckets - { blacklist: string[], spam: string[] }
+     * @param {Map<string,string>} [textMap] - username -> 原始评论文本，用于日志输出
      */
-    async function processAIFilterResults(results) {
-        let blacklistCount = 0;
-        let spamCount = 0;
-        let normalCount = 0;
+    async function processAIFilterResults(buckets, textMap) {
+        const blacklist = Array.isArray(buckets?.blacklist) ? buckets.blacklist : [];
+        const spam = Array.isArray(buckets?.spam) ? buckets.spam : [];
 
-        for (const result of results) {
-            const { username, category, reason } = result;
+        // 去重：同一用户若同时出现在两类中，以 blacklist 优先
+        const blacklistSet = new Set(blacklist);
+        const spamSet = new Set(spam.filter(u => !blacklistSet.has(u)));
 
-            if (category === 'blacklist') {
-                blacklistCount++;
-                console.log(t('consoleAiFilterBlacklist', { username, reason }));
+        const previewText = (u) => {
+            const raw = (textMap && textMap.get && textMap.get(u)) || '';
+            // 单行化并截断，避免日志过长
+            return raw.replace(/\s+/g, ' ').trim().substring(0, 120);
+        };
 
-                // 标记为黑名单并隐藏
-                markCommentByCategory(username, 'blacklist', reason);
-
-                // 自动拉黑用户
-                await blockUserByAPI(username);
-                await sleep(500); // 避免频率限制
-
-            } else if (category === 'spam') {
-                spamCount++;
-                console.log(t('consoleAiFilterSpam', { username, reason }));
-
-                // 标记为垃圾评论
-                markCommentByCategory(username, 'spam', reason);
-
-            } else {
-                normalCount++;
-                console.log(t('consoleAiFilterNormal', { username }));
-            }
+        for (const username of blacklistSet) {
+            console.log(t('consoleAiFilterBlacklist', { username, text: previewText(username) }));
+            markCommentByCategory(username, 'blacklist', '');
+            await blockUserByAPI(username);
+            await sleep(500);
         }
 
+        for (const username of spamSet) {
+            console.log(t('consoleAiFilterSpam', { username, text: previewText(username) }));
+            markCommentByCategory(username, 'spam', '');
+        }
+
+        const blacklistCount = blacklistSet.size;
+        const spamCount = spamSet.size;
         console.log(t('consoleAiFilterComplete', {
             blacklist: blacklistCount,
             spam: spamCount,
-            normal: normalCount
+            normal: 0
         }));
 
-        return { blacklistCount, spamCount, normalCount };
+        return { blacklistCount, spamCount, normalCount: 0 };
     }
 
     /**
@@ -1498,22 +1550,12 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         }
     }
 
-    // Get original poster's username from the first tweet
+    // Get original poster's username from the tweet detail URL
+    // URL format: /{username}/status/{id}
     function getOriginalPosterUsername() {
         try {
-            // The first article is usually the original tweet
-            const firstArticle = document.querySelector('article[data-testid="tweet"]');
-            if (!firstArticle) return null;
-
-            // Find the username link in the first article
-            const userLink = firstArticle.querySelector('a[href^="/"][role="link"]');
-            if (!userLink) return null;
-
-            const href = userLink.getAttribute('href');
-            if (href && href.match(/^\/[^\/]+$/)) {
-                const username = href.substring(1);
-                return username;
-            }
+            const match = location.pathname.match(/^\/([^\/]+)\/status\/\d+/);
+            if (match) return match[1];
         } catch (error) {
             console.error('Failed to get original poster username:', error);
         }
@@ -1525,10 +1567,6 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         const commentersMap = new Map(); // username -> comment text
         const excludeOriginal = config.get('excludeOriginalPoster');
         const originalPoster = excludeOriginal ? getOriginalPosterUsername() : null;
-
-        if (originalPoster && excludeOriginal) {
-            console.log(t('consoleExcludedOriginal', { username: originalPoster }));
-        }
 
         // Comments on X/Twitter are usually in article tags
         const articles = document.querySelectorAll('article[data-testid="tweet"]');
@@ -1555,7 +1593,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
             // Get comment text
             if (username) {
                 const tweetTextElement = article.querySelector('[data-testid="tweetText"]');
-                const tweetText = tweetTextElement ? tweetTextElement.innerText : '';
+                const tweetText = getElementTextWithEmoji(tweetTextElement);
 
                 // Store username and text (append if user has multiple comments)
                 if (commentersMap.has(username)) {
@@ -1838,6 +1876,14 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
         const commentersMap = getAllCommentersWithText();
 
+        // Log excluded original poster once (if applicable)
+        if (config.get('excludeOriginalPoster')) {
+            const originalPoster = getOriginalPosterUsername();
+            if (originalPoster) {
+                console.log(t('consoleExcludedOriginal', { username: originalPoster }));
+            }
+        }
+
         // Filter commenters by keywords (if keywords are set, reuse parsed keywords from confirm step)
         let commenters;
         if (keywords.length > 0) {
@@ -1920,6 +1966,14 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         if (keywords.length === 0) return; // auto block requires keywords
 
         console.log(t('consoleAutoBlockStart'));
+
+        // Log excluded original poster once (if applicable)
+        if (config.get('excludeOriginalPoster')) {
+            const originalPoster = getOriginalPosterUsername();
+            if (originalPoster) {
+                console.log(t('consoleExcludedOriginal', { username: originalPoster }));
+            }
+        }
 
         // Process currently visible comments without scrolling
         await processCurrentComments(keywords);
@@ -2014,6 +2068,9 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
                 return;
             }
 
+            // 提取原推文内容，用于让 AI 判断评论与原文的相关性
+            const mainTweet = extractTweetContent();
+
             // 显示状态指示器
             updateAIFilterStatus(t('aiFilterStatusProcessing', { current: 0, total: comments.length }));
 
@@ -2023,12 +2080,13 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
             for (let i = 0; i < comments.length; i += batchSize) {
                 const batch = comments.slice(i, i + batchSize);
+                const batchTextMap = new Map(batch.map(c => [c.username, c.text]));
 
                 try {
-                    const results = await classifyCommentsByAI(batch);
+                    const results = await classifyCommentsByAI(batch, mainTweet);
 
                     // 处理结果
-                    await processAIFilterResults(results);
+                    await processAIFilterResults(results, batchTextMap);
 
                     // 标记已处理
                     batch.forEach(c => aiFilterProcessed.add(c.username));
