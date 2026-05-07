@@ -69,6 +69,39 @@ async def _get_all_pages(client, url, headers, params=None):
     return items
 
 
+async def _get_document_raw_content(auth_token: str, doc_token: str) -> str:
+    """获取文档原始内容的辅助函数
+
+    参数:
+        auth_token: 认证 token
+        doc_token: 文档 token（obj_token 或 file_id）
+    返回:
+        文档的纯文本内容
+    """
+    url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{doc_token}/raw_content"
+    async with httpx.AsyncClient(verify=certifi.where()) as client:
+        resp = await client.get(url, headers=_make_headers(auth_token))
+        resp.raise_for_status()
+        data = resp.json().get("data", {})
+        return data.get("content", "")
+
+
+async def _get_wiki_node_info(auth_token: str, wiki_token: str) -> dict:
+    """获取 wiki 节点信息的辅助函数
+
+    参数:
+        auth_token: 认证 token
+        wiki_token: wiki 节点 token
+    返回:
+        节点信息字典
+    """
+    url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/get_node"
+    async with httpx.AsyncClient(verify=certifi.where()) as client:
+        resp = await client.get(url, headers=_make_headers(auth_token), params={"token": wiki_token})
+        resp.raise_for_status()
+        return resp.json().get("data", {}).get("node", {})
+
+
 # --- MCP 工具 ---
 
 @mcp.tool()
@@ -78,11 +111,7 @@ async def get_document_content(file_id: str) -> str:
         file_id: 飞书文档 ID，从文档 URL 中提取
     """
     token = await get_tenant_auth()
-    url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{file_id}/raw_content"
-    async with httpx.AsyncClient(verify=certifi.where()) as client:
-        response = await client.get(url, headers=_make_headers(token))
-        response.encoding = 'utf-8'
-        return response.text
+    return await _get_document_raw_content(token, file_id)
 
 
 @mcp.tool()
@@ -198,12 +227,7 @@ async def get_wiki_node_info(wiki_token: str) -> str:
                    wiki_token 为: C5RNwyHtWikA4LkBN9trd4u8zFd
     """
     token = await get_tenant_auth()
-    url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/get_node"
-    params = {"token": wiki_token}
-    async with httpx.AsyncClient(verify=certifi.where()) as client:
-        resp = await client.get(url, headers=_make_headers(token), params=params)
-        resp.raise_for_status()
-        node = resp.json().get("data", {}).get("node", {})
+    node = await _get_wiki_node_info(token, wiki_token)
     return json.dumps({
         "node_token": node.get("node_token"),
         "space_id": node.get("space_id"),
@@ -223,18 +247,13 @@ async def list_wiki_nodes(wiki_token: str) -> str:
     """
     token = await get_tenant_auth()
 
-    # 1. 先获取节点信息，得到 space_id
-    node_url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/get_node"
-    async with httpx.AsyncClient(verify=certifi.where()) as client:
-        resp = await client.get(node_url, headers=_make_headers(token), params={"token": wiki_token})
-        resp.raise_for_status()
-        node_info = resp.json().get("data", {}).get("node", {})
-
+    # 获取节点信息，得到 space_id
+    node_info = await _get_wiki_node_info(token, wiki_token)
     space_id = node_info.get("space_id")
     if not space_id:
         return json.dumps({"error": "无法获取 space_id"}, ensure_ascii=False)
 
-    # 2. 用 space_id + wiki_token 作为 parent_node_token 获取子节点
+    # 用 space_id + wiki_token 作为 parent_node_token 获取子节点
     nodes_url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/{space_id}/nodes"
     params = {"page_size": 50, "parent_node_token": wiki_token}
 
@@ -276,12 +295,7 @@ async def search_wiki_by_keyword(wiki_token: str, keyword: str, max_results: int
 
         try:
             # 1. 获取节点信息
-            node_url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/get_node"
-            async with httpx.AsyncClient(verify=certifi.where(), timeout=10.0) as client:
-                resp = await client.get(node_url, headers=_make_headers(token), params={"token": node_token})
-                resp.raise_for_status()
-                node_info = resp.json().get("data", {}).get("node", {})
-
+            node_info = await _get_wiki_node_info(token, node_token)
             obj_type = node_info.get("obj_type")
             obj_token = node_info.get("obj_token")
             title = node_info.get("title", "")
@@ -291,12 +305,7 @@ async def search_wiki_by_keyword(wiki_token: str, keyword: str, max_results: int
             # 2. 如果是文档，检查是否匹配关键词
             if obj_type == "docx":
                 try:
-                    doc_url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{obj_token}/raw_content"
-                    async with httpx.AsyncClient(verify=certifi.where(), timeout=10.0) as client:
-                        resp = await client.get(doc_url, headers=_make_headers(token))
-                        resp.raise_for_status()
-                        content = resp.json().get("data", {}).get("content", "")
-
+                    content = await _get_document_raw_content(token, obj_token)
                     if keyword.lower() in content.lower() or keyword.lower() in title.lower():
                         idx = content.lower().find(keyword.lower())
                         if idx >= 0:
@@ -345,11 +354,7 @@ async def get_wiki_document_full_content(obj_token: str) -> str:
         obj_token: 文档的 obj_token（从 list_wiki_nodes 或 search_wiki_by_keyword 获取）
     """
     token = await get_tenant_auth()
-    url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{obj_token}/raw_content"
-    async with httpx.AsyncClient(verify=certifi.where()) as client:
-        response = await client.get(url, headers=_make_headers(token))
-        response.raise_for_status()
-        return response.json().get("data", {}).get("content", "")
+    return await _get_document_raw_content(token, obj_token)
 
 
 # --- 统一工具（推荐使用） ---
@@ -373,12 +378,7 @@ async def list_children(token: str, type: str = "auto") -> str:
     # 尝试知识库
     if type in ("wiki", "auto"):
         try:
-            node_url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/get_node"
-            async with httpx.AsyncClient(verify=certifi.where(), timeout=10.0) as client:
-                resp = await client.get(node_url, headers=_make_headers(auth_token), params={"token": token})
-                resp.raise_for_status()
-                node_info = resp.json().get("data", {}).get("node", {})
-
+            node_info = await _get_wiki_node_info(auth_token, token)
             space_id = node_info.get("space_id")
             if space_id:
                 nodes_url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/{space_id}/nodes"
@@ -446,37 +446,20 @@ async def read_document(token: str) -> str:
     auth_token = await get_tenant_auth()
 
     # 先尝试直接读取（假设是 obj_token）
-    url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{token}/raw_content"
-    async with httpx.AsyncClient(verify=certifi.where(), timeout=10.0) as client:
-        resp = await client.get(url, headers=_make_headers(auth_token))
-
-        # 如果成功，直接返回
-        if resp.status_code == 200:
-            data = resp.json().get("data", {})
-            return data.get("content", resp.text)
-
+    try:
+        return await _get_document_raw_content(auth_token, token)
+    except httpx.HTTPStatusError as e:
         # 如果 404，尝试作为 wiki_token 处理
-        if resp.status_code == 404:
+        if e.response.status_code == 404:
             try:
-                # 获取 wiki 节点信息
-                node_url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/get_node"
-                resp2 = await client.get(node_url, headers=_make_headers(auth_token), params={"token": token})
-                resp2.raise_for_status()
-                node = resp2.json().get("data", {}).get("node", {})
+                node = await _get_wiki_node_info(auth_token, token)
                 obj_token = node.get("obj_token")
-
                 if obj_token:
-                    # 用 obj_token 读取文档
-                    doc_url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{obj_token}/raw_content"
-                    resp3 = await client.get(doc_url, headers=_make_headers(auth_token))
-                    resp3.raise_for_status()
-                    data = resp3.json().get("data", {})
-                    return data.get("content", resp3.text)
+                    return await _get_document_raw_content(auth_token, obj_token)
             except Exception:
                 pass
-
-        # 其他错误，抛出
-        resp.raise_for_status()
+        # 其他错误，重新抛出
+        raise
 
 
 if __name__ == "__main__":
