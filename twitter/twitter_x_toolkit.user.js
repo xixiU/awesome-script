@@ -598,8 +598,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                         content: prompt
                     }
                 ],
-                temperature: 0.7,
-                max_tokens: 2000
+                temperature: 0.7
             };
 
             GM_xmlhttpRequest({
@@ -705,6 +704,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             const apiKey = config.get('aiApiKey');
             const model = config.get('aiModel') || 'gpt-3.5-turbo';
             const customPrompt = config.get('aiFilterPrompt') || '';
+            const keywordsRaw = config.get('blockKeywords') || '';
+            const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
 
             if (!apiKey) {
                 reject(new Error(t('alertNoApiKey')));
@@ -716,13 +717,21 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 ${mainTweet.text.substring(0, 500)}`
                 : '原推文：（未能获取）';
 
+            const keywordsSection = keywords.length > 0
+                ? `
+
+用户黑名单关键词（最高优先级，必须严格执行）：
+${keywords.map(k => `- ${k}`).join('\n')}
+规则：任何评论内容中只要出现上述关键词中的任意一个（作为完整词或子串），该评论的 username 必须归入 blacklist，无视评论的其他特征或风格，也无视是否与原推文相关。`
+                : '';
+
             // 默认提示词：只让模型返回需要隐藏/拉黑的 username 列表，降低对小模型的要求
             const defaultPrompt = `你是一个社交媒体内容审核助手。请结合原推文内容，从以下评论中筛选出需要处理的用户名，只输出 username，不需要解释。
 
-${tweetSection}
+${tweetSection}${keywordsSection}
 
 分类标准：
-- blacklist：色情、约炮、线下见面等性暗示；诈骗、钓鱼、恶意链接；严重人身攻击、辱骂、威胁；极端政治煽动、仇恨言论；明显的机器人刷屏。
+- blacklist：（最高优先级）包含上方"用户黑名单关键词"的评论（若已配置）；色情、约炮、线下见面等性暗示；诈骗、钓鱼、恶意链接；严重人身攻击、辱骂、威胁；极端政治煽动、仇恨言论；明显的机器人刷屏。
 - spam：无意义重复内容；过度营销、广告推广；与原推文主题完全无关的内容（包括无意义的外文刷屏、与原文话题不相关的闲聊、大量 emoji/符号夹杂无实质内容的英文抒情句等）；低质量灌水；可疑引流。
 - 其它（与原推文相关的正常讨论、提问、赞同、批评等）视为 normal，不需要返回。
 
@@ -746,8 +755,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
                         content: prompt
                     }
                 ],
-                temperature: 0.3, // 降低温度以获得更一致的分类结果
-                max_tokens: 4000
+                temperature: 0.3 // 降低温度以获得更一致的分类结果
             };
 
             GM_xmlhttpRequest({

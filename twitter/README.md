@@ -336,6 +336,8 @@ A: The current version doesn't support custom prompts and uses built-in optimize
 
 ### v2.4.1 (2026-05-08)
 
+- 🎯 **Inject block keywords into AI filter**: The user-configured "Block Keywords" list is now spliced directly into the AI classification prompt as the top-priority rule — any comment containing any of those keywords must be classified as `blacklist`, regardless of topic relevance or other features
+- 🚀 **Remove max_tokens caps**: AI summary and AI filter requests no longer hard-cap the response (previously 2000 / 4000), so high comment volumes and full model responses are not truncated
 - 🐛 **Fix original poster detection**: Parse from URL `/username/status/id` instead of DOM order, so reply-chain pages no longer mis-identify the reply target as the OP
 - 🔇 **Stop log spam**: Move "excluded original poster" log out of the hot path; print once on auto/manual block entry instead of on every MutationObserver tick
 - 🎯 **Smarter AI filter prompt**: Pass the main tweet into the prompt and ask the model to treat off-topic / bot-style filler as spam; add explicit signals for emoji-heavy English filler and decorative-symbol spam (⦋ ✧ ⟡ 〥 ⋆ ...)
