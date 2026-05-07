@@ -94,11 +94,11 @@ python getFeishuDocMcp.py
 
 飞书有两种文档体系，本工具提供统一入口：
 
-| URL 格式 | 类型 | token 提取 |
-|-----------|------|-----------|
-| `/wiki/C5RNwy...` | 知识库节点 | `C5RNwy...` |
-| `/drive/folder/HRfkf7...` | 云空间文件夹 | `HRfkf7...` |
-| `/docx/doxrz...` | 文档 | `doxrz...` |
+| URL 格式 | 类型 | token 提取 | 说明 |
+|-----------|------|-----------|------|
+| `/wiki/CQv6wuy...` | 知识库节点 | `CQv6wuy...` | wiki_token，可用于 list_children 和 read_document |
+| `/drive/folder/HRfkf7...` | 云空间文件夹 | `HRfkf7...` | folder_token，用于 list_children |
+| `/docx/doxrz...` | 文档 | `doxrz...` | obj_token/file_id，用于 read_document |
 
 **推荐工作流**：
 
@@ -107,11 +107,12 @@ python getFeishuDocMcp.py
 search_all_docs(keyword="智慧法庭")
 
 # 2. 浏览目录（自动识别知识库或云空间）
-list_children(token="C5RNwyHtWikA4LkBN9trd4u8zFd")  # 知识库
-list_children(token="HRfkf7lPDlQbqqdswOsrKPsezAd")  # 云空间
+list_children(token="CQv6wuy5qiNGVIkyaetrbzOrzdf")  # 知识库 wiki_token
+list_children(token="HRfkf7lPDlQbqqdswOsrKPsezAd")  # 云空间 folder_token
 
-# 3. 读取文档内容
-read_document(token="doxrzzXKNz3qKBsTD7MNpEiMDHh")
+# 3. 读取文档内容（支持 wiki_token 和 obj_token）
+read_document(token="CQv6wuy5qiNGVIkyaetrbzOrzdf")  # 知识库 wiki_token
+read_document(token="doxrzzXKNz3qKBsTD7MNpEiMDHh")  # 文档 obj_token
 ```
 
 `list_children` 会自动识别 token 类型（知识库 or 云空间），也可以手动指定：
@@ -119,6 +120,10 @@ read_document(token="doxrzzXKNz3qKBsTD7MNpEiMDHh")
 list_children(token="xxx", type="wiki")   # 强制知识库
 list_children(token="xxx", type="drive")  # 强制云空间
 ```
+
+`read_document` 会自动处理：
+- 如果是 obj_token（如 `doxrzXXX`）→ 直接读取
+- 如果是 wiki_token（如 `CQv6wuyXXX`）→ 先获取 obj_token，再读取
 
 ### 在 Claude Desktop 中配置
 

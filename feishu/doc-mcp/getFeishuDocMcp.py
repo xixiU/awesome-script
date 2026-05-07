@@ -436,17 +436,47 @@ async def read_document(token: str) -> str:
     """读取文档内容（统一入口，支持知识库文档和云空间文档）。
 
     参数:
-        token: 文档 token（obj_token 或 file_id，从 list_children / search_all_docs 获取）
+        token: 文档 token，支持以下格式：
+               - obj_token/file_id: 直接读取（如 doxrzXXX）
+               - wiki_token: 知识库节点 token（如 CQv6wuy5qiNGVIkyaetrbzOrzdf）
+                            会自动获取其 obj_token 后读取
     返回:
         文档的纯文本内容
     """
     auth_token = await get_tenant_auth()
+
+    # 先尝试直接读取（假设是 obj_token）
     url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{token}/raw_content"
-    async with httpx.AsyncClient(verify=certifi.where()) as client:
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=10.0) as client:
         resp = await client.get(url, headers=_make_headers(auth_token))
+
+        # 如果成功，直接返回
+        if resp.status_code == 200:
+            data = resp.json().get("data", {})
+            return data.get("content", resp.text)
+
+        # 如果 404，尝试作为 wiki_token 处理
+        if resp.status_code == 404:
+            try:
+                # 获取 wiki 节点信息
+                node_url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/get_node"
+                resp2 = await client.get(node_url, headers=_make_headers(auth_token), params={"token": token})
+                resp2.raise_for_status()
+                node = resp2.json().get("data", {}).get("node", {})
+                obj_token = node.get("obj_token")
+
+                if obj_token:
+                    # 用 obj_token 读取文档
+                    doc_url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{obj_token}/raw_content"
+                    resp3 = await client.get(doc_url, headers=_make_headers(auth_token))
+                    resp3.raise_for_status()
+                    data = resp3.json().get("data", {})
+                    return data.get("content", resp3.text)
+            except Exception:
+                pass
+
+        # 其他错误，抛出
         resp.raise_for_status()
-        data = resp.json().get("data", {})
-        return data.get("content", resp.text)
 
 
 if __name__ == "__main__":
