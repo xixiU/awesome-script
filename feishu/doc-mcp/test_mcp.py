@@ -7,20 +7,19 @@
     python test_mcp.py                              # 列出所有工具
 
     # === 统一入口（无前缀，token 类型不明时使用） ===
-    python test_mcp.py ls <token> [wiki|drive|auto] # 列出子内容（自动识别）
+    python test_mcp.py ls <token> [wiki|drive|auto] [recursive]  # 列出子内容（自动识别）
     python test_mcp.py read <token>                 # 读取文档内容
-    python test_mcp.py search_all <keyword>         # 全局搜索所有文档
+    python test_mcp.py search_all <keyword>         # 全局搜索（暂不可用，私有化部署限制）
 
     # === 云空间专用（drive_ 前缀，URL 形如 /drive/folder/xxx 或 /docx/xxx） ===
-    python test_mcp.py drive_folder [folder_token]  # 列出云空间文件夹内容
+    python test_mcp.py drive_folder [folder_token] [recursive]  # 列出云空间文件夹内容
     python test_mcp.py drive_doc <file_id>          # 读取云空间 docx 文档
 
     # === 知识库专用（wiki_ 前缀，URL 形如 /wiki/xxx） ===
     python test_mcp.py wiki_spaces                  # 列出所有知识库空间
     python test_mcp.py wiki_info <wiki_token>       # 获取知识库节点信息
-    python test_mcp.py wiki_nodes <wiki_token>      # 列出知识库子节点
+    python test_mcp.py wiki_nodes <wiki_token> [recursive]  # 列出知识库子节点
     python test_mcp.py wiki_doc <wiki_token>        # 读取知识库文档
-    python test_mcp.py wiki_search <wiki_token> <keyword>  # 知识库全文搜索
 """
 import asyncio
 import sys
@@ -44,20 +43,19 @@ def print_help():
     print("用法:")
     print()
     print("  === 统一入口（token 类型不明时使用） ===")
-    print("  python test_mcp.py ls <token> [wiki|drive|auto]  # 列出子内容（自动识别）")
+    print("  python test_mcp.py ls <token> [wiki|drive|auto] [recursive]  # 列出子内容（自动识别）")
     print("  python test_mcp.py read <token>                  # 读取文档内容")
-    # print("  python test_mcp.py search_all <keyword> [count]  # 全局搜索所有文档，接口很慢需要优化")
+    print("  python test_mcp.py search_all <keyword> [count]  # 全局搜索（暂不可用，私有化部署限制）")
     print()
     print("  === 云空间专用（URL 形如 /drive/folder/xxx 或 /docx/xxx） ===")
-    print("  python test_mcp.py drive_folder [folder_token]   # 列出云空间文件夹")
+    print("  python test_mcp.py drive_folder [folder_token] [recursive]   # 列出云空间文件夹")
     print("  python test_mcp.py drive_doc <file_id>           # 读取云空间 docx")
     print()
     print("  === 知识库专用（URL 形如 /wiki/xxx） ===")
     # print("  python test_mcp.py wiki_spaces                   # 列出知识库空间,还没测试通过")
     print("  python test_mcp.py wiki_info <wiki_token>        # 节点信息")
-    print("  python test_mcp.py wiki_nodes <wiki_token>       # 列出子节点")
+    print("  python test_mcp.py wiki_nodes <wiki_token> [recursive]       # 列出子节点")
     print("  python test_mcp.py wiki_doc <wiki_token>         # 读取知识库文档")
-    print("  python test_mcp.py wiki_search <wiki_token> <keyword>  # 全文搜索")
 
 
 async def main():
@@ -77,13 +75,14 @@ async def main():
             if cmd == "ls":
                 token = sys.argv[2] if len(sys.argv) > 2 else None
                 if not token:
-                    print("用法: python test_mcp.py ls <token> [wiki|drive|auto]")
+                    print("用法: python test_mcp.py ls <token> [wiki|drive|auto] [recursive]")
                     return
                 type_hint = sys.argv[3] if len(sys.argv) > 3 else "auto"
-                print(f"--- 列出子内容: {token} (type={type_hint}) ---")
+                recursive = sys.argv[4].lower() in ("true", "1", "yes") if len(sys.argv) > 4 else False
+                print(f"--- 列出子内容: {token} (type={type_hint}, recursive={recursive}) ---")
                 result = await session.call_tool(
                     "list_children",
-                    {"token": token, "type": type_hint}
+                    {"token": token, "type": type_hint, "recursive": recursive}
                 )
                 print_json(str(result.content[0].text))
 
@@ -104,7 +103,7 @@ async def main():
                 count = int(sys.argv[3]) if len(sys.argv) > 3 else 20
                 print(f"--- 全局搜索: keyword={keyword}, count={count} ---")
                 result = await session.call_tool(
-                    "search_all_docs",
+                    "wiki_search",
                     {"keyword": keyword, "count": count}
                 )
                 print_json(str(result.content[0].text))
@@ -112,14 +111,19 @@ async def main():
             # === 云空间专用 ===
             elif cmd == "drive_folder":
                 folder_token = sys.argv[2] if len(sys.argv) > 2 else None
+                recursive = sys.argv[3].lower() in ("true", "1", "yes") if len(sys.argv) > 3 else False
                 if folder_token:
-                    print(f"--- 云空间文件夹: {folder_token} ---")
+                    print(f"--- 云空间文件夹: {folder_token} (recursive={recursive}) ---")
+                    result = await session.call_tool(
+                        "drive_list_folder",
+                        {"folder_token": folder_token, "recursive": recursive}
+                    )
                 else:
-                    print("--- 云空间根目录 ---")
-                result = await session.call_tool(
-                    "drive_list_folder",
-                    {"folder_token": folder_token} if folder_token else {}
-                )
+                    print(f"--- 云空间根目录 (recursive={recursive}) ---")
+                    result = await session.call_tool(
+                        "drive_list_folder",
+                        {"recursive": recursive}
+                    )
                 print_json(str(result.content[0].text))
 
             elif cmd == "drive_doc":
@@ -149,10 +153,14 @@ async def main():
             elif cmd == "wiki_nodes":
                 wiki_token = sys.argv[2] if len(sys.argv) > 2 else None
                 if not wiki_token:
-                    print("用法: python test_mcp.py wiki_nodes <wiki_token>")
+                    print("用法: python test_mcp.py wiki_nodes <wiki_token> [recursive]")
                     return
-                print(f"--- 知识库子节点: {wiki_token} ---")
-                result = await session.call_tool("wiki_list_nodes", {"wiki_token": wiki_token})
+                recursive = sys.argv[3].lower() in ("true", "1", "yes") if len(sys.argv) > 3 else False
+                print(f"--- 知识库子节点: {wiki_token} (recursive={recursive}) ---")
+                result = await session.call_tool(
+                    "wiki_list_nodes",
+                    {"wiki_token": wiki_token, "recursive": recursive}
+                )
                 print_json(str(result.content[0].text))
 
             elif cmd == "wiki_doc":
@@ -163,18 +171,6 @@ async def main():
                 print(f"--- 读取知识库文档: {wiki_token} ---")
                 result = await session.call_tool("wiki_read_document", {"wiki_token": wiki_token})
                 print(str(result.content[0].text)[:500])
-
-            elif cmd == "wiki_search":
-                if len(sys.argv) < 4:
-                    print("用法: python test_mcp.py wiki_search <wiki_token> <keyword>")
-                    return
-                wiki_token, keyword = sys.argv[2], sys.argv[3]
-                print(f"--- 知识库全文搜索: wiki_token={wiki_token}, keyword={keyword} ---")
-                result = await session.call_tool(
-                    "wiki_search",
-                    {"wiki_token": wiki_token, "keyword": keyword}
-                )
-                print_json(str(result.content[0].text))
 
             else:
                 print_help()

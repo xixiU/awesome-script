@@ -155,7 +155,7 @@ async def _list_drive_files(auth_token: str, folder_token: str = None) -> list:
 
 # --- MCP 工具 ---
 # 工具按「归属系统」分成三类，命名统一：
-#   1. 统一入口（无前缀）：list_children / read_document / search_all_docs
+#   1. 统一入口（无前缀）：list_children / read_document
 #      适用于不确定 token 属于知识库还是云空间的场景（如只给 token 没给 URL），
 #      自动识别，auto 模式下先试知识库再回落到云空间。
 #
@@ -166,55 +166,13 @@ async def _list_drive_files(auth_token: str, folder_token: str = None) -> list:
 #   3. 知识库专用（wiki_ 前缀）：wiki_list_spaces / wiki_get_node_info / wiki_list_nodes
 #      / wiki_read_document / wiki_search
 #      适用于用户明确给出知识库 URL 的场景，如 /wiki/xxx，或需要知识库特有能力
-#      （如 space 列举、递归全文检索）。
+#      （如 space 列举、全文搜索）。
 
 
 # ========== 统一入口（无前缀） ==========
-# 这个接口很慢，先不要使用
-# @mcp.tool()
-# async def search_all_docs(
-#     keyword: str,
-#     count: int = 20,
-#     offset: int = 0,
-#     docs_types: list = None,
-# ) -> str:
-#     """【统一入口】全局搜索所有有权限的飞书文档。
-
-#     覆盖云空间（docx/doc/sheet/bitable/mindnote/file）以及知识库内挂载的文档。
-#     无需指定 wiki_token 或 folder_token，会搜索当前应用有权限访问的所有文档。
-
-#     参数:
-#         keyword: 搜索关键词
-#         count: 返回结果数量（默认 20，范围 [0, 50]）
-#         offset: 分页偏移量（默认 0，offset + count < 200）
-#         docs_types: 文档类型过滤（可选），如 ['docx', 'doc', 'sheet', 'bitable', 'mindnote', 'file']
-#     返回:
-#         匹配的文档列表，包含 docs_token、docs_type、title、owner_id
-#     """
-#     token = await get_tenant_auth()
-#     url = f"{URL_PREFIX}/open-apis/suite/docs-api/search/object"
-#     body = {
-#         "search_key": keyword,
-#         "count": min(max(count, 1), 50),
-#         "offset": offset,
-#     }
-#     if docs_types:
-#         body["docs_types"] = docs_types
-
-#     async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
-#         resp = await client.post(url, headers=_make_headers(token), json=body)
-#         resp.raise_for_status()
-#         data = resp.json().get("data", {})
-
-#     return json.dumps({
-#         "total": data.get("total", 0),
-#         "has_more": data.get("has_more", False),
-#         "docs": data.get("docs_entities", []),
-#     }, ensure_ascii=False, indent=2)
-
 
 @mcp.tool()
-async def list_children(token: str, type: str = "auto") -> str:
+async def list_children(token: str, type: str = "auto", recursive: bool = False) -> str:
     """【统一入口】列出目录/节点下的子内容（自动识别知识库或云空间）。
 
     参数:
@@ -225,8 +183,11 @@ async def list_children(token: str, type: str = "auto") -> str:
               - "wiki": 知识库节点
               - "drive": 云空间文件夹
               - "auto"（默认）: 自动识别，先尝试知识库，失败后尝试云空间
+        recursive: 是否递归展示所有子目录（默认 False 只展示一层）
+                  True 时会并发遍历整个目录树，返回扁平化列表
     返回:
         子节点/文件列表（JSON 格式），每项含 source 字段标识 wiki/drive 来源
+        recursive=True 时额外包含 depth 字段表示层级（0 为直接子节点）
     """
     auth_token = await get_tenant_auth()
 
@@ -236,40 +197,106 @@ async def list_children(token: str, type: str = "auto") -> str:
             node_info = await _get_wiki_node_info(auth_token, token)
             space_id = node_info.get("space_id")
             if space_id:
-                nodes = await _list_wiki_child_nodes(auth_token, space_id, token)
-                results = []
-                for n in nodes:
-                    results.append({
-                        "token": n.get("node_token"),
-                        "name": n.get("title"),
-                        "type": n.get("obj_type"),
-                        "has_child": n.get("has_child"),
-                        "obj_token": n.get("obj_token"),
-                        "created_time": n.get("obj_create_time"),
-                        "modified_time": n.get("obj_edit_time"),
-                        "source": "wiki",
-                    })
-                return json.dumps(results, ensure_ascii=False, indent=2)
+                if not recursive:
+                    # 非递归：只列一层
+                    nodes = await _list_wiki_child_nodes(auth_token, space_id, token)
+                    results = []
+                    for n in nodes:
+                        results.append({
+                            "token": n.get("node_token"),
+                            "name": n.get("title"),
+                            "type": n.get("obj_type"),
+                            "has_child": n.get("has_child"),
+                            "obj_token": n.get("obj_token"),
+                            "created_time": n.get("obj_create_time"),
+                            "modified_time": n.get("obj_edit_time"),
+                            "source": "wiki",
+                        })
+                    return json.dumps(results, ensure_ascii=False, indent=2)
+                else:
+                    # 递归：并发遍历整个目录树
+                    all_results = []
+                    sem = asyncio.Semaphore(10)  # 控制并发数
+
+                    async def _collect_recursive(parent_token, depth=0):
+                        async with sem:
+                            children = await _list_wiki_child_nodes(auth_token, space_id, parent_token)
+                            for n in children:
+                                all_results.append({
+                                    "token": n.get("node_token"),
+                                    "name": n.get("title"),
+                                    "type": n.get("obj_type"),
+                                    "has_child": n.get("has_child"),
+                                    "obj_token": n.get("obj_token"),
+                                    "created_time": n.get("obj_create_time"),
+                                    "modified_time": n.get("obj_edit_time"),
+                                    "parent_token": parent_token,
+                                    "depth": depth,
+                                    "source": "wiki",
+                                })
+                            # 并发递归子节点
+                            tasks = [
+                                _collect_recursive(n.get("node_token"), depth + 1)
+                                for n in children if n.get("has_child")
+                            ]
+                            if tasks:
+                                await asyncio.gather(*tasks)
+
+                    await _collect_recursive(token, 0)
+                    return json.dumps(all_results, ensure_ascii=False, indent=2)
         except Exception:
             if type == "wiki":
                 raise
 
     # 尝试云空间
     if type in ("drive", "auto"):
-        files = await _list_drive_files(auth_token, token)
-        results = []
-        for f in files:
-            results.append({
-                "token": f.get("token"),
-                "name": f.get("name"),
-                "type": f.get("type"),
-                "has_child": f.get("type") == "folder",
-                "obj_token": f.get("token"),
-                "created_time": f.get("created_time"),
-                "modified_time": f.get("modified_time"),
-                "source": "drive",
-            })
-        return json.dumps(results, ensure_ascii=False, indent=2)
+        if not recursive:
+            # 非递归：只列一层
+            files = await _list_drive_files(auth_token, token)
+            results = []
+            for f in files:
+                results.append({
+                    "token": f.get("token"),
+                    "name": f.get("name"),
+                    "type": f.get("type"),
+                    "has_child": f.get("type") == "folder",
+                    "obj_token": f.get("token"),
+                    "created_time": f.get("created_time"),
+                    "modified_time": f.get("modified_time"),
+                    "source": "drive",
+                })
+            return json.dumps(results, ensure_ascii=False, indent=2)
+        else:
+            # 递归：并发遍历整个目录树
+            all_results = []
+            sem = asyncio.Semaphore(10)
+
+            async def _collect_recursive(folder_token, depth=0):
+                async with sem:
+                    files = await _list_drive_files(auth_token, folder_token)
+                    for f in files:
+                        all_results.append({
+                            "token": f.get("token"),
+                            "name": f.get("name"),
+                            "type": f.get("type"),
+                            "has_child": f.get("type") == "folder",
+                            "obj_token": f.get("token"),
+                            "created_time": f.get("created_time"),
+                            "modified_time": f.get("modified_time"),
+                            "parent_token": folder_token,
+                            "depth": depth,
+                            "source": "drive",
+                        })
+                    # 并发递归子文件夹
+                    tasks = [
+                        _collect_recursive(f.get("token"), depth + 1)
+                        for f in files if f.get("type") == "folder"
+                    ]
+                    if tasks:
+                        await asyncio.gather(*tasks)
+
+            await _collect_recursive(token, 0)
+            return json.dumps(all_results, ensure_ascii=False, indent=2)
 
     return json.dumps({"error": "无法识别 token 类型"}, ensure_ascii=False)
 
@@ -308,7 +335,7 @@ async def read_document(token: str) -> str:
 # ========== 云空间专用（drive_ 前缀） ==========
 
 @mcp.tool()
-async def drive_list_folder(folder_token: str = None) -> str:
+async def drive_list_folder(folder_token: str = None, recursive: bool = False) -> str:
     """【云空间】列出云空间文件夹中的文件和子文件夹。
 
     接口: GET /open-apis/drive/v1/files
@@ -316,24 +343,58 @@ async def drive_list_folder(folder_token: str = None) -> str:
     参数:
         folder_token: 文件夹 token（从云空间 URL 中提取，如 /drive/folder/xxx）
                      不填则列出根目录
+        recursive: 是否递归展示所有子目录（默认 False 只展示一层）
+                  True 时会并发遍历整个目录树，返回扁平化列表
     返回:
         文件夹内的文件列表，包含 token、type、name、owner_id 等信息
+        recursive=True 时额外包含 depth 和 parent_token 字段
     """
     token = await get_tenant_auth()
-    files = await _list_drive_files(token, folder_token)
 
-    results = []
-    for f in files:
-        results.append({
-            "token": f.get("token"),
-            "name": f.get("name"),
-            "type": f.get("type"),  # folder, doc, sheet, bitable, docx, file 等
-            "parent_token": f.get("parent_token"),
-            "owner_id": f.get("owner_id"),
-            "created_time": f.get("created_time"),
-            "modified_time": f.get("modified_time"),
-        })
-    return json.dumps(results, ensure_ascii=False, indent=2)
+    if not recursive:
+        # 非递归：只列一层
+        files = await _list_drive_files(token, folder_token)
+        results = []
+        for f in files:
+            results.append({
+                "token": f.get("token"),
+                "name": f.get("name"),
+                "type": f.get("type"),
+                "parent_token": f.get("parent_token"),
+                "owner_id": f.get("owner_id"),
+                "created_time": f.get("created_time"),
+                "modified_time": f.get("modified_time"),
+            })
+        return json.dumps(results, ensure_ascii=False, indent=2)
+    else:
+        # 递归：并发遍历整个目录树
+        all_results = []
+        sem = asyncio.Semaphore(10)
+
+        async def _collect_recursive(parent_folder_token, depth=0):
+            async with sem:
+                files = await _list_drive_files(token, parent_folder_token)
+                for f in files:
+                    all_results.append({
+                        "token": f.get("token"),
+                        "name": f.get("name"),
+                        "type": f.get("type"),
+                        "parent_token": parent_folder_token,
+                        "owner_id": f.get("owner_id"),
+                        "created_time": f.get("created_time"),
+                        "modified_time": f.get("modified_time"),
+                        "depth": depth,
+                    })
+                # 并发递归子文件夹
+                tasks = [
+                    _collect_recursive(f.get("token"), depth + 1)
+                    for f in files if f.get("type") == "folder"
+                ]
+                if tasks:
+                    await asyncio.gather(*tasks)
+
+        await _collect_recursive(folder_token, 0)
+        return json.dumps(all_results, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()
@@ -406,15 +467,18 @@ async def wiki_get_node_info(wiki_token: str) -> str:
 
 
 @mcp.tool()
-async def wiki_list_nodes(wiki_token: str) -> str:
+async def wiki_list_nodes(wiki_token: str, recursive: bool = False) -> str:
     """【知识库】列出知识库节点的子节点。
 
     接口: GET /open-apis/wiki/v2/spaces/{space_id}/nodes
     适用场景：URL 形如 /wiki/xxx 时直接使用，展开该节点下的子节点。
     参数:
         wiki_token: 父节点的 wiki_token（从知识库 URL /wiki/xxx 或 wiki_get_node_info 获取）
+        recursive: 是否递归展示所有子节点（默认 False 只展示一层）
+                  True 时会并发遍历整个节点树，返回扁平化列表
     返回:
         子节点列表，包含 node_token / obj_token / obj_type / title / has_child / parent_node_token
+        recursive=True 时额外包含 depth 字段
     """
     token = await get_tenant_auth()
 
@@ -424,22 +488,52 @@ async def wiki_list_nodes(wiki_token: str) -> str:
     if not space_id:
         return json.dumps({"error": "无法获取 space_id"}, ensure_ascii=False)
 
-    # 获取子节点
-    nodes = await _list_wiki_child_nodes(token, space_id, wiki_token)
+    if not recursive:
+        # 非递归：只列一层
+        nodes = await _list_wiki_child_nodes(token, space_id, wiki_token)
+        results = []
+        for n in nodes:
+            results.append({
+                "node_token": n.get("node_token"),
+                "obj_token": n.get("obj_token"),
+                "obj_type": n.get("obj_type"),
+                "title": n.get("title"),
+                "has_child": n.get("has_child"),
+                "parent_node_token": n.get("parent_node_token"),
+                "created_time": n.get("obj_create_time"),
+                "modified_time": n.get("obj_edit_time"),
+            })
+        return json.dumps(results, ensure_ascii=False, indent=2)
+    else:
+        # 递归：并发遍历整个节点树
+        all_results = []
+        sem = asyncio.Semaphore(10)
 
-    results = []
-    for n in nodes:
-        results.append({
-            "node_token": n.get("node_token"),
-            "obj_token": n.get("obj_token"),
-            "obj_type": n.get("obj_type"),
-            "title": n.get("title"),
-            "has_child": n.get("has_child"),
-            "parent_node_token": n.get("parent_node_token"),
-            "created_time": n.get("obj_create_time"),
-            "modified_time": n.get("obj_edit_time"),
-        })
-    return json.dumps(results, ensure_ascii=False, indent=2)
+        async def _collect_recursive(parent_token, depth=0):
+            async with sem:
+                children = await _list_wiki_child_nodes(token, space_id, parent_token)
+                for n in children:
+                    all_results.append({
+                        "node_token": n.get("node_token"),
+                        "obj_token": n.get("obj_token"),
+                        "obj_type": n.get("obj_type"),
+                        "title": n.get("title"),
+                        "has_child": n.get("has_child"),
+                        "parent_node_token": parent_token,
+                        "created_time": n.get("obj_create_time"),
+                        "modified_time": n.get("obj_edit_time"),
+                        "depth": depth,
+                    })
+                # 并发递归子节点
+                tasks = [
+                    _collect_recursive(n.get("node_token"), depth + 1)
+                    for n in children if n.get("has_child")
+                ]
+                if tasks:
+                    await asyncio.gather(*tasks)
+
+        await _collect_recursive(wiki_token, 0)
+        return json.dumps(all_results, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()
@@ -461,76 +555,25 @@ async def wiki_read_document(wiki_token: str) -> str:
     return await _get_document_raw_content(auth_token, obj_token)
 
 
-@mcp.tool()
-async def wiki_search(wiki_token: str, keyword: str, max_results: int = 10) -> str:
-    """【知识库】在知识库中递归搜索包含关键词的文档（全文检索）。
-
-    通过递归遍历 wiki 节点并读取每个 docx 文档内容进行匹配。
-    参数:
-        wiki_token: 知识库根节点的 wiki_token（从知识库 URL 中提取）
-        keyword: 搜索关键词
-        max_results: 最多返回结果数（默认 10）
-    返回:
-        匹配的文档列表，包含 title、obj_token、node_token 和匹配的内容片段
-    """
-    token = await get_tenant_auth()
-    results = []
-    visited = set()  # 防止循环引用
-
-    async def search_node(node_token: str, depth: int = 0):
-        """递归搜索节点及其子节点"""
-        if len(results) >= max_results or depth > 10 or node_token in visited:
-            return
-        visited.add(node_token)
-
-        try:
-            # 1. 获取节点信息
-            node_info = await _get_wiki_node_info(token, node_token)
-            obj_type = node_info.get("obj_type")
-            obj_token = node_info.get("obj_token")
-            title = node_info.get("title", "")
-            space_id = node_info.get("space_id")
-            has_child = node_info.get("has_child")
-
-            # 2. 如果是文档，检查是否匹配关键词
-            if obj_type == "docx":
-                try:
-                    content = await _get_document_raw_content(token, obj_token)
-                    if keyword.lower() in content.lower() or keyword.lower() in title.lower():
-                        idx = content.lower().find(keyword.lower())
-                        if idx >= 0:
-                            start = max(0, idx - 50)
-                            end = min(len(content), idx + len(keyword) + 50)
-                            snippet = content[start:end]
-                        else:
-                            snippet = content[:100]
-
-                        results.append({
-                            "title": title,
-                            "obj_token": obj_token,
-                            "node_token": node_token,
-                            "snippet": snippet,
-                        })
-                except Exception:
-                    pass
-
-            # 3. 如果有子节点，递归搜索
-            if has_child and space_id:
-                try:
-                    child_nodes = await _list_wiki_child_nodes(token, space_id, node_token)
-                    for child in child_nodes:
-                        if len(results) >= max_results:
-                            break
-                        await search_node(child.get("node_token"), depth + 1)
-                except Exception:
-                    pass
-
-        except Exception:
-            pass
-
-    # 从根节点开始搜索
-    await search_node(wiki_token)
-    return json.dumps(results, ensure_ascii=False, indent=2)
+# 注：飞书文档搜索 API (/open-apis/suite/docs-api/search/object) 仅支持 user_access_token，
+# 不支持 tenant_access_token（应用身份），因此暂时注释掉。
+# 如需搜索功能，需接入 OAuth 获取 user_access_token。
+# @mcp.tool()
+# async def wiki_search(keyword: str, wiki_token: str = None, count: int = 10) -> str:
+#     """【知识库】在知识库中搜索包含关键词的文档（全文检索）。
+#
+#     递归收集知识库节点，然后并发读取 docx 文档内容进行关键词匹配。
+#     注：飞书搜索 API 仅支持 user_access_token，当前使用 tenant_access_token
+#     无法调用，因此采用遍历+并发方式实现。
+#     参数:
+#         keyword: 搜索关键词
+#         wiki_token: 知识库节点 token（从 /wiki/xxx 的 URL 中提取），
+#                    搜索该节点及其所有子文档
+#         count: 最多返回结果数（默认 10）
+#     返回:
+#         匹配的文档列表 JSON，包含 title、node_token、obj_token、snippet
+#     """
+#     pass
 
 
 if __name__ == "__main__":
