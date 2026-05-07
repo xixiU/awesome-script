@@ -1024,10 +1024,19 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
     // Create block button
     // Create floating toolbar with draggable functionality
     function createFloatingToolbar() {
-        // Load saved position
+        // Load saved position, clamp to current viewport in case the window shrank
+        // (previously persisted coords may now fall outside the visible area).
+        const BTN_SIZE = 56;
+        const MARGIN = 20;
+        const defaultX = Math.max(MARGIN, window.innerWidth - BTN_SIZE - MARGIN);
+        const defaultY = Math.max(MARGIN, window.innerHeight - BTN_SIZE - MARGIN);
+        const rawX = GM_getValue('toolbar_position_x', defaultX);
+        const rawY = GM_getValue('toolbar_position_y', defaultY);
+        const maxX = Math.max(0, window.innerWidth - BTN_SIZE);
+        const maxY = Math.max(0, window.innerHeight - BTN_SIZE);
         const savedPosition = {
-            x: GM_getValue('toolbar_position_x', window.innerWidth - 80),
-            y: GM_getValue('toolbar_position_y', window.innerHeight - 80)
+            x: Math.max(0, Math.min(rawX, maxX)),
+            y: Math.max(0, Math.min(rawY, maxY))
         };
 
         // Create container

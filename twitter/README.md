@@ -336,6 +336,7 @@ A: The current version doesn't support custom prompts and uses built-in optimize
 
 ### v2.4.1 (2026-05-08)
 
+- 🪟 **Fix disappearing toolbar button**: On startup the persisted toolbar position is now clamped into the current viewport, so shrinking / resizing the window no longer leaves the main button stuck outside the visible area
 - 🎯 **Inject block keywords into AI filter**: The user-configured "Block Keywords" list is now spliced directly into the AI classification prompt as the top-priority rule — any comment containing any of those keywords must be classified as `blacklist`, regardless of topic relevance or other features
 - 🚀 **Remove max_tokens caps**: AI summary and AI filter requests no longer hard-cap the response (previously 2000 / 4000), so high comment volumes and full model responses are not truncated
 - 🐛 **Fix original poster detection**: Parse from URL `/username/status/id` instead of DOM order, so reply-chain pages no longer mis-identify the reply target as the OP
