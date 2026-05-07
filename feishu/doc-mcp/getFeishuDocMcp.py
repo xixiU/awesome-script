@@ -245,6 +245,8 @@ async def list_children(token: str, type: str = "auto") -> str:
                         "type": n.get("obj_type"),
                         "has_child": n.get("has_child"),
                         "obj_token": n.get("obj_token"),
+                        "created_time": n.get("obj_create_time"),
+                        "modified_time": n.get("obj_edit_time"),
                         "source": "wiki",
                     })
                 return json.dumps(results, ensure_ascii=False, indent=2)
@@ -263,6 +265,8 @@ async def list_children(token: str, type: str = "auto") -> str:
                 "type": f.get("type"),
                 "has_child": f.get("type") == "folder",
                 "obj_token": f.get("token"),
+                "created_time": f.get("created_time"),
+                "modified_time": f.get("modified_time"),
                 "source": "drive",
             })
         return json.dumps(results, ensure_ascii=False, indent=2)
@@ -396,6 +400,8 @@ async def wiki_get_node_info(wiki_token: str) -> str:
         "title": node.get("title"),
         "has_child": node.get("has_child"),
         "parent_node_token": node.get("parent_node_token"),
+        "created_time": node.get("obj_create_time"),
+        "modified_time": node.get("obj_edit_time"),
     }, ensure_ascii=False, indent=2)
 
 
@@ -430,6 +436,8 @@ async def wiki_list_nodes(wiki_token: str) -> str:
             "title": n.get("title"),
             "has_child": n.get("has_child"),
             "parent_node_token": n.get("parent_node_token"),
+            "created_time": n.get("obj_create_time"),
+            "modified_time": n.get("obj_edit_time"),
         })
     return json.dumps(results, ensure_ascii=False, indent=2)
 
