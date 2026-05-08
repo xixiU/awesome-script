@@ -73,7 +73,7 @@
             configBlockKeywordsHelp: 'Only block commenters whose comments contain these keywords (one per line). Leave empty to block all.',
             configAutoBlockLabel: 'Auto Block',
             configAutoBlockHelp: 'Automatically block commenters with keywords when opening tweet detail page (runs in background)',
-            consoleKeywordMatched: 'Keyword matched [{keyword}] for @{username}: {text}',
+            consoleKeywordMatched: 'Keywblacklistord matched [{keyword}] for @{username}: {text}',
             consoleKeywordSkipped: 'Skipped @{username}: no keywords matched',
             consoleAutoBlockStart: 'Auto-block started in background...',
             consoleAutoBlockComplete: 'Auto-block completed: {success} blocked, {failed} failed',
@@ -87,6 +87,8 @@
             configAiApiKeyHelp: 'Your OpenAI API Key',
             configAiModelLabel: 'AI Model',
             configAiModelHelp: 'Model name (e.g., gpt-4, gpt-3.5-turbo)',
+            configAiMultimodalLabel: 'Multimodal Model',
+            configAiMultimodalHelp: 'Enable if your model supports image recognition (e.g., GPT-4V, Claude 3.5, Qwen-VL). Avatar images will be sent to the model for text recognition.',
             alertSummarizing: 'AI summarization in progress, please wait...',
             alertNoApiKey: 'Please configure your OpenAI API Key first!\nClick the config panel to set it up.',
             alertNoContent: 'No content found to summarize!',
@@ -108,8 +110,8 @@
             consoleAiFilterStart: 'AI comment filtering started...',
             consoleAiFilterProgress: 'AI filtering: {current}/{total} comments processed',
             consoleAiFilterComplete: 'AI filtering completed: {blacklist} blacklisted, {spam} spam, {normal} normal',
-            consoleAiFilterBlacklist: '🚫 Blacklisted @{username}: {text}',
-            consoleAiFilterSpam: '⚠️ Spam detected @{username}: {text}',
+            consoleAiFilterBlacklist: '🚫 Blacklisted {displayName} (@{username}): {text}',
+            consoleAiFilterSpam: '⚠️ Spam detected {displayName} (@{username}): {text}',
             consoleAiFilterNormal: '✅ Normal comment @{username}',
             consoleAiFilterError: '❌ AI filtering error: {error}',
             spamCommentLabel: '⚠️ Spam Comment',
@@ -178,6 +180,8 @@
             configAiApiKeyHelp: '你的OpenAI API Key',
             configAiModelLabel: 'AI模型',
             configAiModelHelp: '模型名称（如：gpt-4, gpt-3.5-turbo）',
+            configAiMultimodalLabel: '多模态模型',
+            configAiMultimodalHelp: '如果你的模型支持图像识别（如 GPT-4V、Claude 3.5、Qwen-VL），请开启。开启后会将头像图片发送给模型识别其中的文字。',
             alertSummarizing: 'AI总结进行中，请稍候...',
             alertNoApiKey: '请先配置你的OpenAI API Key！\n点击配置面板进行设置。',
             alertNoContent: '未找到可总结的内容！',
@@ -199,8 +203,8 @@
             consoleAiFilterStart: 'AI评论过滤已启动...',
             consoleAiFilterProgress: 'AI过滤中：已处理 {current}/{total} 条评论',
             consoleAiFilterComplete: 'AI过滤完成：黑名单 {blacklist} 条，垃圾 {spam} 条，正常 {normal} 条',
-            consoleAiFilterBlacklist: '🚫 拉黑 @{username}：{text}',
-            consoleAiFilterSpam: '⚠️ 垃圾评论 @{username}：{text}',
+            consoleAiFilterBlacklist: '🚫 拉黑 {displayName} (@{username})：{text}',
+            consoleAiFilterSpam: '⚠️ 垃圾评论 {displayName} (@{username})：{text}',
             consoleAiFilterNormal: '✅ 正常评论 @{username}',
             consoleAiFilterError: '❌ AI过滤错误：{error}',
             spamCommentLabel: '⚠️ 垃圾评论',
@@ -249,6 +253,7 @@
         aiBaseUrl: 'https://api.openai.com/v1',
         aiApiKey: '',
         aiModel: 'gpt-3.5-turbo',
+        aiMultimodal: false,
         // AI过滤功能配置
         aiFilterEnabled: false,
         aiFilterPrompt: '',
@@ -313,6 +318,12 @@
             type: 'text',
             placeholder: 'gpt-3.5-turbo',
             help: t('configAiModelHelp')
+        },
+        {
+            key: 'aiMultimodal',
+            label: t('configAiMultimodalLabel'),
+            type: 'checkbox',
+            help: t('configAiMultimodalHelp')
         },
         // AI过滤功能配置项
         {
@@ -757,8 +768,15 @@ ${tweetSection}${keywordsSection}
 
 判定"与原推文无关"时请宽松：只要评论明显偏离原推文的话题或语境，就归入 spam。典型机器人刷屏特征：大量装饰性符号（如 ⦋ ✧ ⟡ 〥 ⋆ 等）、整句英文诗 / 抒情语但与原文主题无关、emoji 与无意义英文短句夹杂的模板化文本。
 
+注意：昵称（displayName）也是重要的判断依据。如果昵称包含"线下"、"约"、"全国安排"、"见面"等引流暗示词，即使评论内容看似正常，也应归入 blacklist。
+${config.get('aiMultimodal') ? `
+头像识别（你的模型支持图像识别）：每条评论都提供了头像图片 URL。如果头像中包含"线下"、"约"、"全国安排"、"见面"、"加V"、"联系方式"等引流暗示文字，该用户应归入 blacklist。` : ''}
+
 评论列表：
-${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`).join('\n')}
+${comments.map((c, i) => {
+                const avatarPart = config.get('aiMultimodal') ? ` | 头像: ${c.avatarUrl}` : '';
+                return `${i + 1}. 昵称: ${c.displayName} | @${c.username}${avatarPart},评论: ${c.text.substring(0, 200)}`;
+            }).join('\n\n')}
 
 严格按以下 JSON 格式返回（不要任何解释文字，不要 markdown 代码块）：
 {"blacklist":["user1","user2"],"spam":["user3"]}
@@ -936,29 +954,58 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
      * @param {Object} buckets - { blacklist: string[], spam: string[] }
      * @param {Map<string,string>} [textMap] - username -> 原始评论文本，用于日志输出
      */
-    async function processAIFilterResults(buckets, textMap) {
+    async function processAIFilterResults(buckets, dataMap) {
         const blacklist = Array.isArray(buckets?.blacklist) ? buckets.blacklist : [];
         const spam = Array.isArray(buckets?.spam) ? buckets.spam : [];
 
+        // 过滤掉不存在的用户名（AI 可能返回不存在的 username）
+        const validUsernames = new Set(dataMap.keys());
+        const validBlacklist = blacklist.filter(u => validUsernames.has(u));
+        const validSpam = spam.filter(u => validUsernames.has(u));
+
+        // 记录被过滤掉的无效用户名
+        const invalidBlacklist = blacklist.filter(u => !validUsernames.has(u));
+        const invalidSpam = spam.filter(u => !validUsernames.has(u));
+        if (invalidBlacklist.length > 0) {
+            console.warn(`⚠️ AI 返回了不存在的黑名单用户: ${invalidBlacklist.join(', ')}`);
+        }
+        if (invalidSpam.length > 0) {
+            console.warn(`⚠️ AI 返回了不存在的垃圾评论用户: ${invalidSpam.join(', ')}`);
+        }
+
         // 去重：同一用户若同时出现在两类中，以 blacklist 优先
-        const blacklistSet = new Set(blacklist);
-        const spamSet = new Set(spam.filter(u => !blacklistSet.has(u)));
+        const blacklistSet = new Set(validBlacklist);
+        const spamSet = new Set(validSpam.filter(u => !blacklistSet.has(u)));
 
         const previewText = (u) => {
-            const raw = (textMap && textMap.get && textMap.get(u)) || '';
+            const data = (dataMap && dataMap.get && dataMap.get(u)) || {};
+            const raw = data.text || '';
             // 单行化并截断，避免日志过长
             return raw.replace(/\s+/g, ' ').trim().substring(0, 120);
         };
 
+        const getDisplayName = (u) => {
+            const data = (dataMap && dataMap.get && dataMap.get(u)) || {};
+            return data.displayName || u;
+        };
+
         for (const username of blacklistSet) {
-            console.log(t('consoleAiFilterBlacklist', { username, text: previewText(username) }));
+            console.log(t('consoleAiFilterBlacklist', {
+                displayName: getDisplayName(username),
+                username,
+                text: previewText(username)
+            }));
             markCommentByCategory(username, 'blacklist', '');
             await blockUserByAPI(username);
             await sleep(500);
         }
 
         for (const username of spamSet) {
-            console.log(t('consoleAiFilterSpam', { username, text: previewText(username) }));
+            console.log(t('consoleAiFilterSpam', {
+                displayName: getDisplayName(username),
+                username,
+                text: previewText(username)
+            }));
             markCommentByCategory(username, 'spam', '');
         }
 
@@ -1020,6 +1067,11 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
      * @param {boolean} isComplete - 是否完成
      */
     function updateAIFilterStatus(status, isComplete = false) {
+        // 如果通知开关关闭，不显示状态指示器
+        if (!config.get('enableNotifications')) {
+            return;
+        }
+
         let indicator = document.getElementById('ai-filter-status');
 
         if (!indicator) {
@@ -1601,7 +1653,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
     // Get all commenters with their comment text
     function getAllCommentersWithText() {
-        const commentersMap = new Map(); // username -> comment text
+        const commentersMap = new Map(); // username -> { text, displayName, avatarUrl }
         const excludeOriginal = config.get('excludeOriginalPoster');
         const originalPoster = excludeOriginal ? getOriginalPosterUsername() : null;
 
@@ -1627,16 +1679,29 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
                 }
             });
 
-            // Get comment text
+            // Get comment text, display name and avatar URL
             if (username) {
                 const tweetTextElement = article.querySelector('[data-testid="tweetText"]');
                 const tweetText = getElementTextWithEmoji(tweetTextElement);
 
-                // Store username and text (append if user has multiple comments)
+                // Get display name (nickname)
+                const displayNameElement = article.querySelector('[data-testid="User-Name"] span');
+                const displayName = displayNameElement ? displayNameElement.innerText : username;
+
+                // Get avatar URL
+                const avatarImg = article.querySelector('img[draggable="true"]');
+                const avatarUrl = avatarImg ? avatarImg.src : '';
+
+                // Store username, text, displayName and avatarUrl (append if user has multiple comments)
                 if (commentersMap.has(username)) {
-                    commentersMap.set(username, commentersMap.get(username) + '\n' + tweetText);
+                    const existing = commentersMap.get(username);
+                    commentersMap.set(username, {
+                        text: existing.text + '\n' + tweetText,
+                        displayName: existing.displayName,
+                        avatarUrl: existing.avatarUrl
+                    });
                 } else {
-                    commentersMap.set(username, tweetText);
+                    commentersMap.set(username, { text: tweetText, displayName, avatarUrl });
                 }
             }
         });
@@ -1925,10 +1990,10 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         let commenters;
         if (keywords.length > 0) {
             commenters = [];
-            for (const [username, text] of commentersMap) {
-                const matchedKeyword = keywords.find(kw => text.includes(kw));
+            for (const [username, data] of commentersMap) {
+                const matchedKeyword = keywords.find(kw => data.text.includes(kw));
                 if (matchedKeyword) {
-                    console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: text.substring(0, 50) }));
+                    console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: data.text.substring(0, 50) }));
                     commenters.push(username);
                 } else {
                     console.log(t('consoleKeywordSkipped', { username }));
@@ -2042,12 +2107,12 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         const commentersMap = getAllCommentersWithText();
         const toBlock = [];
 
-        for (const [username, text] of commentersMap) {
+        for (const [username, data] of commentersMap) {
             if (autoBlockProcessed.has(username)) continue; // Skip already processed
 
-            const matchedKeyword = keywords.find(kw => text.includes(kw));
+            const matchedKeyword = keywords.find(kw => data.text.includes(kw));
             if (matchedKeyword) {
-                console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: text.substring(0, 50) }));
+                console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: data.text.substring(0, 50) }));
                 toBlock.push(username);
                 autoBlockProcessed.add(username);
             }
@@ -2098,7 +2163,12 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
             const commentersMap = getAllCommentersWithText();
             const comments = Array.from(commentersMap.entries())
                 .filter(([username]) => !aiFilterProcessed.has(username))
-                .map(([username, text]) => ({ username, text }));
+                .map(([username, data]) => ({
+                    username,
+                    text: data.text,
+                    displayName: data.displayName,
+                    avatarUrl: data.avatarUrl
+                }));
 
             if (comments.length === 0) {
                 aiFilterInProgress = false;
@@ -2117,13 +2187,17 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
             for (let i = 0; i < comments.length; i += batchSize) {
                 const batch = comments.slice(i, i + batchSize);
-                const batchTextMap = new Map(batch.map(c => [c.username, c.text]));
+                const batchDataMap = new Map(batch.map(c => [c.username, {
+                    text: c.text,
+                    displayName: c.displayName,
+                    avatarUrl: c.avatarUrl
+                }]));
 
                 try {
                     const results = await classifyCommentsByAI(batch, mainTweet);
 
                     // 处理结果
-                    await processAIFilterResults(results, batchTextMap);
+                    await processAIFilterResults(results, batchDataMap);
 
                     // 标记已处理
                     batch.forEach(c => aiFilterProcessed.add(c.username));
