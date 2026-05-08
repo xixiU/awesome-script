@@ -2315,9 +2315,16 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         const url = location.href;
         if (url !== lastUrl) {
             lastUrl = url;
-            // Remove old toolbar
+            // Preserve toolbar position before removing (to avoid jumping between pages with different viewport sizes)
             const oldToolbar = document.getElementById('x-toolkit-toolbar');
-            if (oldToolbar) oldToolbar.remove();
+            if (oldToolbar) {
+                const currentLeft = parseInt(oldToolbar.style.left) || 0;
+                const currentTop = parseInt(oldToolbar.style.top) || 0;
+                // Save current actual position so createFloatingToolbar uses it instead of stale saved position
+                GM_setValue('toolbar_position_x', currentLeft);
+                GM_setValue('toolbar_position_y', currentTop);
+                oldToolbar.remove();
+            }
             // Remove old AI filter status indicator
             const oldStatus = document.getElementById('ai-filter-status');
             if (oldStatus) oldStatus.remove();

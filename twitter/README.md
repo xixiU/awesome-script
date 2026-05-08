@@ -336,6 +336,7 @@ A: The current version doesn't support custom prompts and uses built-in optimize
 
 ### v2.4.1 (2026-05-08)
 
+- 🎯 **Fix toolbar jumping**: Preserve toolbar's current actual position when switching pages (home ↔ tweet detail), avoiding position jumps caused by different viewport sizes across page types
 - 🔕 **Add notification toggle**: New "Enable Notifications" option in config panel (default: off) controls progress-type popup notifications like [AI Filtering], [AI Filtering Complete], [AI Summarizing], [Blocking Complete], etc. Disable to reduce interruptions (error alerts like "API Key not configured" still show normally)
 - 🪟 **Fix disappearing toolbar button**: On startup the persisted toolbar position is now clamped into the current viewport, so shrinking / resizing the window no longer leaves the main button stuck outside the visible area
 - 🎯 **Inject block keywords into AI filter**: The user-configured "Block Keywords" list is now spliced directly into the AI classification prompt as the top-priority rule — any comment containing any of those keywords must be classified as `blacklist`, regardless of topic relevance or other features
