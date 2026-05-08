@@ -121,7 +121,9 @@
             aiFilterButtonLoading: '🔄 AI Filtering...',
             alertAiFilterInProgress: 'AI filtering is in progress, please wait...',
             alertShowAllSpam: 'Show all hidden spam comments?',
-            buttonShowAllSpam: '👁️ Show All Spam'
+            buttonShowAllSpam: '👁️ Show All Spam',
+            configEnableNotificationsLabel: 'Enable Notifications',
+            configEnableNotificationsHelp: 'Show popup notifications like [AI Filtering], [AI Filtering Complete], [AI Summarizing], etc. Disable to reduce interruptions'
         },
         zh: {
             // Toolbar相关
@@ -210,7 +212,9 @@
             aiFilterButtonLoading: '🔄 AI过滤中...',
             alertAiFilterInProgress: 'AI过滤正在进行中，请稍候...',
             alertShowAllSpam: '显示所有被隐藏的垃圾评论？',
-            buttonShowAllSpam: '👁️ 显示所有垃圾评论'
+            buttonShowAllSpam: '👁️ 显示所有垃圾评论',
+            configEnableNotificationsLabel: '启用通知',
+            configEnableNotificationsHelp: '开启后会显示【AI过滤中】【AI过滤完成】【AI总结中】等弹窗通知，关闭可减少干扰'
         }
     };
 
@@ -247,7 +251,9 @@
         aiModel: 'gpt-3.5-turbo',
         // AI过滤功能配置
         aiFilterEnabled: false,
-        aiFilterPrompt: ''
+        aiFilterPrompt: '',
+        // 通知配置
+        enableNotifications: false
     }, {
         i18n: i18n,
         lang: currentLang
@@ -321,6 +327,13 @@
             type: 'textarea',
             placeholder: '',
             help: t('configAiFilterPromptHelp')
+        },
+        // 通知配置项
+        {
+            key: 'enableNotifications',
+            label: t('configEnableNotificationsLabel'),
+            type: 'checkbox',
+            help: t('configEnableNotificationsHelp')
         }
     ]);
 
@@ -368,6 +381,13 @@
     // Utility function: delay
     function sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Utility function: show alert with notification toggle
+    function showAlert(message) {
+        if (config.get('enableNotifications')) {
+            alert(message);
+        }
     }
 
     // ==================== 页面类型检测 ====================
@@ -1494,7 +1514,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
     // Handle AI summarize
     async function handleAISummarize() {
         if (isSummarizing) {
-            alert(t('alertSummarizing'));
+            showAlert(t('alertSummarizing'));
             return;
         }
 
@@ -1840,7 +1860,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
     // Main handler: block all commenters
     async function handleBlockAllCommenters() {
         if (isBlocking) {
-            alert(t('alertProcessing'));
+            showAlert(t('alertProcessing'));
             return;
         }
 
@@ -1919,7 +1939,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         }
 
         if (commenters.length === 0) {
-            alert(t('alertNoCommenters'));
+            showAlert(t('alertNoCommenters'));
             isBlocking = false;
             updateButtonStatus(t('buttonText'), false);
             return;
@@ -1955,7 +1975,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         const successList = blockedUsers.length > 0 ? blockedUsers.map(u => '@' + u).join(', ') : 'None';
         const failedList = failedUsers.length > 0 ? failedUsers.map(u => '@' + u).join(', ') : 'None';
 
-        alert(t('alertComplete', {
+        showAlert(t('alertComplete', {
             success: blockedCount,
             failed: failedCount,
             total: commenters.length,
@@ -2163,7 +2183,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
      */
     async function handleManualAIFilter() {
         if (aiFilterInProgress) {
-            alert(t('alertAiFilterInProgress'));
+            showAlert(t('alertAiFilterInProgress'));
             return;
         }
 
