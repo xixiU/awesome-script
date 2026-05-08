@@ -775,7 +775,7 @@ ${config.get('aiMultimodal') ? `
 评论列表：
 ${comments.map((c, i) => {
                 const avatarPart = config.get('aiMultimodal') ? ` | 头像: ${c.avatarUrl}` : '';
-                return `${i + 1}. 昵称: ${c.displayName} | @${c.username}${avatarPart},评论: ${c.text.substring(0, 200)}`;
+                return `${i + 1}. 昵称: ${c.displayName} ,username: @${c.username}${avatarPart},评论: ${c.text.substring(0, 200)}`;
             }).join('\n\n')}
 
 严格按以下 JSON 格式返回（不要任何解释文字，不要 markdown 代码块）：
