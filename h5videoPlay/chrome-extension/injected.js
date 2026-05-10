@@ -625,7 +625,6 @@
 
         checkUI();
         // showTip('HTML5视频工具已就绪');
-        console.log('[H5Video] 视频已初始化:', v);
     }
 
     // ===== URL 变化监听（SPA）=====
