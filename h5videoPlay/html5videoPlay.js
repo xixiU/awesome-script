@@ -955,7 +955,6 @@ const app = {
         this.rawProps = void 0;
         by = d.body;
         v = v || this.findMV();
-        log('bind event\n', v);
         bus.$emit('foundMV');
         const bRate = videoConfigManager.get('remberRate');
         window.addEventListener('urlchange', async (info) => { //TM event: info.url
