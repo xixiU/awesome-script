@@ -334,6 +334,13 @@ A: The current version doesn't support custom prompts and uses built-in optimize
 
 ## Changelog
 
+### v2.4.2 (2026-05-10)
+
+- 🎯 **AI filter pre-rules**: Two local rules run before the AI call to catch obvious bot templates — hits are blacklisted immediately, no token spend:
+  - **Rule 1 broken-word**: ≥3 occurrences of "letter + emoji/symbol + letter" inside a word (e.g., `t🔥hose tac💼tful insince🌂re word🎊s`)
+  - **Rule 2 bot-decor chars**: ≥3 rare Unicode decoration characters per comment (e.g., `ꦿ ༺ ༻ ꙳ ✦ ⋆ ⛭` — Tibetan / Javanese / Old Church Slavonic marks that regular keyboards and emoji pickers can't produce)
+- 🧹 **Filter invalid AI returns**: The model occasionally returns usernames that don't actually exist in the comment list (e.g., single-letter `d`), which previously triggered `Failed to get user ID`; we now filter against the real username set first and only act on valid ones (invalid ones get a warn log)
+
 ### v2.4.1 (2026-05-08)
 
 - 🎯 **Fix toolbar jumping**: Preserve toolbar's current actual position when switching pages (home ↔ tweet detail), avoiding position jumps caused by different viewport sizes across page types

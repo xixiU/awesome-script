@@ -2,7 +2,7 @@
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
 // @namespace    http://tampermonkey.net/
-// @version      2.4.1
+// @version      2.4.2
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -727,6 +727,84 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             }
         }
         return out;
+    }
+
+    // 检测"英文单词被符号/emoji 硬拆开"的模板化刷屏
+    // 规则：一条评论中出现 >= THRESHOLD 次"字母 + 非字母非空格字符 + 字母"的夹断模式
+    //       就判定为机器人刷屏，直接归入 blacklist
+    // 例：t🔥hose、tac💼tful、insince🌂re🌺、word🎊s —— 四处夹断 → blacklist
+    const WORD_SPLIT_THRESHOLD = 3;
+    function countBrokenWordPatterns(text) {
+        if (!text || typeof text !== 'string') return 0;
+        // [A-Za-z] + 单个"非字母且非空白且非 ASCII 标点"的字符 + [A-Za-z]
+        // 用 Unicode 属性类确保能覆盖 emoji、各类装饰符号（⦋ ✧ ⟡ 〥 ⋆ 🔥 💼 🎊 等）
+        // \p{L} 是字母，\p{N} 是数字；我们要的是"既不是字母也不是空白也不是常规标点"的单字符
+        const re = /[A-Za-z](?:[^\s\p{L}\p{N}.,!?'":;\-()\[\]{}<>+=*/\\|@#$%^&~`_]+)[A-Za-z]/gu;
+        const matches = text.match(re);
+        return matches ? matches.length : 0;
+    }
+
+    function isBrokenWordSpam(text) {
+        return countBrokenWordPatterns(text) >= WORD_SPLIT_THRESHOLD;
+    }
+
+    // 机器人装饰字符名单：普通键盘/输入法/emoji 选择器里根本选不到，只有脚本生成的
+    // 模板刷屏会用到。不含常用 emoji（😂 ❤️ 👍 🔥 等），避免误伤爱用 emoji 的用户。
+    // 一条评论里出现名单内字符 >= WORD_SPLIT_THRESHOLD 次（不要求不同）就判黑。
+    const BOT_DECOR_CHARS = new Set([
+        // 藏语装饰/爪哇语辅助字符
+        '༺', '༻', // ༺ ༻
+        '༘', '༙', // ༘ ༙
+        '༄', '༅', '༂', // ༄ ༅ ༂
+        '࿇', // ࿇
+        'ꦿ', // ꦿ
+        // 古教会斯拉夫语附加符号
+        '꙳', // ꙳
+        '꙰', '꙱', '꙲', // ꙰ ꙱ ꙲
+        // 装饰括号
+        'Ɥ', // ꞎ
+        '﹅', '﹆', // ﹅ ﹆
+        '⺀', '⺁', '⺂', '⺃', // ⺀ ⺁ ⺂ ⺃
+        '⟡', // ⟡
+        '〥', // 〥
+        '⦂', '⧋', '⧊', // ⦂ ⧋ ⧊
+        '⦓', '⦔', // ⦓ ⦔
+        // 罕见星形符号
+        '✦', '✧', '✩', // ✦ ✧ ✩
+        '⋆', // ⋆
+        // 其它
+        '⬮', '⬯', // ⬮ ⬯
+        '⚬', '⚭', // ⚬ ⚭
+        '⛭', '⛮', // ⛭ ⛮
+        '⛬', // ⛬
+        '꧁', '꧂', // ꧁ ꧂
+        '٭', // ٭
+        // 花哨装饰括号
+        '⦘', '⦙', // ⦘ ⦙
+        '⦊', '⦋', // ⦊ ⦋
+        '⦌', '⦍', '⦎', '⦏', // ⦌ ⦍ ⦎ ⦏
+    ]);
+
+    function countBotDecorChars(text) {
+        if (!text || typeof text !== 'string') return 0;
+        let n = 0;
+        // 用 for...of 正确处理代理对，避免误判
+        for (const ch of text) {
+            if (BOT_DECOR_CHARS.has(ch)) n++;
+        }
+        return n;
+    }
+
+    function isBotDecorSpam(text) {
+        return countBotDecorChars(text) >= WORD_SPLIT_THRESHOLD;
+    }
+
+    // 前置 spam 检测：命中两条规则中的任一条就判黑名单
+    // 返回命中的规则名（null 表示未命中）
+    function detectSpamRule(text) {
+        if (isBrokenWordSpam(text)) return 'broken-word';
+        if (isBotDecorSpam(text)) return 'bot-decor';
+        return null;
     }
 
     async function classifyCommentsByAI(comments, mainTweet) {
@@ -2161,7 +2239,7 @@ ${comments.map((c, i) => {
 
             // 获取当前可见的评论
             const commentersMap = getAllCommentersWithText();
-            const comments = Array.from(commentersMap.entries())
+            const allComments = Array.from(commentersMap.entries())
                 .filter(([username]) => !aiFilterProcessed.has(username))
                 .map(([username, data]) => ({
                     username,
@@ -2170,7 +2248,41 @@ ${comments.map((c, i) => {
                     avatarUrl: data.avatarUrl
                 }));
 
+            if (allComments.length === 0) {
+                aiFilterInProgress = false;
+                return;
+            }
+
+            // 前置规则检测：
+            //   规则 1 broken-word：英文单词被符号/emoji 硬拆开 >= WORD_SPLIT_THRESHOLD 次
+            //   规则 2 bot-decor：评论中包含机器人装饰字符 >= WORD_SPLIT_THRESHOLD 次（冷僻 Unicode，普通输入法打不出）
+            // 任一命中直接判黑名单，不送 AI，节省 token 也更稳定
+            const preFilterBlacklist = [];
+            const comments = [];
+            for (const c of allComments) {
+                const rule = detectSpamRule(c.text);
+                if (rule) {
+                    preFilterBlacklist.push(c.username);
+                    const ruleLabel = rule === 'broken-word'
+                        ? `单词夹断 ≥${WORD_SPLIT_THRESHOLD}`
+                        : `机器人装饰字符 ≥${WORD_SPLIT_THRESHOLD}`;
+                    console.log(`🎯 前置命中（${ruleLabel}）@${c.username}: ${c.text.substring(0, 80)}`);
+                } else {
+                    comments.push(c);
+                }
+            }
+
+            // 先处理前置命中的黑名单（直接拉黑，不走 AI）
+            if (preFilterBlacklist.length > 0) {
+                const preMap = new Map(allComments
+                    .filter(c => preFilterBlacklist.includes(c.username))
+                    .map(c => [c.username, { text: c.text, displayName: c.displayName, avatarUrl: c.avatarUrl }]));
+                await processAIFilterResults({ blacklist: preFilterBlacklist, spam: [] }, preMap);
+                preFilterBlacklist.forEach(u => aiFilterProcessed.add(u));
+            }
+
             if (comments.length === 0) {
+                updateAIFilterStatus(t('aiFilterStatusComplete'), true);
                 aiFilterInProgress = false;
                 return;
             }
