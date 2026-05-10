@@ -106,6 +106,8 @@
             configAiFilterEnabledHelp: 'Use AI to automatically filter spam and blacklist comments',
             configAiFilterPromptLabel: 'AI Filter Prompt',
             configAiFilterPromptHelp: 'Custom prompt for AI comment classification (leave empty for default)',
+            configBioBlacklistPrefixesLabel: 'Bio Blacklist Prefixes',
+            configBioBlacklistPrefixesHelp: 'Users whose profile bio starts with any of these prefixes are blacklisted directly. One prefix per line. Runs in the background via the user info API, no browser tabs opened.',
             consoleAiFilterStart: 'AI comment filtering started...',
             consoleAiFilterProgress: 'AI filtering: {current}/{total} comments processed',
             consoleAiFilterComplete: 'AI filtering completed: {blacklist} blacklisted, {spam} spam, {normal} normal',
@@ -199,6 +201,8 @@
             configAiFilterEnabledHelp: '使用AI自动过滤垃圾评论和黑名单评论',
             configAiFilterPromptLabel: 'AI过滤提示词',
             configAiFilterPromptHelp: '自定义AI评论分类的提示词（留空使用默认）',
+            configBioBlacklistPrefixesLabel: '个人简介前缀黑名单',
+            configBioBlacklistPrefixesHelp: '个人简介以这些前缀开头的用户直接拉黑，每行一个。后台通过用户信息接口异步检查，不会打开浏览器标签页。',
             consoleAiFilterStart: 'AI评论过滤已启动...',
             consoleAiFilterProgress: 'AI过滤中：已处理 {current}/{total} 条评论',
             consoleAiFilterComplete: 'AI过滤完成：黑名单 {blacklist} 条，垃圾 {spam} 条，正常 {normal} 条',
@@ -256,6 +260,8 @@
         // AI过滤功能配置
         aiFilterEnabled: false,
         aiFilterPrompt: '',
+        // 个人简介前缀黑名单（每行一个前缀，命中前缀的用户直接拉黑）
+        bioBlacklistPrefixes: '已入驻约p平台\n已入驻曰泡平台',
         // 通知配置
         enableNotifications: false
     }, {
@@ -338,6 +344,13 @@
             placeholder: '',
             help: t('configAiFilterPromptHelp')
         },
+        {
+            key: 'bioBlacklistPrefixes',
+            label: t('configBioBlacklistPrefixesLabel'),
+            type: 'textarea',
+            placeholder: '已入驻约p平台',
+            help: t('configBioBlacklistPrefixesHelp')
+        },
         // 通知配置项
         {
             key: 'enableNotifications',
@@ -347,17 +360,42 @@
         }
     ]);
 
-    // Restructure config panel: put checkbox items side by side
+    // Restructure config panel: group checkbox items by feature, 2-column grid per group
     function restructureConfigPanel() {
         const content = document.querySelector('#TwitterXToolkit-config-panel .config-content');
         if (!content) return;
 
-        const checkboxGroups = Array.from(content.querySelectorAll('.config-form-group'))
-            .filter(g => g.querySelector('input[type="checkbox"]'));
-        if (checkboxGroups.length < 2) return;
+        // 按功能分组，顺序就是最终展示顺序
+        const groups = [
+            {
+                title: currentLang === 'zh' ? '屏蔽功能' : 'Blocking',
+                keys: ['excludeOriginalPoster', 'autoBlock']
+            },
+            {
+                title: currentLang === 'zh' ? 'AI 功能' : 'AI Features',
+                keys: ['aiFilterEnabled', 'aiMultimodal']
+            },
+            {
+                title: currentLang === 'zh' ? '通知' : 'Notifications',
+                keys: ['enableNotifications']
+            }
+        ];
 
-        // Fix internal layout of each checkbox group: [checkbox] [label] on one row
-        checkboxGroups.forEach(group => {
+        // 找到所有 checkbox group
+        const allGroups = Array.from(content.querySelectorAll('.config-form-group'));
+        const checkboxGroupByKey = new Map();
+        allGroups.forEach(g => {
+            const input = g.querySelector('input[type="checkbox"]');
+            if (!input) return;
+            // input id 形如 'TwitterXToolkit-excludeOriginalPoster'
+            const key = input.id.replace(/^TwitterXToolkit-/, '');
+            checkboxGroupByKey.set(key, g);
+        });
+
+        if (checkboxGroupByKey.size === 0) return;
+
+        // 规范每个 checkbox group 内部：[checkbox] [label] 一行，help 独立成行
+        checkboxGroupByKey.forEach(group => {
             const label = group.querySelector('.config-label');
             const input = group.querySelector('input[type="checkbox"]');
             const help = group.querySelector('.config-help');
@@ -365,25 +403,45 @@
             const row = document.createElement('div');
             row.style.cssText = 'display:flex;align-items:center;gap:8px;';
             input.style.cssText = 'width:auto;margin:0;cursor:pointer;flex-shrink:0;';
-            label.style.cssText = 'margin:0;cursor:pointer;font-weight:500;';
+            label.style.cssText = 'margin:0;cursor:pointer;font-weight:500;font-size:14px;color:#374151;';
             row.appendChild(input);
             row.appendChild(label);
 
-            // Rebuild group: row + help
             group.innerHTML = '';
             group.appendChild(row);
             if (help) {
-                help.style.marginLeft = '24px';
+                help.style.cssText = 'margin:4px 0 0 24px;font-size:12px;color:#6b7280;line-height:1.4;';
                 group.appendChild(help);
             }
-            group.style.cssText = 'flex:1;margin-bottom:0;';
+            group.style.cssText = 'margin:0;padding:8px 10px;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;';
         });
 
-        // Wrap all checkbox groups in a single flex row
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'display:flex;gap:16px;margin-bottom:20px;';
-        content.insertBefore(wrapper, checkboxGroups[0]);
-        checkboxGroups.forEach(g => wrapper.appendChild(g));
+        // 为每个分组构建 section，插到 content 最前面（倒序 insertBefore，保证正序）
+        const firstChild = content.firstChild;
+        for (let i = groups.length - 1; i >= 0; i--) {
+            const grp = groups[i];
+            const presentKeys = grp.keys.filter(k => checkboxGroupByKey.has(k));
+            if (presentKeys.length === 0) continue;
+
+            const section = document.createElement('div');
+            section.style.cssText = 'margin-bottom:16px;';
+
+            const title = document.createElement('div');
+            title.textContent = grp.title;
+            title.style.cssText = 'font-size:13px;font-weight:600;color:#667eea;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #e5e7eb;letter-spacing:0.3px;';
+            section.appendChild(title);
+
+            const grid = document.createElement('div');
+            // 2 列 grid，小屏自动回退成 1 列
+            grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;';
+            presentKeys.forEach(key => {
+                const g = checkboxGroupByKey.get(key);
+                grid.appendChild(g);
+            });
+            section.appendChild(grid);
+
+            content.insertBefore(section, firstChild);
+        }
     }
 
     restructureConfigPanel();
@@ -796,6 +854,109 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
     function isBotDecorSpam(text) {
         return countBotDecorChars(text) >= WORD_SPLIT_THRESHOLD;
+    }
+
+    // 用户简介缓存：username -> 简介字符串（或 null 表示拉取失败）
+    // 缓存粒度是整个会话，避免同一用户重复请求
+    const userBioCache = new Map();
+
+    // 通过 Twitter 内部 GraphQL 接口后台拉取用户简介
+    // 复用 blockUserByAPI 已有的鉴权（bearer + ct0 cookie）
+    async function fetchUserBio(username) {
+        if (userBioCache.has(username)) return userBioCache.get(username);
+
+        try {
+            const csrfToken = document.cookie.match(/ct0=([^;]+)/)?.[1];
+            if (!csrfToken) {
+                userBioCache.set(username, null);
+                return null;
+            }
+
+            const variables = encodeURIComponent(JSON.stringify({
+                screen_name: username,
+                withSafetyModeUserFields: true
+            }));
+            const features = encodeURIComponent(JSON.stringify({
+                hidden_profile_subscriptions_enabled: true,
+                rweb_tipjar_consumption_enabled: true,
+                responsive_web_graphql_exclude_directive_enabled: true,
+                verified_phone_label_enabled: false,
+                subscriptions_verification_info_is_identity_verified_enabled: true,
+                subscriptions_verification_info_verified_since_enabled: true,
+                highlights_tweets_tab_ui_enabled: true,
+                responsive_web_twitter_article_notes_tab_enabled: true,
+                subscriptions_feature_can_gift_premium: true,
+                creator_subscriptions_tweet_preview_api_enabled: true,
+                responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+                responsive_web_graphql_timeline_navigation_enabled: true
+            }));
+
+            const response = await fetch(
+                `https://x.com/i/api/graphql/G3KGOASz96M-Qu0nwmGXNg/UserByScreenName?variables=${variables}&features=${features}`,
+                {
+                    method: 'GET',
+                    headers: {
+                        'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+                        'x-csrf-token': csrfToken,
+                        'x-twitter-auth-type': 'OAuth2Session',
+                        'x-twitter-active-user': 'yes',
+                        'x-twitter-client-language': 'en'
+                    },
+                    credentials: 'include'
+                }
+            );
+
+            if (!response.ok) {
+                userBioCache.set(username, null);
+                return null;
+            }
+
+            const data = await response.json();
+            const bio = data?.data?.user?.result?.legacy?.description || '';
+            userBioCache.set(username, bio);
+            return bio;
+        } catch (error) {
+            console.warn(`拉取 @${username} 简介失败:`, error.message);
+            userBioCache.set(username, null);
+            return null;
+        }
+    }
+
+    // 简介前缀匹配检查：简介去掉前导空白后以任一前缀开头就算命中
+    function matchBioPrefix(bio, prefixes) {
+        if (!bio || !Array.isArray(prefixes) || prefixes.length === 0) return null;
+        const trimmed = bio.replace(/^\s+/, '');
+        for (const prefix of prefixes) {
+            if (trimmed.startsWith(prefix)) return prefix;
+        }
+        return null;
+    }
+
+    // 批量检查一组 username 的简介，返回命中用户的 Set 和命中的前缀 Map
+    // 控制并发（每批 5 个）和批次间延迟（300ms），避免触发 Twitter rate limit
+    async function checkBiosInBackground(usernames, prefixes) {
+        const hits = new Map(); // username -> matched prefix
+        if (!prefixes || prefixes.length === 0 || usernames.length === 0) {
+            return hits;
+        }
+
+        const BATCH_SIZE = 5;
+        const BATCH_DELAY_MS = 300;
+
+        for (let i = 0; i < usernames.length; i += BATCH_SIZE) {
+            const batch = usernames.slice(i, i + BATCH_SIZE);
+            const bios = await Promise.all(batch.map(u => fetchUserBio(u)));
+            batch.forEach((username, idx) => {
+                const bio = bios[idx];
+                const matched = matchBioPrefix(bio, prefixes);
+                if (matched) hits.set(username, matched);
+            });
+            if (i + BATCH_SIZE < usernames.length) {
+                await sleep(BATCH_DELAY_MS);
+            }
+        }
+
+        return hits;
     }
 
     // 前置 spam 检测：命中两条规则中的任一条就判黑名单
@@ -2257,6 +2418,7 @@ ${comments.map((c, i) => {
             //   规则 2 bot-decor：评论中包含机器人装饰字符 >= WORD_SPLIT_THRESHOLD 次（冷僻 Unicode，普通输入法打不出）
             // 任一命中直接判黑名单，不送 AI，节省 token 也更稳定
             const preFilterBlacklist = [];
+            const preFilterReason = new Map(); // username -> label
             const comments = [];
             for (const c of allComments) {
                 const rule = detectSpamRule(c.text);
@@ -2265,9 +2427,35 @@ ${comments.map((c, i) => {
                     const ruleLabel = rule === 'broken-word'
                         ? `单词夹断 ≥${WORD_SPLIT_THRESHOLD}`
                         : `机器人装饰字符 ≥${WORD_SPLIT_THRESHOLD}`;
+                    preFilterReason.set(c.username, ruleLabel);
                     console.log(`🎯 前置命中（${ruleLabel}）@${c.username}: ${c.text.substring(0, 80)}`);
                 } else {
                     comments.push(c);
+                }
+            }
+
+            // 规则 3 bio-prefix：后台查询用户简介，命中配置前缀的直接判黑名单
+            // 只对"未被文本规则命中"的用户查询，避免浪费请求
+            const bioPrefixesRaw = config.get('bioBlacklistPrefixes') || '';
+            const bioPrefixes = bioPrefixesRaw.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+            if (bioPrefixes.length > 0 && comments.length > 0) {
+                const candidateNames = comments.map(c => c.username);
+                const bioHits = await checkBiosInBackground(candidateNames, bioPrefixes);
+                if (bioHits.size > 0) {
+                    const remainingComments = [];
+                    for (const c of comments) {
+                        const matched = bioHits.get(c.username);
+                        if (matched) {
+                            preFilterBlacklist.push(c.username);
+                            const label = `简介前缀「${matched}」`;
+                            preFilterReason.set(c.username, label);
+                            console.log(`🎯 前置命中（${label}）@${c.username}`);
+                        } else {
+                            remainingComments.push(c);
+                        }
+                    }
+                    comments.length = 0;
+                    comments.push(...remainingComments);
                 }
             }
 

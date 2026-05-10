@@ -1,8 +1,7 @@
 # 推特X工具箱
 
-中文文档 | [English](README_EN.md)
-
 一个强大的推特/X多功能工具箱，集成屏蔽评论者、AI智能总结等功能，未来将持续扩展更多实用工具。
+
 
 ## 功能特点
 
@@ -15,6 +14,11 @@
 - 📊 实时显示处理进度，展示详细的用户列表
 - ✅ 统计成功和失败数量
 - ⚙️ 可配置是否排除原推作者
+
+<p align="center">
+  <img src="images/example1.png" alt="使用示例 1" width="48%" />
+  <img src="images/example2.png" alt="使用示例 2" width="48%" />
+</p>
 
 ### 🤖 AI智能总结
 
@@ -46,7 +50,7 @@
 
 1. 点击浏览器工具栏中的 Tampermonkey 图标
 2. 选择"添加新脚本"
-3. 将 `twitter_x_toolkit.user.js` 文件中的代码完整复制粘贴到编辑器中
+3. 将 `twitter_x_toolkit.user.js` 文件中的代码完整复制粘贴到编辑器中或导入<https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_x_toolkit.user.js链接>
 4. 按 `Ctrl + S`（Mac: `Cmd + S`）保存
 
 ## 使用方法
@@ -106,6 +110,10 @@
 ## 配置选项
 
 点击油猴图标 → 脚本设置 → ⚙️ 打开TwitterXToolkit配置，可进行以下设置：
+
+<p align="center">
+  <img src="images/config.png" alt="配置面板" width="60%" />
+</p>
 
 ### 通用配置
 
