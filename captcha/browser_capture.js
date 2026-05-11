@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.2.9
-// @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。修复跨域图片处理问题。
+// @version      4.3.0
+// @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。支持通配符批量排除网站。
 // @author       xixiu
 // @thanks       哈士奇
 // @match        *://*/*
@@ -1331,8 +1331,6 @@
     function notice(msg) {
         if (noticeTimer) {
             clearTimeout(noticeTimer);
-        } else {
-            setTimeout(() => new Vue().$message.success(msg));
         }
         noticeTimer = setTimeout(() => new Vue().$message.success(msg), 1000);
     }
@@ -1440,13 +1438,43 @@
 
     let blackListMenuId = null;
 
+    // 通配符匹配函数
+    function matchPattern(url, pattern) {
+        // 将通配符模式转换为正则表达式
+        // * 匹配任意字符（除了 /）
+        // ** 匹配任意字符（包括 /）
+        const regexPattern = pattern
+            .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // 转义特殊字符
+            .replace(/\*\*/g, '___DOUBLE_STAR___') // 临时替换 **
+            .replace(/\*/g, '[^/]*') // * 匹配除 / 外的任意字符
+            .replace(/___DOUBLE_STAR___/g, '.*'); // ** 匹配任意字符
+
+        const regex = new RegExp('^' + regexPattern + '$');
+        return regex.test(url);
+    }
+
+    // 检查当前页面是否在黑名单中
     function blackListCheck() {
-        let key = location.host + location.pathname + "_black";
-        let data = GM_getValue(key) && JSON.parse(GM_getValue(key));
+        let currentUrl = location.host + location.pathname;
+        let key = currentUrl + "_black";
+
+        // 检查精确匹配
+        let exactMatch = GM_getValue(key) && JSON.parse(GM_getValue(key));
+
+        // 检查通配符匹配
+        let patterns = GM_getValue('captcha_blacklist_patterns');
+        let patternList = patterns ? JSON.parse(patterns) : [];
+        let patternMatch = patternList.some(item =>
+            item.isBlacklisted && matchPattern(currentUrl, item.pattern)
+        );
+
+        let isBlacklisted = exactMatch || patternMatch;
+
         if (blackListMenuId) {
             GM_unregisterMenuCommand(blackListMenuId);
         }
-        if (data) {
+
+        if (isBlacklisted) {
             blackListMenuId = GM_registerMenuCommand(
                 "标记当前网站有验证码",
                 labelWebsite
@@ -1457,24 +1485,83 @@
                 labelWebsite
             );
         }
-        return data;
+
+        return isBlacklisted;
     }
 
     function labelWebsite() {
-        let key = location.host + location.pathname + "_black";
+        let currentUrl = location.host + location.pathname;
+        let key = currentUrl + "_black";
         let data = GM_getValue(key) && JSON.parse(GM_getValue(key));
-        if (data) {
-            GM_setValue(key, "false");
+
+        // 检查是否已经在通配符黑名单中
+        let patterns = GM_getValue('captcha_blacklist_patterns');
+        let patternList = patterns ? JSON.parse(patterns) : [];
+        let existingPattern = patternList.find(item => matchPattern(currentUrl, item.pattern));
+
+        let isCurrentlyBlacklisted = data || (existingPattern && existingPattern.isBlacklisted);
+
+        if (isCurrentlyBlacklisted) {
+            // 当前是黑名单状态，点击后标记为"有验证码"（移除黑名单）
+            // 弹出确认框，让用户选择要移除的规则
+            let message = "当前网站已标记为没有验证码。\n\n";
+            if (existingPattern) {
+                message += "匹配的规则：" + existingPattern.pattern + "\n\n";
+            }
+            message += "点击确定将标记为有验证码（启用验证码识别）";
+
+            if (confirm(message)) {
+                // 移除精确匹配
+                GM_setValue(key, "false");
+
+                // 移除通配符匹配
+                if (existingPattern) {
+                    patternList = patternList.filter(item => item.pattern !== existingPattern.pattern);
+                    GM_setValue('captcha_blacklist_patterns', JSON.stringify(patternList));
+                }
+
+                notice("操作成功，已标记网站有验证码");
+                captchaInstance = captchaInstance || new Captcha();
+                captchaInstance.init();
+            }
         } else {
-            GM_setValue(key, "true");
+            // 当前不在黑名单，点击后标记为"没有验证码"（添加到黑名单）
+            // 弹出输入框，让用户编辑网站地址（支持通配符）
+            let defaultPattern = currentUrl;
+            let message = "请输入要排除验证码识别的网站地址模式：\n\n";
+            message += "支持通配符：\n";
+            message += "  * 匹配单层路径（不包含 /）\n";
+            message += "  ** 匹配多层路径（包含 /）\n\n";
+            message += "示例：\n";
+            message += "  x.com/xx/status/* （排除该路径下所有页面）\n";
+            message += "  x.com/** （排除整个域名）\n\n";
+            message += "当前页面：" + currentUrl;
+
+            let userPattern = prompt(message, defaultPattern);
+
+            if (userPattern !== null && userPattern.trim() !== "") {
+                userPattern = userPattern.trim();
+
+                // 检查是否包含通配符
+                if (userPattern.includes('*')) {
+                    // 保存到通配符列表
+                    let existingIndex = patternList.findIndex(item => item.pattern === userPattern);
+                    if (existingIndex >= 0) {
+                        patternList[existingIndex].isBlacklisted = true;
+                    } else {
+                        patternList.push({ pattern: userPattern, isBlacklisted: true });
+                    }
+                    GM_setValue('captcha_blacklist_patterns', JSON.stringify(patternList));
+                    notice("操作成功，已添加规则：" + userPattern);
+                } else {
+                    // 精确匹配，使用原来的方式保存
+                    let patternKey = userPattern + "_black";
+                    GM_setValue(patternKey, "true");
+                    notice("操作成功，已标记网站没有验证码");
+                }
+            }
         }
-        notice(
-            "操作成功，" + (data ? "已标记网站有验证码" : "已标记网站没有验证码")
-        );
-        if (data) {
-            captchaInstance = captchaInstance || new Captcha();
-            captchaInstance.init();
-        }
+
         blackListCheck();
     }
     blackListCheck();

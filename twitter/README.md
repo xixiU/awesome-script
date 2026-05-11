@@ -1,426 +1,371 @@
-# Twitter X Toolkit
+# 推特X工具箱
 
-[中文文档](README_zh.md) | English
+一个强大的推特/X多功能工具箱，集成屏蔽评论者、AI智能总结等功能，未来将持续扩展更多实用工具。
 
-A powerful multi-functional toolkit for Twitter/X, integrating commenter blocking, AI-powered summarization, AI comment filtering, and more features to come.
 
-## Features
+## 功能特点
 
-### 🚫 Block All Commenters
+### 🚫 一键屏蔽评论者
 
-- 🎯 Block all commenters under a tweet with one click
-- 🔍 **Keyword Filtering**: Only block commenters whose comments contain specific keywords
-- 🤖 **Auto-Block Mode**: Automatically block commenters with keywords in the background (optional)
-- 🔄 Automatically scroll and load all comments
-- 📊 Real-time progress display with detailed user lists
-- ✅ Statistics on successful and failed operations
-- ⚙️ Configurable option to exclude original poster
+- 🎯 一键屏蔽某条推文下的所有评论者
+- 🔍 **关键词过滤**：只屏蔽评论中包含特定关键词的用户
+- 🤖 **自动拉黑模式**：打开推文详情页时自动在后台根据关键词拉黑评论者（可选）
+- 🔄 自动滚动加载所有评论
+- 📊 实时显示处理进度，展示详细的用户列表
+- ✅ 统计成功和失败数量
+- ⚙️ 可配置是否排除原推作者
 
-### 🤖 AI-Powered Summarization
+<p align="center">
+  <img src="images/example1.png" alt="使用示例 1" width="48%" />
+  <img src="images/example2.png" alt="使用示例 2" width="48%" />
+</p>
 
-- 📝 **Tweet Detail Page**: Summarize tweet content and comments, analyze comment sentiment and discussion hotspots
-- 👤 **User Profile Page**: Summarize user's tweets, analyze topics and speaking style
-- 🌐 Support custom OpenAI-compatible APIs (OpenAI, Azure, self-hosted, etc.)
-- 📊 Configurable max pages to load
-- 🎨 Beautiful result panel with fullscreen and copy features
+### 🤖 AI智能总结
 
-### 🔍 AI Comment Filtering (NEW!)
+- 📝 **推文详情页**：总结推文内容及评论，分析评论观点分布和讨论热点
+- 👤 **用户主页**：总结用户的推文，分析用户关注话题和发言风格
+- 🌐 支持自定义OpenAI兼容的API（OpenAI、Azure、本地部署等）
+- 📊 可配置最大加载页数，控制内容量
+- 🎨 精美的结果展示面板，支持全屏和复制
 
-- 🤖 **Intelligent Classification**: AI automatically categorizes comments into blacklist, spam, or normal
-- 🚫 **Auto-Block Blacklist**: Automatically block users with blacklist comments (porn, scams, hate speech)
-- ⚠️ **Hide Spam**: Hide spam comments with option to manually reveal (prevents AI misjudgment)
-- 👁️ **Show All Spam**: One-click to reveal all hidden spam comments
-- ⚡ **Non-Blocking UX**: Comments display first, AI filters in background
-- 🎯 **Batch Processing**: Process up to 20 comments per API call for efficiency
-- 🔄 **Auto-Watch**: Automatically filter new comments as they load
-- 📊 **Real-time Status**: Visual indicator shows filtering progress
+### 🌍 通用特性
 
-### 🌍 General Features
+- 🌐 多语言支持（中文/英文）- 自动检测系统语言
+- 🎨 精美的悬浮按钮界面
+- ⚙️ 丰富的配置选项
 
-- 🌐 Multi-language support (English/Chinese) - Auto-detects system language
-- 🎨 Beautiful floating button interface
-- ⚙️ Rich configuration options
+## 安装方法
 
-## Installation
+### 1. 安装油猴插件
 
-### 1. Install Tampermonkey Extension
+首先需要在浏览器中安装 Tampermonkey 扩展：
 
-First, install the Tampermonkey extension in your browser:
-
-- **Chrome/Edge**: [Chrome Web Store](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
-- **Firefox**: [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/tampermonkey/)
+- **Chrome/Edge**: [Chrome 网上应用店](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
+- **Firefox**: [Firefox 附加组件](https://addons.mozilla.org/zh-CN/firefox/addon/tampermonkey/)
 - **Safari**: [Mac App Store](https://apps.apple.com/app/tampermonkey/id1482490089)
 
-### 2. Install the Script
+### 2. 安装脚本
 
-After installing Tampermonkey:
+安装完 Tampermonkey 后：
 
-1. Click the Tampermonkey icon in your browser toolbar
-2. Select "Create a new script"
-3. Copy and paste the entire code from `twitter_x_toolkit.user.js` into the editor
-4. Press `Ctrl + S` (Mac: `Cmd + S`) to save
+1. 点击浏览器工具栏中的 Tampermonkey 图标
+2. 选择"添加新脚本"
+3. 将 `twitter_x_toolkit.user.js` 文件中的代码完整复制粘贴到编辑器中或导入<https://github.com/xixiU/awesome-script/raw/refs/heads/master/twitter/twitter_x_toolkit.user.js链接>
+4. 按 `Ctrl + S`（Mac: `Cmd + S`）保存
 
-## Usage
+## 使用方法
 
-### Feature 1: Block Commenters
+### 功能一：屏蔽评论者
 
-#### 1. Open a Tweet Detail Page
+#### 1. 打开推文详情页
 
-Navigate to any tweet's detail page on Twitter/X (URL format: `https://x.com/username/status/tweetID`)
+在推特/X上打开任意一条推文的详情页（URL格式：`https://x.com/用户名/status/推文ID`）
 
-#### 2. Click the Block Button
+#### 2. 点击屏蔽按钮
 
-A purple gradient floating button **"🚫 Block All Commenters"** will appear in the top right corner
+页面右上角会出现紫色渐变的悬浮按钮 **"🚫 屏蔽所有评论者"**
 
-#### 3. Confirm and Execute
+#### 3. 确认并执行
 
-After clicking and confirming, the script will:
+点击按钮后确认，脚本将：
 
-1. Automatically scroll to load all comments
-2. Extract all commenters' usernames
-3. Block each commenter one by one
-4. Display real-time progress and statistics
+1. 自动滚动加载所有评论
+2. 提取所有评论者的用户名
+3. 逐个屏蔽每位评论者
+4. 显示实时进度和统计信息
 
-### Feature 2: AI Summarization
+### 功能二：AI智能总结
 
-#### 1. Configure AI API (First Time Use)
+#### 1. 配置AI API（首次使用）
 
-Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterXToolkit Configuration, and set:
+点击油猴图标 → 脚本设置 → ⚙️ 打开TwitterXToolkit配置，设置：
 
-- **OpenAI API Base URL**: API base URL (e.g., `https://api.openai.com/v1`)
-- **API Key**: Your OpenAI API Key
-- **AI Model**: Model name (e.g., `gpt-3.5-turbo`, `gpt-4`)
-- **Max Scroll Attempts**: Control how many times to scroll for loading content (default: 10, range: 1-50)
+- **OpenAI API地址**：API基础地址（如：`https://api.openai.com/v1`）
+- **API密钥**：你的OpenAI API Key
+- **AI模型**：模型名称（如：`gpt-3.5-turbo`、`gpt-4`）
+- **最大滚动次数**：控制加载内容的次数（默认：10，范围：1-50）
 
-#### 2. Use AI Summarization
+#### 2. 使用AI总结
 
-**On Tweet Detail Page**:
+**在推文详情页**：
 
-- Click the pink gradient **"🤖 AI Summary"** button
-- The script will auto-load the tweet and comments, then generate a summary
-- Summary includes: core viewpoints of original tweet, comment sentiment distribution, discussion hotspots, overall public opinion
+- 点击粉色渐变的 **"🤖 AI总结"** 按钮
+- 脚本将自动加载推文和评论，并生成总结
+- 总结内容包括：原推核心观点、评论观点分布、讨论热点、舆论倾向
 
-**On User Profile Page**:
+**在用户主页**：
 
-- Click the **"🤖 AI Summary"** button
-- The script will load user's tweets and generate a summary
-- Summary includes: main topics of interest, speaking style, core viewpoints, recent active themes
+- 点击 **"🤖 AI总结"** 按钮
+- 脚本将加载用户的推文，并生成总结
+- 总结内容包括：主要关注话题、发言风格、核心观点、活跃主题
 
-#### 3. View and Operate Results
+#### 3. 查看和操作结果
 
-After summarization completes, a result panel will appear, supporting:
+总结完成后将弹出结果面板，支持：
 
-- 📄 **Copy**: One-click copy of summary content
-- 🖥️ **Fullscreen**: View summary in fullscreen mode
-- ❌ **Close**: Close the result panel
+- 📄 **复制**：一键复制总结内容
+- 🖥️ **全屏**：全屏查看总结
+- ❌ **关闭**：关闭结果面板
 
-### Feature 3: AI Comment Filtering
+## 配置选项
 
-#### 1. Configure AI API (Same as AI Summarization)
+点击油猴图标 → 脚本设置 → ⚙️ 打开TwitterXToolkit配置，可进行以下设置：
 
-Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterXToolkit Configuration, and set:
+<p align="center">
+  <img src="images/config.png" alt="配置面板" width="60%" />
+</p>
 
-- **OpenAI API Base URL**: API base URL (e.g., `https://api.openai.com/v1` or Ollama `http://localhost:11434/v1`)
-- **API Key**: Your OpenAI API Key (or any text for Ollama)
-- **AI Model**: Model name (e.g., `gpt-3.5-turbo`, `gpt-4`, or Ollama model like `llama3`)
-- **AI Comment Filter**: Enable/disable automatic AI filtering (default: disabled)
-- **AI Filter Prompt**: Custom prompt for comment classification (optional, leave empty for default)
+### 通用配置
 
-#### 2. How It Works
+- **排除原推作者**：不屏蔽发推文的人（默认：开启）
+- **自动拉黑**：打开推文详情页时自动在后台根据关键词拉黑评论者（默认：关闭，需配置关键词）
+- **最大滚动次数**：加载内容的最大滚动尝试次数，用于屏蔽功能和AI总结功能（默认：5，范围：1-50）
 
-**Automatic Mode** (when enabled):
+### 拉黑关键词配置
 
-- Opens a tweet detail page
-- Comments display immediately (no waiting)
-- AI filters comments in background (2-3 seconds delay)
-- Real-time status indicator shows progress
-- Blacklist comments: automatically hidden and user blocked
-- Spam comments: hidden with "Show" button overlay
-- Normal comments: no changes
+- **拉黑关键词**：只拉黑评论中包含这些关键词的用户（每行一个）。留空则拉黑所有评论者。
+  - 默认预设了常见黄推/骚扰词汇
+  - 点击屏蔽按钮时，确认弹窗会展示当前生效的关键词
 
-**Manual Mode**:
+### AI总结功能配置
 
-- Click the **"🔍 AI Filter Comments"** button
-- Script scrolls to load all comments first
-- Then runs AI filtering on all comments
-- Same classification and hiding behavior as automatic mode
+- **OpenAI API地址**：OpenAI兼容的API基础地址（默认：`https://api.openai.com/v1`）
+- **API密钥**：你的OpenAI API Key（必填）
+- **AI模型**：使用的模型名称（默认：`gpt-3.5-turbo`）
 
-**Show Hidden Comments**:
+## 注意事项
 
-- Click the **"👁️ Show All Spam"** button
-- Reveals all hidden spam and blacklist comments
-- Useful if you suspect AI misjudgment
+⚠️ **重要提示**：
 
-#### 3. Comment Categories
+### 屏蔽功能
 
-AI classifies comments into three types:
+1. **不可撤销**：屏蔽操作完成后，需要手动到设置中解除屏蔽
+2. **速率限制**：脚本已内置延迟（每个用户间隔1秒），避免触发推特的速率限制
+3. **仅限详情页**：屏蔽功能必须在推文详情页使用
+4. **谨慎使用**：建议只在真正需要的时候使用，避免误伤无辜用户
 
-1. **Blacklist** (🚫): Porn, scams, hate speech, severe harassment → Auto-block user + hide comment
-2. **Spam** (⚠️): Ads, off-topic, low-quality → Hide with "Show" button
-3. **Normal** (✅): Legitimate discussion → No action
+### AI总结功能
 
-## Configuration Options
+1. **API密钥安全**：请妥善保管你的API Key，不要分享给他人
+2. **API费用**：使用OpenAI API会产生费用，请注意控制使用量
+3. **兼容性**：支持所有OpenAI兼容的API服务（如Azure OpenAI、本地部署的模型等）
+4. **加载时间**：根据内容量和网络情况，总结可能需要10-60秒
+5. **权限要求**：需要登录推特账号才能查看内容
 
-Click Tampermonkey icon → Script Settings → ⚙️ Open TwitterXToolkit Configuration:
+## 工作原理
 
-### General Configuration
+### 屏蔽功能
 
-- **Exclude Original Poster**: Don't block the person who posted the tweet (default: enabled)
-- **Auto Block**: Automatically block keyword-matching commenters in the background when opening a tweet detail page (default: disabled, requires keywords to be set)
-- **Max Scroll Attempts**: Maximum scroll attempts for loading content, used for both blocking and AI summarization (default: 5, range: 1-50)
+1. **评论加载**：自动滚动页面，触发推特的懒加载机制，加载更多评论
+2. **用户识别**：解析页面DOM结构，提取所有评论者的用户名
+3. **UI操作**：模拟用户点击操作（点击"..."菜单 → 点击"屏蔽" → 确认屏蔽）
+4. **进度反馈**：实时更新按钮状态，显示处理进度
 
-### Block Keywords Configuration
+### AI总结功能
 
-- **Block Keywords**: Only block commenters whose comments contain these keywords (one per line). Leave empty to block all commenters.
-  - Default keywords include common spam/solicitation phrases
-  - The confirmation dialog shows the active keywords before blocking
+1. **页面类型检测**：自动识别当前页面类型（推文详情页/用户主页）
+2. **内容提取**：
+   - 推文详情页：提取原推内容 + 自动滚动加载评论
+   - 用户主页：自动滚动加载用户的推文
+3. **内容组织**：将提取的内容格式化为结构化数据
+4. **API调用**：调用OpenAI兼容的API进行智能总结
+5. **结果展示**：在精美的面板中展示Markdown格式的总结结果
 
-### AI Summarization Configuration
+## 技术栈
 
-- **OpenAI API Base URL**: OpenAI-compatible API base URL (default: `https://api.openai.com/v1`)
-- **API Key**: Your OpenAI API Key (required)
-- **AI Model**: Model name to use (default: `gpt-3.5-turbo`)
-
-### AI Comment Filtering Configuration
-
-- **AI Comment Filter**: Enable automatic AI filtering of comments (default: disabled)
-- **AI Filter Prompt**: Custom prompt for AI comment classification (optional, leave empty for default)
-  - The default prompt classifies comments into blacklist, spam, and normal categories
-  - You can customize the classification criteria by providing your own prompt
-
-## Important Notes
-
-⚠️ **Important**:
-
-### Block Feature
-
-1. **Irreversible**: After blocking is complete, you need to manually unblock users in settings
-2. **Rate Limiting**: Built-in delay (1 second between each user) to avoid triggering Twitter's rate limits
-3. **Detail Page Only**: Block feature only works on tweet detail pages
-4. **Use With Caution**: Recommended to use only when truly needed to avoid blocking innocent users
-
-### AI Summarization Feature
-
-1. **API Key Security**: Keep your API Key safe and don't share it with others
-2. **API Costs**: Using OpenAI API will incur costs, please monitor your usage
-3. **Compatibility**: Supports all OpenAI-compatible API services (Azure OpenAI, self-hosted models, etc.)
-4. **Loading Time**: Depending on content volume and network conditions, summarization may take 10-60 seconds
-5. **Login Required**: Need to be logged into Twitter to view content
-
-### AI Comment Filtering Feature
-
-1. **API Costs**: Each filtering session calls the AI API, monitor your usage and costs
-2. **Accuracy**: AI classification may have false positives/negatives, always review before trusting
-3. **Batch Processing**: Processes up to 20 comments per API call to reduce costs
-4. **Auto-Block**: Blacklist comments trigger automatic user blocking (irreversible)
-5. **Manual Review**: Use "Show All Spam" button to review hidden comments if needed
-6. **Ollama Support**: Works with local Ollama models (e.g., `http://localhost:11434/v1` + `llama3`)
-7. **Custom Prompts**: Advanced users can customize classification criteria via AI Filter Prompt setting
-
-## How It Works
-
-### Block Feature
-
-1. **Comment Loading**: Automatically scrolls the page to trigger Twitter's lazy loading mechanism
-2. **User Identification**: Parses DOM structure to extract all commenters' usernames
-3. **UI Operation**: Simulates user clicks (click "..." menu → click "Block" → confirm block)
-4. **Progress Feedback**: Real-time button status updates showing progress
-
-### AI Summarization Feature
-
-1. **Page Type Detection**: Automatically identifies current page type (tweet detail / user profile)
-2. **Content Extraction**:
-   - Tweet Detail Page: Extract original tweet content + auto-scroll to load comments
-   - User Profile Page: Auto-scroll to load user's tweets
-3. **Content Organization**: Format extracted content into structured data
-4. **API Call**: Call OpenAI-compatible API for intelligent summarization
-5. **Result Display**: Display Markdown-formatted summary results in a beautiful panel
-
-### AI Comment Filtering Feature
-
-1. **Non-Blocking Display**: Comments render immediately, AI filtering runs in background
-2. **Comment Extraction**: Parse DOM to extract all visible comments with usernames and text
-3. **Batch Classification**: Send comments to AI API in batches of 20 for efficiency
-4. **Result Processing**:
-   - Blacklist: Hide comment + auto-block user via Twitter API
-   - Spam: Add semi-transparent overlay with "Show" button
-   - Normal: No action
-5. **Real-time Updates**: Status indicator shows filtering progress
-6. **Auto-Watch**: MutationObserver monitors new comments and filters them automatically
-
-## Tech Stack
-
-- Vanilla JavaScript
+- 原生 JavaScript
 - Tampermonkey GM API
-  - `GM_setValue` / `GM_getValue`: Persistent config storage
-  - `GM_xmlhttpRequest`: Cross-origin API calls
-  - `GM_addStyle`: Inject styles
-  - `GM_registerMenuCommand`: Register menu commands
-- DOM Manipulation
-- MutationObserver (listen for route changes)
-- OpenAI API (supports various compatible AI services through proxy)
+  - `GM_setValue` / `GM_getValue`：持久化配置存储
+  - `GM_xmlhttpRequest`：跨域API调用
+  - `GM_addStyle`：注入样式
+  - `GM_registerMenuCommand`：注册菜单命令
+- DOM 操作
+- MutationObserver（监听路由变化）
+- OpenAI API（通过代理支持各种兼容的AI服务）
 
-## FAQ
+## 常见问题
 
-### Block Feature Related
+### 屏蔽功能相关
 
-#### Q: Why do some users fail to block?
+#### Q: 为什么有些用户屏蔽失败？
 
-A: Possible reasons:
+A: 可能的原因：
 
-- User is already blocked
-- User account has been deleted or suspended
-- Network latency caused page elements not to load completely
-- Twitter page structure has changed
+- 用户已经被屏蔽
+- 用户账号已被删除或冻结
+- 网络延迟导致页面元素未加载完成
+- 推特页面结构变化
 
-#### Q: Can I batch unblock users?
+### Q: 可以批量解除屏蔽吗？
 
-A: The script currently only supports blocking. To unblock:
+A: 脚本目前只支持屏蔽功能，解除屏蔽需要：
 
-1. Go to Settings → Privacy and safety → Blocked accounts
-2. Manually unblock each user
+1. 进入设置 → 隐私和安全 → 已屏蔽的账号
+2. 手动逐个解除屏蔽
 
-#### Q: Will I get banned by Twitter?
+### Q: 会不会被推特封号？
 
-A: The script has built-in reasonable delay mechanisms, simulating real user operations. Normal use won't lead to banning. However:
+A: 脚本已经内置了合理的延迟机制，模拟真实用户操作，正常使用不会导致封号。但请：
 
-- Don't use too frequently
-- Don't block large numbers of users in a short time
-- Follow Twitter's Terms of Service
+- 不要频繁使用
+- 不要短时间内屏蔽大量用户
+- 遵守推特使用条款
 
-#### Q: Does it support mobile?
+#### Q: 支持移动端吗？
 
-A: The script is designed for desktop browsers. Mobile browsers typically don't support Tampermonkey.
+A: 脚本主要针对桌面端浏览器设计，移动端浏览器通常不支持油猴插件。
 
-### AI Summarization Related
+### AI总结功能相关
 
-#### Q: Which AI services are supported?
+#### Q: 支持哪些AI服务？
 
-A: Supports all OpenAI-compatible API services, including:
+A: 支持所有OpenAI兼容的API服务，包括：
 
-- Official OpenAI API (`https://api.openai.com/v1`)
+- OpenAI官方API（`https://api.openai.com/v1`）
 - Azure OpenAI Service
-- Domestic API proxy services
-- Self-hosted compatible models (e.g., LocalAI, vLLM, etc.)
+- 国内API代理服务
+- 本地部署的兼容模型（如LocalAI、vLLM等）
 
-Just configure the correct API URL and key.
+只需在配置中填写正确的API地址和密钥即可。
 
-#### Q: Why does summarization fail or timeout?
+#### Q: 为什么总结失败或超时？
 
-A: Possible reasons:
+A: 可能的原因：
 
-- API key not configured or expired
-- Incorrect API URL configuration
-- Network connection issues
-- API service temporarily unavailable
-- Request timeout (default 60 seconds)
+- API密钥未配置或已失效
+- API地址配置错误
+- 网络连接问题
+- API服务暂时不可用
+- 请求超时（默认60秒）
 
-#### Q: How to save on API costs?
+#### Q: 如何节省API费用？
 
-A: Suggestions:
+A: 建议：
 
-- Use `gpt-3.5-turbo` instead of `gpt-4` (about 10x cheaper)
-- Reduce "Max Scroll Attempts" configuration (default 3, loads less content)
-- Only use summarization when needed
-- Consider using self-hosted models
+- 使用 `gpt-3.5-turbo` 而非 `gpt-4`（便宜约10倍）
+- 减少"最大滚动次数"配置（默认3次，加载更少内容）
+- 只在需要时使用总结功能
+- 考虑使用本地部署的模型
 
-#### Q: What language is the summary in?
+#### Q: 总结的内容是什么语言？
 
-A: Regardless of the original language, summaries are output in **Chinese** using structured Markdown format for easy reading.
+A: 无论原文使用何种语言，总结都会使用**中文**输出，并采用结构化的Markdown格式，便于阅读。
 
-#### Q: Can I customize the summary prompts?
+#### Q: 可以自定义总结的提示词吗？
 
-A: The current version doesn't support custom prompts and uses built-in optimized prompts. This feature may be added in future versions.
+A: 当前版本暂不支持自定义提示词，使用内置的优化提示词。未来版本可能会添加此功能。
 
-## Changelog
+## 更新日志
+
+### v2.4.2 (2026-05-10)
+
+- 🎯 **AI 过滤前置规则**：在调用 AI 之前先用两条本地规则拦一道明显的机器人模板刷屏，命中直接拉黑不烧 token：
+  - **规则 1 单词夹断**：一条评论里出现 ≥3 次"字母 + emoji/符号 + 字母"的单词内硬拆（如 `t🔥hose tac💼tful insince🌂re word🎊s`）
+  - **规则 2 机器人装饰字符**：一条评论里出现 ≥3 次冷僻 Unicode 装饰字符（如 `ꦿ ༺ ༻ ꙳ ✦ ⋆ ⛭` 等藏文/爪哇文/古教会斯拉夫文附加符号），这些字符普通键盘和 emoji 选择器打不出来，正常用户基本不会用
+- 🧹 **过滤 AI 无效返回**：AI 偶尔会返回评论列表里根本不存在的 username（如单字母 `d`），之前会触发 `Failed to get user ID` 报错；现在先按真实 username 集合过滤一遍，只处理存在的用户，无效名打 warn 日志
+
+### v2.4.1 (2026-05-08)
+
+- 🎯 **修复工具栏跳动**：页面切换（主页 ↔ 推文详情页）时保留工具栏的当前实际位置，避免因不同页面视口大小差异导致按钮位置跳动
+- 🔕 **新增通知开关**：配置面板新增"启用通知"选项（默认关闭），控制【AI过滤中】【AI过滤完成】【AI总结中】【屏蔽操作完成】等进度类弹窗通知，关闭后可减少干扰（错误提示如"未配置API Key"等仍会正常弹出）
+- 🪟 **修复工具栏按钮消失**：启动时把持久化的工具栏位置钳进当前视口，窗口变矮 / 换小屏后旧的越界坐标不再导致主按钮跑到看不见的地方
+- 🎯 **AI 过滤注入黑名单关键词**：把用户在"拉黑关键词"里配置的词列表直接拼进 AI 分类 prompt，并声明为最高优先级——命中任一关键词的评论 username 必须归入 blacklist，无视话题相关性和其他特征
+- 🚀 **移除 max_tokens 上限**：AI 总结和 AI 过滤请求不再强制截断（原为 2000 / 4000），让评论量大或模型需要完整输出时不被截掉
+- 🐛 **修复原推作者识别**：改用 URL `/username/status/id` 解析，不再依赖"第一个 article"，回复链页面不会再把被回复者误判成原推作者
+- 🔇 **修复日志刷屏**：把"已排除原推作者"日志从热路径里移走，改为在手动/自动拉黑入口各打一次，不再被 MutationObserver 反复触发
+- 🎯 **AI 过滤提示词优化**：把原推文内容注入 prompt，指示模型将与原文无关 / 机器人风格灌水判为 spam；显式列出 emoji 夹杂英文抒情、装饰符号刷屏（⦋ ✧ ⟡ 〥 ⋆ ...）等典型特征
+- 📦 **AI 过滤协议简化**：模型只需返回 `{"blacklist":[...],"spam":[...]}` 两组 username 数组，不再要求每条评论都出带 category/reason 的对象，小模型（Qwen 7B 等）稳定性显著提升
+- 🛟 **抢救式解析**：模型吐出损坏 JSON 时，通过正则从中抽出 `blacklist` 和 `spam` 两个用户名数组，不再整批丢失
+- 😀 **评论支持 emoji 提取**：遍历子节点读取 `<img alt>`，正确还原 Twitter 的 Twemoji 图像为真实 emoji 字符；原推抽取、滚动扫描、AI 过滤三处都已适配
+- 📝 **日志打印原评论**：AI 过滤的控制台日志改为输出原始评论内容，而不是空的 reason，形如 `⚠️ 垃圾评论 @user：<原始文本>`
 
 ### v2.4.0 (2026-05-06)
 
-- 🔍 **AI Comment Filtering**: Intelligent comment classification using AI (blacklist/spam/normal)
-- 🚫 **Auto-Block Blacklist**: Automatically block users with blacklist comments (porn, scams, hate speech)
-- ⚠️ **Hide Spam**: Hide spam comments with "Show" button overlay to prevent AI misjudgment
-- 👁️ **Show All Spam**: One-click button to reveal all hidden spam comments
-- ⚡ **Non-Blocking UX**: Comments display first, AI filters in background (2-3s delay)
-- 🎯 **Batch Processing**: Process up to 20 comments per API call for efficiency
-- 🔄 **Auto-Watch**: Automatically filter new comments as they load
-- 📊 **Real-time Status**: Visual indicator shows filtering progress
-- 🎨 **Manual Trigger**: "🔍 AI Filter Comments" button for manual filtering
-- 🌐 **Ollama Support**: Works with local Ollama models (e.g., llama3)
-- ⚙️ **Custom Prompts**: Advanced users can customize classification criteria
+- 🔍 **AI 评论过滤**：AI 自动将评论分类为 blacklist / spam / normal
+- 🚫 **自动拉黑黑名单**：blacklist 评论对应的用户自动拉黑（色情、诈骗、仇恨言论等）
+- ⚠️ **隐藏垃圾评论**：spam 评论以遮罩形式隐藏，保留"显示"按钮防止误判
+- 👁️ **一键显示隐藏评论**："👁️ Show All Spam" 按钮一键展开所有被隐藏的评论
+- ⚡ **非阻塞体验**：评论先展示，AI 在后台异步过滤（延迟 2-3 秒）
+- 🎯 **批量处理**：每次 API 调用最多处理 20 条评论，降低成本
+- 🔄 **自动监听**：新加载的评论会被自动识别并过滤
+- 📊 **实时状态**：右上角指示器显示过滤进度
+- 🎨 **手动触发**：提供"🔍 AI 过滤评论"按钮用于手动过滤
+- 🌐 **支持 Ollama**：兼容本地 Ollama 模型（例如 `http://localhost:11434/v1` + `llama3`）
+- ⚙️ **自定义提示词**：高级用户可通过 AI 过滤提示词设置自定义分类标准
 
 ### v2.3.1 (2026-04-29)
 
-- 🔍 **Keyword Filtering**: Only block commenters whose comments contain configured keywords
-- 🤖 **Auto-Block Mode**: Automatically block in background when opening tweet detail pages (uses MutationObserver, no page scrolling)
-- 📋 **Confirmation Dialog**: Shows active keywords before blocking so you know what will be filtered
-- 📊 **Detailed Results**: Block result dialog now lists all successfully blocked and failed usernames
-- 🎨 **Config Panel Layout**: Checkbox options (Exclude Original Poster / Auto Block) displayed side by side
-- 🐛 **Fixed**: Auto-block no longer triggers on timeline pages, only on tweet detail pages
-- 🐛 **Fixed**: Auto-block no longer forces page scroll (silent mode)
-- 🐛 **Fixed**: Manual block now respects max scroll attempts to prevent infinite loops
-- ⚡ **Optimized**: Default max scroll attempts reduced from 10 to 5; scroll interval reduced to 800ms
+- 🔍 **关键词过滤**：只拉黑评论中包含配置关键词的用户
+- 🤖 **自动拉黑模式**：打开推文详情页时自动在后台拉黑（使用 MutationObserver，不主动滚动页面）
+- 📋 **确认弹窗优化**：点击屏蔽前展示当前生效的关键词列表
+- 📊 **结果详情**：屏蔽完成后展示成功和失败的用户名列表
+- 🎨 **配置面板布局**：checkbox 配置项（排除原推作者/自动拉黑）并排显示
+- 🐛 **修复**：自动拉黑不再在时间线页面触发，只在推文详情页运行
+- 🐛 **修复**：自动拉黑不再强制滚动页面（静默模式）
+- 🐛 **修复**：手动拉黑添加最大滚动次数限制，避免无限循环卡顿
+- ⚡ **优化**：默认最大滚动次数从 10 降至 5；滚动间隔从 1000ms 优化至 800ms
 
 ### v2.1 (2026-02-09)
 
-- 🔧 **Optimized Default Config**: Increased default max scroll attempts from 3 to 10 for more content
-- 🎨 **Comprehensive Panel Optimization**:
-  - Fixed content area scrolling issue
-  - Fullscreen mode now utilizes entire screen space
-  - Unified button style with circular icon buttons (⛶ 📋 ×)
-  - Enhanced hover effects and interaction feedback
-- 📦 **Code Refactoring**: Abstracted generic scroll loading function, reducing 150+ lines of duplicate code
-- ⚡ **Performance Boost**: Optimized content extraction logic, improved code maintainability
+- 🔧 **优化默认配置**：最大滚动次数默认值从3提升至10，获取更多内容
+- 🎨 **全面优化结果面板**：
+  - 修复内容区无法滚动的问题
+  - 全屏模式充分利用整个屏幕空间
+  - 统一按钮样式为圆形符号按钮（⛶ 📋 ×）
+  - 优化hover效果和交互反馈
+- 📦 **代码重构**：抽象通用滚动加载函数，减少150+行重复代码
+- ⚡ **性能提升**：优化内容提取逻辑，提升代码可维护性
 
 ### v2.0.2 (2026-02-09)
 
-- 🔧 Optimized configuration: Merged "Max Scroll Attempts" and "Max Pages to Fetch" into a unified config
-- 📊 Unified scroll behavior: Blocking and AI summarization share the same configuration
-- ⚡ Simplified config panel: Reduced redundant settings, improved UX
-- 🔢 Extended config range: Max scroll attempts expanded from 1-20 to 1-50
+- 🔧 优化配置项：合并"最大滚动次数"和"最大加载页数"为统一配置
+- 📊 统一滚动行为：屏蔽和AI总结功能共用同一配置项
+- ⚡ 简化配置面板：减少冗余配置，提升用户体验
+- 🔢 扩展配置范围：最大滚动次数从1-20扩展为1-50
 
 ### v2.0.1 (2026-02-09)
 
-- 🎨 Optimized AI summary result panel: Adapted to Twitter dark mode
-- 🔧 Improved Markdown rendering: Auto-clean code block markers, optimized styles
-- 📝 Renamed to "Twitter X Toolkit" for multi-functional positioning and future expansion
-- 🌈 Enhanced color scheme: Dark background, highlighted text, better readability
+- 🎨 优化AI总结结果展示面板：适配Twitter暗色模式
+- 🔧 改进Markdown渲染：自动清理代码块标记，优化样式
+- 📝 重命名为"推特X工具箱"，体现多功能定位，便于未来扩展
+- 🌈 优化配色方案：暗色背景、高亮文字、更好的可读性
 
 ### v2.0 (2026-02-09)
 
-- 🚀 **Major Update**: Added AI-powered summarization feature
-- 🤖 Support summarizing tweets and comments (tweet detail page)
-- 👤 Support summarizing user tweets (user profile page)
-- 🌐 Support all OpenAI-compatible API services
-- 📊 Configurable max pages to load
-- 🎨 Beautiful result panel with fullscreen and copy features
-- ⚙️ Updated config manager with more configuration options
+- 🚀 **重大更新**：新增AI智能总结功能
+- 🤖 支持总结推文和评论（推文详情页）
+- 👤 支持总结用户推文（用户主页）
+- 🌐 支持所有OpenAI兼容的API服务
+- 📊 可配置最大加载页数
+- 🎨 精美的结果展示面板，支持全屏和复制
+- ⚙️ 更新配置管理器，支持更多配置选项
 
 ### v1.4 (2026-02-01)
 
-- ✨ Added configurable max scroll attempts (default: 3, adjustable from 1-20)
-- 🔧 Optimized comment loading performance with customizable scroll behavior
+- ✨ 新增可配置的最大滚动次数（默认：3次，可调整范围：1-20）
+- 🔧 优化评论加载性能，支持自定义滚动行为
 
 ### v1.3 (2026-02-01)
 
-- ✨ Added configuration: Exclude Original Poster (default: enabled, don't block tweet author)
-- 🔧 Integrated ConfigManager for configuration management
-- 🌐 Multi-language support (English/Chinese), auto-detect system language
-- 🎯 One-click block all commenters under a tweet
-- 🔄 Auto-load all comments with real-time progress display
-- 🎨 Beautiful floating button interface
+- ✨ 新增配置选项：排除原推作者（默认开启，不屏蔽发推文的人）
+- 🔧 集成 ConfigManager 实现配置管理
+- 🌐 支持多语言（中文/英文），自动检测系统语言
+- 🎯 一键屏蔽推文下的所有评论者
+- 🔄 自动加载所有评论并显示实时进度
+- 🎨 精美的悬浮按钮界面
 
-## License
+## 许可证
 
 MIT License
 
-## Author
+## 作者
 
 xixiU
 
-## Support
+## 贡献
 
-If you encounter any issues or have suggestions, please:
+欢迎提交 Issue 和 Pull Request！
 
-1. Check the FAQ section above
-2. Submit an issue on GitHub
-3. Contact the author
+## 免责声明
+
+本脚本仅供学习交流使用，使用者需自行承担使用本脚本产生的一切后果。作者不对使用本脚本造成的任何损失负责。

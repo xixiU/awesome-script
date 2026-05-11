@@ -1,8 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @namespace    http://tampermonkey.net/
-// @version      2.4.0
+// @version      2.4.2
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -73,7 +72,7 @@
             configBlockKeywordsHelp: 'Only block commenters whose comments contain these keywords (one per line). Leave empty to block all.',
             configAutoBlockLabel: 'Auto Block',
             configAutoBlockHelp: 'Automatically block commenters with keywords when opening tweet detail page (runs in background)',
-            consoleKeywordMatched: 'Keyword matched [{keyword}] for @{username}: {text}',
+            consoleKeywordMatched: 'Keywblacklistord matched [{keyword}] for @{username}: {text}',
             consoleKeywordSkipped: 'Skipped @{username}: no keywords matched',
             consoleAutoBlockStart: 'Auto-block started in background...',
             consoleAutoBlockComplete: 'Auto-block completed: {success} blocked, {failed} failed',
@@ -87,6 +86,8 @@
             configAiApiKeyHelp: 'Your OpenAI API Key',
             configAiModelLabel: 'AI Model',
             configAiModelHelp: 'Model name (e.g., gpt-4, gpt-3.5-turbo)',
+            configAiMultimodalLabel: 'Multimodal Model',
+            configAiMultimodalHelp: 'Enable if your model supports image recognition (e.g., GPT-4V, Claude 3.5, Qwen-VL). Avatar images will be sent to the model for text recognition.',
             alertSummarizing: 'AI summarization in progress, please wait...',
             alertNoApiKey: 'Please configure your OpenAI API Key first!\nClick the config panel to set it up.',
             alertNoContent: 'No content found to summarize!',
@@ -105,11 +106,13 @@
             configAiFilterEnabledHelp: 'Use AI to automatically filter spam and blacklist comments',
             configAiFilterPromptLabel: 'AI Filter Prompt',
             configAiFilterPromptHelp: 'Custom prompt for AI comment classification (leave empty for default)',
+            configBioBlacklistPrefixesLabel: 'Bio Blacklist Prefixes',
+            configBioBlacklistPrefixesHelp: 'Users whose profile bio starts with any of these prefixes are blacklisted directly. One prefix per line. Runs in the background via the user info API, no browser tabs opened.',
             consoleAiFilterStart: 'AI comment filtering started...',
             consoleAiFilterProgress: 'AI filtering: {current}/{total} comments processed',
             consoleAiFilterComplete: 'AI filtering completed: {blacklist} blacklisted, {spam} spam, {normal} normal',
-            consoleAiFilterBlacklist: '🚫 Blacklisted @{username}: {reason}',
-            consoleAiFilterSpam: '⚠️ Spam detected @{username}: {reason}',
+            consoleAiFilterBlacklist: '🚫 Blacklisted {displayName} (@{username}): {text}',
+            consoleAiFilterSpam: '⚠️ Spam detected {displayName} (@{username}): {text}',
             consoleAiFilterNormal: '✅ Normal comment @{username}',
             consoleAiFilterError: '❌ AI filtering error: {error}',
             spamCommentLabel: '⚠️ Spam Comment',
@@ -121,7 +124,9 @@
             aiFilterButtonLoading: '🔄 AI Filtering...',
             alertAiFilterInProgress: 'AI filtering is in progress, please wait...',
             alertShowAllSpam: 'Show all hidden spam comments?',
-            buttonShowAllSpam: '👁️ Show All Spam'
+            buttonShowAllSpam: '👁️ Show All Spam',
+            configEnableNotificationsLabel: 'Enable Notifications',
+            configEnableNotificationsHelp: 'Show popup notifications like [AI Filtering], [AI Filtering Complete], [AI Summarizing], etc. Disable to reduce interruptions'
         },
         zh: {
             // Toolbar相关
@@ -176,6 +181,8 @@
             configAiApiKeyHelp: '你的OpenAI API Key',
             configAiModelLabel: 'AI模型',
             configAiModelHelp: '模型名称（如：gpt-4, gpt-3.5-turbo）',
+            configAiMultimodalLabel: '多模态模型',
+            configAiMultimodalHelp: '如果你的模型支持图像识别（如 GPT-4V、Claude 3.5、Qwen-VL），请开启。开启后会将头像图片发送给模型识别其中的文字。',
             alertSummarizing: 'AI总结进行中，请稍候...',
             alertNoApiKey: '请先配置你的OpenAI API Key！\n点击配置面板进行设置。',
             alertNoContent: '未找到可总结的内容！',
@@ -194,11 +201,13 @@
             configAiFilterEnabledHelp: '使用AI自动过滤垃圾评论和黑名单评论',
             configAiFilterPromptLabel: 'AI过滤提示词',
             configAiFilterPromptHelp: '自定义AI评论分类的提示词（留空使用默认）',
+            configBioBlacklistPrefixesLabel: '个人简介前缀黑名单',
+            configBioBlacklistPrefixesHelp: '个人简介以这些前缀开头的用户直接拉黑，每行一个。后台通过用户信息接口异步检查，不会打开浏览器标签页。',
             consoleAiFilterStart: 'AI评论过滤已启动...',
             consoleAiFilterProgress: 'AI过滤中：已处理 {current}/{total} 条评论',
             consoleAiFilterComplete: 'AI过滤完成：黑名单 {blacklist} 条，垃圾 {spam} 条，正常 {normal} 条',
-            consoleAiFilterBlacklist: '🚫 拉黑 @{username}：{reason}',
-            consoleAiFilterSpam: '⚠️ 垃圾评论 @{username}：{reason}',
+            consoleAiFilterBlacklist: '🚫 拉黑 {displayName} (@{username})：{text}',
+            consoleAiFilterSpam: '⚠️ 垃圾评论 {displayName} (@{username})：{text}',
             consoleAiFilterNormal: '✅ 正常评论 @{username}',
             consoleAiFilterError: '❌ AI过滤错误：{error}',
             spamCommentLabel: '⚠️ 垃圾评论',
@@ -210,7 +219,9 @@
             aiFilterButtonLoading: '🔄 AI过滤中...',
             alertAiFilterInProgress: 'AI过滤正在进行中，请稍候...',
             alertShowAllSpam: '显示所有被隐藏的垃圾评论？',
-            buttonShowAllSpam: '👁️ 显示所有垃圾评论'
+            buttonShowAllSpam: '👁️ 显示所有垃圾评论',
+            configEnableNotificationsLabel: '启用通知',
+            configEnableNotificationsHelp: '开启后会显示【AI过滤中】【AI过滤完成】【AI总结中】等弹窗通知，关闭可减少干扰'
         }
     };
 
@@ -245,9 +256,14 @@
         aiBaseUrl: 'https://api.openai.com/v1',
         aiApiKey: '',
         aiModel: 'gpt-3.5-turbo',
+        aiMultimodal: false,
         // AI过滤功能配置
         aiFilterEnabled: false,
-        aiFilterPrompt: ''
+        aiFilterPrompt: '',
+        // 个人简介前缀黑名单（每行一个前缀，命中前缀的用户直接拉黑）
+        bioBlacklistPrefixes: '已入驻约p平台\n已入驻曰泡平台',
+        // 通知配置
+        enableNotifications: false
     }, {
         i18n: i18n,
         lang: currentLang
@@ -308,6 +324,12 @@
             placeholder: 'gpt-3.5-turbo',
             help: t('configAiModelHelp')
         },
+        {
+            key: 'aiMultimodal',
+            label: t('configAiMultimodalLabel'),
+            type: 'checkbox',
+            help: t('configAiMultimodalHelp')
+        },
         // AI过滤功能配置项
         {
             key: 'aiFilterEnabled',
@@ -321,20 +343,59 @@
             type: 'textarea',
             placeholder: '',
             help: t('configAiFilterPromptHelp')
+        },
+        {
+            key: 'bioBlacklistPrefixes',
+            label: t('configBioBlacklistPrefixesLabel'),
+            type: 'textarea',
+            placeholder: '已入驻约p平台',
+            help: t('configBioBlacklistPrefixesHelp')
+        },
+        // 通知配置项
+        {
+            key: 'enableNotifications',
+            label: t('configEnableNotificationsLabel'),
+            type: 'checkbox',
+            help: t('configEnableNotificationsHelp')
         }
     ]);
 
-    // Restructure config panel: put checkbox items side by side
+    // Restructure config panel: group checkbox items by feature, 2-column grid per group
     function restructureConfigPanel() {
         const content = document.querySelector('#TwitterXToolkit-config-panel .config-content');
         if (!content) return;
 
-        const checkboxGroups = Array.from(content.querySelectorAll('.config-form-group'))
-            .filter(g => g.querySelector('input[type="checkbox"]'));
-        if (checkboxGroups.length < 2) return;
+        // 按功能分组，顺序就是最终展示顺序
+        const groups = [
+            {
+                title: currentLang === 'zh' ? '屏蔽功能' : 'Blocking',
+                keys: ['excludeOriginalPoster', 'autoBlock']
+            },
+            {
+                title: currentLang === 'zh' ? 'AI 功能' : 'AI Features',
+                keys: ['aiFilterEnabled', 'aiMultimodal']
+            },
+            {
+                title: currentLang === 'zh' ? '通知' : 'Notifications',
+                keys: ['enableNotifications']
+            }
+        ];
 
-        // Fix internal layout of each checkbox group: [checkbox] [label] on one row
-        checkboxGroups.forEach(group => {
+        // 找到所有 checkbox group
+        const allGroups = Array.from(content.querySelectorAll('.config-form-group'));
+        const checkboxGroupByKey = new Map();
+        allGroups.forEach(g => {
+            const input = g.querySelector('input[type="checkbox"]');
+            if (!input) return;
+            // input id 形如 'TwitterXToolkit-excludeOriginalPoster'
+            const key = input.id.replace(/^TwitterXToolkit-/, '');
+            checkboxGroupByKey.set(key, g);
+        });
+
+        if (checkboxGroupByKey.size === 0) return;
+
+        // 规范每个 checkbox group 内部：[checkbox] [label] 一行，help 独立成行
+        checkboxGroupByKey.forEach(group => {
             const label = group.querySelector('.config-label');
             const input = group.querySelector('input[type="checkbox"]');
             const help = group.querySelector('.config-help');
@@ -342,25 +403,45 @@
             const row = document.createElement('div');
             row.style.cssText = 'display:flex;align-items:center;gap:8px;';
             input.style.cssText = 'width:auto;margin:0;cursor:pointer;flex-shrink:0;';
-            label.style.cssText = 'margin:0;cursor:pointer;font-weight:500;';
+            label.style.cssText = 'margin:0;cursor:pointer;font-weight:500;font-size:14px;color:#374151;';
             row.appendChild(input);
             row.appendChild(label);
 
-            // Rebuild group: row + help
             group.innerHTML = '';
             group.appendChild(row);
             if (help) {
-                help.style.marginLeft = '24px';
+                help.style.cssText = 'margin:4px 0 0 24px;font-size:12px;color:#6b7280;line-height:1.4;';
                 group.appendChild(help);
             }
-            group.style.cssText = 'flex:1;margin-bottom:0;';
+            group.style.cssText = 'margin:0;padding:8px 10px;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;';
         });
 
-        // Wrap all checkbox groups in a single flex row
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'display:flex;gap:16px;margin-bottom:20px;';
-        content.insertBefore(wrapper, checkboxGroups[0]);
-        checkboxGroups.forEach(g => wrapper.appendChild(g));
+        // 为每个分组构建 section，插到 content 最前面（倒序 insertBefore，保证正序）
+        const firstChild = content.firstChild;
+        for (let i = groups.length - 1; i >= 0; i--) {
+            const grp = groups[i];
+            const presentKeys = grp.keys.filter(k => checkboxGroupByKey.has(k));
+            if (presentKeys.length === 0) continue;
+
+            const section = document.createElement('div');
+            section.style.cssText = 'margin-bottom:16px;';
+
+            const title = document.createElement('div');
+            title.textContent = grp.title;
+            title.style.cssText = 'font-size:13px;font-weight:600;color:#667eea;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #e5e7eb;letter-spacing:0.3px;';
+            section.appendChild(title);
+
+            const grid = document.createElement('div');
+            // 2 列 grid，小屏自动回退成 1 列
+            grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;';
+            presentKeys.forEach(key => {
+                const g = checkboxGroupByKey.get(key);
+                grid.appendChild(g);
+            });
+            section.appendChild(grid);
+
+            content.insertBefore(section, firstChild);
+        }
     }
 
     restructureConfigPanel();
@@ -368,6 +449,13 @@
     // Utility function: delay
     function sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Utility function: show alert with notification toggle
+    function showAlert(message) {
+        if (config.get('enableNotifications')) {
+            alert(message);
+        }
     }
 
     // ==================== 页面类型检测 ====================
@@ -394,6 +482,29 @@
 
     // ==================== 内容提取功能 ====================
 
+    // Extract text from an element, preserving emojis rendered as <img alt="😀">
+    // Twitter uses Twemoji-style <img> tags for emojis, which innerText skips.
+    function getElementTextWithEmoji(el) {
+        if (!el) return '';
+        let text = '';
+        el.childNodes.forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                text += node.textContent;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.tagName === 'IMG') {
+                    // Only take alt for emoji/sticker images, not arbitrary inline images.
+                    const alt = node.getAttribute('alt') || '';
+                    if (alt) text += alt;
+                } else if (node.tagName === 'BR') {
+                    text += '\n';
+                } else {
+                    text += getElementTextWithEmoji(node);
+                }
+            }
+        });
+        return text;
+    }
+
     // Extract main tweet content
     function extractTweetContent() {
         try {
@@ -402,7 +513,7 @@
 
             // Extract tweet text
             const tweetTextElement = firstArticle.querySelector('[data-testid="tweetText"]');
-            const tweetText = tweetTextElement ? tweetTextElement.innerText : '';
+            const tweetText = getElementTextWithEmoji(tweetTextElement);
 
             // Extract author info
             const userLink = firstArticle.querySelector('a[href^="/"][role="link"]');
@@ -455,7 +566,7 @@
 
                 try {
                     const tweetTextElement = article.querySelector('[data-testid="tweetText"]');
-                    const tweetText = tweetTextElement ? tweetTextElement.innerText : '';
+                    const tweetText = getElementTextWithEmoji(tweetTextElement);
 
                     const userLink = article.querySelector('a[href^="/"][role="link"]');
                     let author = '';
@@ -575,8 +686,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                         content: prompt
                     }
                 ],
-                temperature: 0.7,
-                max_tokens: 2000
+                temperature: 0.7
             };
 
             GM_xmlhttpRequest({
@@ -617,57 +727,299 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     /**
      * 使用AI对评论进行分类
      * @param {Array} comments - 评论数组 [{username, text}, ...]
-     * @returns {Promise<Array>} - 分类结果 [{username, category, reason}, ...]
-     *   category: 'blacklist' | 'spam' | 'normal'
+     * @param {Object} [mainTweet] - 原推内容 { author, text }，用于判断与原文的相关性
+     * @returns {Promise<Object>} - 分类结果 { blacklist: string[], spam: string[] }
      */
-    async function classifyCommentsByAI(comments) {
+    // 从 AI 输出中抢救出两个 username 数组
+    // 策略：先清理常见损坏模式 → 整体解析 → 失败则用正则抽字符串数组
+    function extractUsernameBuckets(raw) {
+        const empty = { blacklist: [], spam: [] };
+        if (!raw || typeof raw !== 'string') return empty;
+
+        const text = raw
+            .replace(/```json\n?/g, '')
+            .replace(/```\n?/g, '')
+            .replace(/,\s*,+/g, ',')
+            .replace(/,\s*([}\]])/g, '$1')
+            .trim();
+
+        // 尝试整体解析
+        try {
+            const parsed = JSON.parse(text);
+            if (parsed && typeof parsed === 'object') {
+                return {
+                    blacklist: sanitizeUsernameArray(parsed.blacklist),
+                    spam: sanitizeUsernameArray(parsed.spam)
+                };
+            }
+        } catch (_) { /* fall through */ }
+
+        // 正则兜底：分别抓 "blacklist": [...] 与 "spam": [...] 块
+        const pick = (key) => {
+            const m = text.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*)\\]`));
+            if (!m) return [];
+            const usernames = [];
+            const re = /"([^"\\]+)"/g;
+            let um;
+            while ((um = re.exec(m[1])) !== null) usernames.push(um[1]);
+            return sanitizeUsernameArray(usernames);
+        };
+
+        return {
+            blacklist: pick('blacklist'),
+            spam: pick('spam')
+        };
+    }
+
+    function sanitizeUsernameArray(arr) {
+        if (!Array.isArray(arr)) return [];
+        const seen = new Set();
+        const out = [];
+        for (const v of arr) {
+            if (typeof v !== 'string') continue;
+            const name = v.trim().replace(/^@/, '');
+            if (name && !seen.has(name)) {
+                seen.add(name);
+                out.push(name);
+            }
+        }
+        return out;
+    }
+
+    // 检测"英文单词被符号/emoji 硬拆开"的模板化刷屏
+    // 规则：一条评论中出现 >= THRESHOLD 次"字母 + 非字母非空格字符 + 字母"的夹断模式
+    //       就判定为机器人刷屏，直接归入 blacklist
+    // 例：t🔥hose、tac💼tful、insince🌂re🌺、word🎊s —— 四处夹断 → blacklist
+    const WORD_SPLIT_THRESHOLD = 3;
+    function countBrokenWordPatterns(text) {
+        if (!text || typeof text !== 'string') return 0;
+        // [A-Za-z] + 单个"非字母且非空白且非 ASCII 标点"的字符 + [A-Za-z]
+        // 用 Unicode 属性类确保能覆盖 emoji、各类装饰符号（⦋ ✧ ⟡ 〥 ⋆ 🔥 💼 🎊 等）
+        // \p{L} 是字母，\p{N} 是数字；我们要的是"既不是字母也不是空白也不是常规标点"的单字符
+        const re = /[A-Za-z](?:[^\s\p{L}\p{N}.,!?'":;\-()\[\]{}<>+=*/\\|@#$%^&~`_]+)[A-Za-z]/gu;
+        const matches = text.match(re);
+        return matches ? matches.length : 0;
+    }
+
+    function isBrokenWordSpam(text) {
+        return countBrokenWordPatterns(text) >= WORD_SPLIT_THRESHOLD;
+    }
+
+    // 机器人装饰字符名单：普通键盘/输入法/emoji 选择器里根本选不到，只有脚本生成的
+    // 模板刷屏会用到。不含常用 emoji（😂 ❤️ 👍 🔥 等），避免误伤爱用 emoji 的用户。
+    // 一条评论里出现名单内字符 >= WORD_SPLIT_THRESHOLD 次（不要求不同）就判黑。
+    const BOT_DECOR_CHARS = new Set([
+        // 藏语装饰/爪哇语辅助字符
+        '༺', '༻', // ༺ ༻
+        '༘', '༙', // ༘ ༙
+        '༄', '༅', '༂', // ༄ ༅ ༂
+        '࿇', // ࿇
+        'ꦿ', // ꦿ
+        // 古教会斯拉夫语附加符号
+        '꙳', // ꙳
+        '꙰', '꙱', '꙲', // ꙰ ꙱ ꙲
+        // 装饰括号
+        'Ɥ', // ꞎ
+        '﹅', '﹆', // ﹅ ﹆
+        '⺀', '⺁', '⺂', '⺃', // ⺀ ⺁ ⺂ ⺃
+        '⟡', // ⟡
+        '〥', // 〥
+        '⦂', '⧋', '⧊', // ⦂ ⧋ ⧊
+        '⦓', '⦔', // ⦓ ⦔
+        // 罕见星形符号
+        '✦', '✧', '✩', // ✦ ✧ ✩
+        '⋆', // ⋆
+        // 其它
+        '⬮', '⬯', // ⬮ ⬯
+        '⚬', '⚭', // ⚬ ⚭
+        '⛭', '⛮', // ⛭ ⛮
+        '⛬', // ⛬
+        '꧁', '꧂', // ꧁ ꧂
+        '٭', // ٭
+        // 花哨装饰括号
+        '⦘', '⦙', // ⦘ ⦙
+        '⦊', '⦋', // ⦊ ⦋
+        '⦌', '⦍', '⦎', '⦏', // ⦌ ⦍ ⦎ ⦏
+    ]);
+
+    function countBotDecorChars(text) {
+        if (!text || typeof text !== 'string') return 0;
+        let n = 0;
+        // 用 for...of 正确处理代理对，避免误判
+        for (const ch of text) {
+            if (BOT_DECOR_CHARS.has(ch)) n++;
+        }
+        return n;
+    }
+
+    function isBotDecorSpam(text) {
+        return countBotDecorChars(text) >= WORD_SPLIT_THRESHOLD;
+    }
+
+    // 用户简介缓存：username -> 简介字符串（或 null 表示拉取失败）
+    // 缓存粒度是整个会话，避免同一用户重复请求
+    const userBioCache = new Map();
+
+    // 通过 Twitter 内部 GraphQL 接口后台拉取用户简介
+    // 复用 blockUserByAPI 已有的鉴权（bearer + ct0 cookie）
+    async function fetchUserBio(username) {
+        if (userBioCache.has(username)) return userBioCache.get(username);
+
+        try {
+            const csrfToken = document.cookie.match(/ct0=([^;]+)/)?.[1];
+            if (!csrfToken) {
+                userBioCache.set(username, null);
+                return null;
+            }
+
+            const variables = encodeURIComponent(JSON.stringify({
+                screen_name: username,
+                withSafetyModeUserFields: true
+            }));
+            const features = encodeURIComponent(JSON.stringify({
+                hidden_profile_subscriptions_enabled: true,
+                rweb_tipjar_consumption_enabled: true,
+                responsive_web_graphql_exclude_directive_enabled: true,
+                verified_phone_label_enabled: false,
+                subscriptions_verification_info_is_identity_verified_enabled: true,
+                subscriptions_verification_info_verified_since_enabled: true,
+                highlights_tweets_tab_ui_enabled: true,
+                responsive_web_twitter_article_notes_tab_enabled: true,
+                subscriptions_feature_can_gift_premium: true,
+                creator_subscriptions_tweet_preview_api_enabled: true,
+                responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+                responsive_web_graphql_timeline_navigation_enabled: true
+            }));
+
+            const response = await fetch(
+                `https://x.com/i/api/graphql/G3KGOASz96M-Qu0nwmGXNg/UserByScreenName?variables=${variables}&features=${features}`,
+                {
+                    method: 'GET',
+                    headers: {
+                        'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+                        'x-csrf-token': csrfToken,
+                        'x-twitter-auth-type': 'OAuth2Session',
+                        'x-twitter-active-user': 'yes',
+                        'x-twitter-client-language': 'en'
+                    },
+                    credentials: 'include'
+                }
+            );
+
+            if (!response.ok) {
+                userBioCache.set(username, null);
+                return null;
+            }
+
+            const data = await response.json();
+            const bio = data?.data?.user?.result?.legacy?.description || '';
+            userBioCache.set(username, bio);
+            return bio;
+        } catch (error) {
+            console.warn(`拉取 @${username} 简介失败:`, error.message);
+            userBioCache.set(username, null);
+            return null;
+        }
+    }
+
+    // 简介前缀匹配检查：简介去掉前导空白后以任一前缀开头就算命中
+    function matchBioPrefix(bio, prefixes) {
+        if (!bio || !Array.isArray(prefixes) || prefixes.length === 0) return null;
+        const trimmed = bio.replace(/^\s+/, '');
+        for (const prefix of prefixes) {
+            if (trimmed.startsWith(prefix)) return prefix;
+        }
+        return null;
+    }
+
+    // 批量检查一组 username 的简介，返回命中用户的 Set 和命中的前缀 Map
+    // 控制并发（每批 5 个）和批次间延迟（300ms），避免触发 Twitter rate limit
+    async function checkBiosInBackground(usernames, prefixes) {
+        const hits = new Map(); // username -> matched prefix
+        if (!prefixes || prefixes.length === 0 || usernames.length === 0) {
+            return hits;
+        }
+
+        const BATCH_SIZE = 5;
+        const BATCH_DELAY_MS = 300;
+
+        for (let i = 0; i < usernames.length; i += BATCH_SIZE) {
+            const batch = usernames.slice(i, i + BATCH_SIZE);
+            const bios = await Promise.all(batch.map(u => fetchUserBio(u)));
+            batch.forEach((username, idx) => {
+                const bio = bios[idx];
+                const matched = matchBioPrefix(bio, prefixes);
+                if (matched) hits.set(username, matched);
+            });
+            if (i + BATCH_SIZE < usernames.length) {
+                await sleep(BATCH_DELAY_MS);
+            }
+        }
+
+        return hits;
+    }
+
+    // 前置 spam 检测：命中两条规则中的任一条就判黑名单
+    // 返回命中的规则名（null 表示未命中）
+    function detectSpamRule(text) {
+        if (isBrokenWordSpam(text)) return 'broken-word';
+        if (isBotDecorSpam(text)) return 'bot-decor';
+        return null;
+    }
+
+    async function classifyCommentsByAI(comments, mainTweet) {
         return new Promise((resolve, reject) => {
             const baseUrl = config.get('aiBaseUrl') || 'https://api.openai.com/v1';
             const apiKey = config.get('aiApiKey');
             const model = config.get('aiModel') || 'gpt-3.5-turbo';
             const customPrompt = config.get('aiFilterPrompt') || '';
+            const keywordsRaw = config.get('blockKeywords') || '';
+            const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
 
             if (!apiKey) {
                 reject(new Error(t('alertNoApiKey')));
                 return;
             }
 
-            // 默认提示词
-            const defaultPrompt = `你是一个专业的社交媒体内容审核助手。请对以下推特评论进行分类，判断每条评论是否为垃圾评论或黑名单评论。
+            const tweetSection = mainTweet && mainTweet.text
+                ? `原推文（作者 @${mainTweet.author || 'unknown'}）：
+${mainTweet.text.substring(0, 500)}`
+                : '原推文：（未能获取）';
+
+            const keywordsSection = keywords.length > 0
+                ? `
+
+用户黑名单关键词（最高优先级，必须严格执行）：
+${keywords.map(k => `- ${k}`).join('\n')}
+规则：任何评论内容中只要出现上述关键词中的任意一个（作为完整词或子串），该评论的 username 必须归入 blacklist，无视评论的其他特征或风格，也无视是否与原推文相关。`
+                : '';
+
+            // 默认提示词：只让模型返回需要隐藏/拉黑的 username 列表，降低对小模型的要求
+            const defaultPrompt = `你是一个社交媒体内容审核助手。请结合原推文内容，从以下评论中筛选出需要处理的用户名，只输出 username，不需要解释。
+
+${tweetSection}${keywordsSection}
 
 分类标准：
-1. **blacklist（黑名单）**：包含以下特征的评论
-   - 色情、约炮、线下见面等性暗示内容
-   - 诈骗、钓鱼、恶意链接
-   - 严重人身攻击、辱骂、威胁
-   - 极端政治煽动、仇恨言论
-   - 明显的机器人刷屏
+- blacklist：（最高优先级）包含上方"用户黑名单关键词"的评论（若已配置）；色情、约炮、线下见面等性暗示；诈骗、钓鱼、恶意链接；严重人身攻击、辱骂、威胁；极端政治煽动、仇恨言论；明显的机器人刷屏。
+- spam：无意义重复内容；过度营销、广告推广；与原推文主题完全无关的内容（包括无意义的外文刷屏、与原文话题不相关的闲聊、大量 emoji/符号夹杂无实质内容的英文抒情句等）；低质量灌水；可疑引流。
+- 其它（与原推文相关的正常讨论、提问、赞同、批评等）视为 normal，不需要返回。
 
-2. **spam（垃圾评论）**：包含以下特征的评论
-   - 无意义的重复内容
-   - 过度营销、广告推广
-   - 与主题完全无关的内容
-   - 低质量的灌水评论
-   - 可疑的引流行为
+判定"与原推文无关"时请宽松：只要评论明显偏离原推文的话题或语境，就归入 spam。典型机器人刷屏特征：大量装饰性符号（如 ⦋ ✧ ⟡ 〥 ⋆ 等）、整句英文诗 / 抒情语但与原文主题无关、emoji 与无意义英文短句夹杂的模板化文本。
 
-3. **normal（正常评论）**：不符合以上两类的评论
-   - 正常的讨论、观点表达
-   - 合理的批评或赞同
-   - 相关的提问或回复
-
-请以JSON数组格式返回结果，每个元素包含：username（用户名）、category（分类）、reason（简短理由，10字以内）
+注意：昵称（displayName）也是重要的判断依据。如果昵称包含"线下"、"约"、"全国安排"、"见面"等引流暗示词，即使评论内容看似正常，也应归入 blacklist。
+${config.get('aiMultimodal') ? `
+头像识别（你的模型支持图像识别）：每条评论都提供了头像图片 URL。如果头像中包含"线下"、"约"、"全国安排"、"见面"、"加V"、"联系方式"等引流暗示文字，该用户应归入 blacklist。` : ''}
 
 评论列表：
-${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`).join('\n')}
+${comments.map((c, i) => {
+                const avatarPart = config.get('aiMultimodal') ? ` | 头像: ${c.avatarUrl}` : '';
+                return `${i + 1}. 昵称: ${c.displayName} ,username: @${c.username}${avatarPart},评论: ${c.text.substring(0, 200)}`;
+            }).join('\n\n')}
 
-返回格式示例：
-[
-  {"username": "user1", "category": "blacklist", "reason": "色情内容"},
-  {"username": "user2", "category": "spam", "reason": "无关广告"},
-  {"username": "user3", "category": "normal", "reason": "正常讨论"}
-]
+严格按以下 JSON 格式返回（不要任何解释文字，不要 markdown 代码块）：
+{"blacklist":["user1","user2"],"spam":["user3"]}
 
-请只返回JSON数组，不要包含其他文字说明。`;
+如果没有匹配的用户，返回：{"blacklist":[],"spam":[]}`;
 
             const prompt = customPrompt || defaultPrompt;
 
@@ -679,8 +1031,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
                         content: prompt
                     }
                 ],
-                temperature: 0.3, // 降低温度以获得更一致的分类结果
-                max_tokens: 4000
+                temperature: 0.3 // 降低温度以获得更一致的分类结果
             };
 
             GM_xmlhttpRequest({
@@ -699,21 +1050,9 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
                         if (response.status === 200) {
                             const data = JSON.parse(response.responseText);
-                            const content = data.choices?.[0]?.message?.content || '[]';
-
-                            // 尝试解析JSON结果
-                            let result;
-                            try {
-                                // 移除可能的markdown代码块标记
-                                const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-                                result = JSON.parse(cleanContent);
-                            } catch (e) {
-                                console.error('Failed to parse AI response as JSON:', e);
-                                // 如果解析失败，返回空数组
-                                result = [];
-                            }
-
-                            resolve(result);
+                            const content = data.choices?.[0]?.message?.content || '';
+                            const buckets = extractUsernameBuckets(content);
+                            resolve(buckets);
                         } else {
                             reject(new Error(`API request failed: ${response.status} ${response.statusText}\n${response.responseText}`));
                         }
@@ -850,47 +1189,73 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
     /**
      * 处理AI过滤结果
-     * @param {Array} results - AI分类结果
+     * @param {Object} buckets - { blacklist: string[], spam: string[] }
+     * @param {Map<string,string>} [textMap] - username -> 原始评论文本，用于日志输出
      */
-    async function processAIFilterResults(results) {
-        let blacklistCount = 0;
-        let spamCount = 0;
-        let normalCount = 0;
+    async function processAIFilterResults(buckets, dataMap) {
+        const blacklist = Array.isArray(buckets?.blacklist) ? buckets.blacklist : [];
+        const spam = Array.isArray(buckets?.spam) ? buckets.spam : [];
 
-        for (const result of results) {
-            const { username, category, reason } = result;
+        // 过滤掉不存在的用户名（AI 可能返回不存在的 username）
+        const validUsernames = new Set(dataMap.keys());
+        const validBlacklist = blacklist.filter(u => validUsernames.has(u));
+        const validSpam = spam.filter(u => validUsernames.has(u));
 
-            if (category === 'blacklist') {
-                blacklistCount++;
-                console.log(t('consoleAiFilterBlacklist', { username, reason }));
-
-                // 标记为黑名单并隐藏
-                markCommentByCategory(username, 'blacklist', reason);
-
-                // 自动拉黑用户
-                await blockUserByAPI(username);
-                await sleep(500); // 避免频率限制
-
-            } else if (category === 'spam') {
-                spamCount++;
-                console.log(t('consoleAiFilterSpam', { username, reason }));
-
-                // 标记为垃圾评论
-                markCommentByCategory(username, 'spam', reason);
-
-            } else {
-                normalCount++;
-                console.log(t('consoleAiFilterNormal', { username }));
-            }
+        // 记录被过滤掉的无效用户名
+        const invalidBlacklist = blacklist.filter(u => !validUsernames.has(u));
+        const invalidSpam = spam.filter(u => !validUsernames.has(u));
+        if (invalidBlacklist.length > 0) {
+            console.warn(`⚠️ AI 返回了不存在的黑名单用户: ${invalidBlacklist.join(', ')}`);
+        }
+        if (invalidSpam.length > 0) {
+            console.warn(`⚠️ AI 返回了不存在的垃圾评论用户: ${invalidSpam.join(', ')}`);
         }
 
+        // 去重：同一用户若同时出现在两类中，以 blacklist 优先
+        const blacklistSet = new Set(validBlacklist);
+        const spamSet = new Set(validSpam.filter(u => !blacklistSet.has(u)));
+
+        const previewText = (u) => {
+            const data = (dataMap && dataMap.get && dataMap.get(u)) || {};
+            const raw = data.text || '';
+            // 单行化并截断，避免日志过长
+            return raw.replace(/\s+/g, ' ').trim().substring(0, 120);
+        };
+
+        const getDisplayName = (u) => {
+            const data = (dataMap && dataMap.get && dataMap.get(u)) || {};
+            return data.displayName || u;
+        };
+
+        for (const username of blacklistSet) {
+            console.log(t('consoleAiFilterBlacklist', {
+                displayName: getDisplayName(username),
+                username,
+                text: previewText(username)
+            }));
+            markCommentByCategory(username, 'blacklist', '');
+            await blockUserByAPI(username);
+            await sleep(500);
+        }
+
+        for (const username of spamSet) {
+            console.log(t('consoleAiFilterSpam', {
+                displayName: getDisplayName(username),
+                username,
+                text: previewText(username)
+            }));
+            markCommentByCategory(username, 'spam', '');
+        }
+
+        const blacklistCount = blacklistSet.size;
+        const spamCount = spamSet.size;
         console.log(t('consoleAiFilterComplete', {
             blacklist: blacklistCount,
             spam: spamCount,
-            normal: normalCount
+            normal: 0
         }));
 
-        return { blacklistCount, spamCount, normalCount };
+        return { blacklistCount, spamCount, normalCount: 0 };
     }
 
     /**
@@ -940,6 +1305,11 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
      * @param {boolean} isComplete - 是否完成
      */
     function updateAIFilterStatus(status, isComplete = false) {
+        // 如果通知开关关闭，不显示状态指示器
+        if (!config.get('enableNotifications')) {
+            return;
+        }
+
         let indicator = document.getElementById('ai-filter-status');
 
         if (!indicator) {
@@ -964,10 +1334,19 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
     // Create block button
     // Create floating toolbar with draggable functionality
     function createFloatingToolbar() {
-        // Load saved position
+        // Load saved position, clamp to current viewport in case the window shrank
+        // (previously persisted coords may now fall outside the visible area).
+        const BTN_SIZE = 56;
+        const MARGIN = 20;
+        const defaultX = Math.max(MARGIN, window.innerWidth - BTN_SIZE - MARGIN);
+        const defaultY = Math.max(MARGIN, window.innerHeight - BTN_SIZE - MARGIN);
+        const rawX = GM_getValue('toolbar_position_x', defaultX);
+        const rawY = GM_getValue('toolbar_position_y', defaultY);
+        const maxX = Math.max(0, window.innerWidth - BTN_SIZE);
+        const maxY = Math.max(0, window.innerHeight - BTN_SIZE);
         const savedPosition = {
-            x: GM_getValue('toolbar_position_x', window.innerWidth - 80),
-            y: GM_getValue('toolbar_position_y', window.innerHeight - 80)
+            x: Math.max(0, Math.min(rawX, maxX)),
+            y: Math.max(0, Math.min(rawY, maxY))
         };
 
         // Create container
@@ -1425,7 +1804,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
     // Handle AI summarize
     async function handleAISummarize() {
         if (isSummarizing) {
-            alert(t('alertSummarizing'));
+            showAlert(t('alertSummarizing'));
             return;
         }
 
@@ -1498,22 +1877,12 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         }
     }
 
-    // Get original poster's username from the first tweet
+    // Get original poster's username from the tweet detail URL
+    // URL format: /{username}/status/{id}
     function getOriginalPosterUsername() {
         try {
-            // The first article is usually the original tweet
-            const firstArticle = document.querySelector('article[data-testid="tweet"]');
-            if (!firstArticle) return null;
-
-            // Find the username link in the first article
-            const userLink = firstArticle.querySelector('a[href^="/"][role="link"]');
-            if (!userLink) return null;
-
-            const href = userLink.getAttribute('href');
-            if (href && href.match(/^\/[^\/]+$/)) {
-                const username = href.substring(1);
-                return username;
-            }
+            const match = location.pathname.match(/^\/([^\/]+)\/status\/\d+/);
+            if (match) return match[1];
         } catch (error) {
             console.error('Failed to get original poster username:', error);
         }
@@ -1522,13 +1891,9 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
     // Get all commenters with their comment text
     function getAllCommentersWithText() {
-        const commentersMap = new Map(); // username -> comment text
+        const commentersMap = new Map(); // username -> { text, displayName, avatarUrl }
         const excludeOriginal = config.get('excludeOriginalPoster');
         const originalPoster = excludeOriginal ? getOriginalPosterUsername() : null;
-
-        if (originalPoster && excludeOriginal) {
-            console.log(t('consoleExcludedOriginal', { username: originalPoster }));
-        }
 
         // Comments on X/Twitter are usually in article tags
         const articles = document.querySelectorAll('article[data-testid="tweet"]');
@@ -1552,16 +1917,29 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
                 }
             });
 
-            // Get comment text
+            // Get comment text, display name and avatar URL
             if (username) {
                 const tweetTextElement = article.querySelector('[data-testid="tweetText"]');
-                const tweetText = tweetTextElement ? tweetTextElement.innerText : '';
+                const tweetText = getElementTextWithEmoji(tweetTextElement);
 
-                // Store username and text (append if user has multiple comments)
+                // Get display name (nickname)
+                const displayNameElement = article.querySelector('[data-testid="User-Name"] span');
+                const displayName = displayNameElement ? displayNameElement.innerText : username;
+
+                // Get avatar URL
+                const avatarImg = article.querySelector('img[draggable="true"]');
+                const avatarUrl = avatarImg ? avatarImg.src : '';
+
+                // Store username, text, displayName and avatarUrl (append if user has multiple comments)
                 if (commentersMap.has(username)) {
-                    commentersMap.set(username, commentersMap.get(username) + '\n' + tweetText);
+                    const existing = commentersMap.get(username);
+                    commentersMap.set(username, {
+                        text: existing.text + '\n' + tweetText,
+                        displayName: existing.displayName,
+                        avatarUrl: existing.avatarUrl
+                    });
                 } else {
-                    commentersMap.set(username, tweetText);
+                    commentersMap.set(username, { text: tweetText, displayName, avatarUrl });
                 }
             }
         });
@@ -1785,7 +2163,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
     // Main handler: block all commenters
     async function handleBlockAllCommenters() {
         if (isBlocking) {
-            alert(t('alertProcessing'));
+            showAlert(t('alertProcessing'));
             return;
         }
 
@@ -1838,14 +2216,22 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
         const commentersMap = getAllCommentersWithText();
 
+        // Log excluded original poster once (if applicable)
+        if (config.get('excludeOriginalPoster')) {
+            const originalPoster = getOriginalPosterUsername();
+            if (originalPoster) {
+                console.log(t('consoleExcludedOriginal', { username: originalPoster }));
+            }
+        }
+
         // Filter commenters by keywords (if keywords are set, reuse parsed keywords from confirm step)
         let commenters;
         if (keywords.length > 0) {
             commenters = [];
-            for (const [username, text] of commentersMap) {
-                const matchedKeyword = keywords.find(kw => text.includes(kw));
+            for (const [username, data] of commentersMap) {
+                const matchedKeyword = keywords.find(kw => data.text.includes(kw));
                 if (matchedKeyword) {
-                    console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: text.substring(0, 50) }));
+                    console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: data.text.substring(0, 50) }));
                     commenters.push(username);
                 } else {
                     console.log(t('consoleKeywordSkipped', { username }));
@@ -1856,7 +2242,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         }
 
         if (commenters.length === 0) {
-            alert(t('alertNoCommenters'));
+            showAlert(t('alertNoCommenters'));
             isBlocking = false;
             updateButtonStatus(t('buttonText'), false);
             return;
@@ -1892,7 +2278,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         const successList = blockedUsers.length > 0 ? blockedUsers.map(u => '@' + u).join(', ') : 'None';
         const failedList = failedUsers.length > 0 ? failedUsers.map(u => '@' + u).join(', ') : 'None';
 
-        alert(t('alertComplete', {
+        showAlert(t('alertComplete', {
             success: blockedCount,
             failed: failedCount,
             total: commenters.length,
@@ -1920,6 +2306,14 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         if (keywords.length === 0) return; // auto block requires keywords
 
         console.log(t('consoleAutoBlockStart'));
+
+        // Log excluded original poster once (if applicable)
+        if (config.get('excludeOriginalPoster')) {
+            const originalPoster = getOriginalPosterUsername();
+            if (originalPoster) {
+                console.log(t('consoleExcludedOriginal', { username: originalPoster }));
+            }
+        }
 
         // Process currently visible comments without scrolling
         await processCurrentComments(keywords);
@@ -1951,12 +2345,12 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         const commentersMap = getAllCommentersWithText();
         const toBlock = [];
 
-        for (const [username, text] of commentersMap) {
+        for (const [username, data] of commentersMap) {
             if (autoBlockProcessed.has(username)) continue; // Skip already processed
 
-            const matchedKeyword = keywords.find(kw => text.includes(kw));
+            const matchedKeyword = keywords.find(kw => data.text.includes(kw));
             if (matchedKeyword) {
-                console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: text.substring(0, 50) }));
+                console.log(t('consoleKeywordMatched', { keyword: matchedKeyword, username, text: data.text.substring(0, 50) }));
                 toBlock.push(username);
                 autoBlockProcessed.add(username);
             }
@@ -2005,14 +2399,83 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
             // 获取当前可见的评论
             const commentersMap = getAllCommentersWithText();
-            const comments = Array.from(commentersMap.entries())
+            const allComments = Array.from(commentersMap.entries())
                 .filter(([username]) => !aiFilterProcessed.has(username))
-                .map(([username, text]) => ({ username, text }));
+                .map(([username, data]) => ({
+                    username,
+                    text: data.text,
+                    displayName: data.displayName,
+                    avatarUrl: data.avatarUrl
+                }));
 
-            if (comments.length === 0) {
+            if (allComments.length === 0) {
                 aiFilterInProgress = false;
                 return;
             }
+
+            // 前置规则检测：
+            //   规则 1 broken-word：英文单词被符号/emoji 硬拆开 >= WORD_SPLIT_THRESHOLD 次
+            //   规则 2 bot-decor：评论中包含机器人装饰字符 >= WORD_SPLIT_THRESHOLD 次（冷僻 Unicode，普通输入法打不出）
+            // 任一命中直接判黑名单，不送 AI，节省 token 也更稳定
+            const preFilterBlacklist = [];
+            const preFilterReason = new Map(); // username -> label
+            const comments = [];
+            for (const c of allComments) {
+                const rule = detectSpamRule(c.text);
+                if (rule) {
+                    preFilterBlacklist.push(c.username);
+                    const ruleLabel = rule === 'broken-word'
+                        ? `单词夹断 ≥${WORD_SPLIT_THRESHOLD}`
+                        : `机器人装饰字符 ≥${WORD_SPLIT_THRESHOLD}`;
+                    preFilterReason.set(c.username, ruleLabel);
+                    console.log(`🎯 前置命中（${ruleLabel}）@${c.username}: ${c.text.substring(0, 80)}`);
+                } else {
+                    comments.push(c);
+                }
+            }
+
+            // 规则 3 bio-prefix：后台查询用户简介，命中配置前缀的直接判黑名单
+            // 只对"未被文本规则命中"的用户查询，避免浪费请求
+            const bioPrefixesRaw = config.get('bioBlacklistPrefixes') || '';
+            const bioPrefixes = bioPrefixesRaw.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+            if (bioPrefixes.length > 0 && comments.length > 0) {
+                const candidateNames = comments.map(c => c.username);
+                const bioHits = await checkBiosInBackground(candidateNames, bioPrefixes);
+                if (bioHits.size > 0) {
+                    const remainingComments = [];
+                    for (const c of comments) {
+                        const matched = bioHits.get(c.username);
+                        if (matched) {
+                            preFilterBlacklist.push(c.username);
+                            const label = `简介前缀「${matched}」`;
+                            preFilterReason.set(c.username, label);
+                            console.log(`🎯 前置命中（${label}）@${c.username}`);
+                        } else {
+                            remainingComments.push(c);
+                        }
+                    }
+                    comments.length = 0;
+                    comments.push(...remainingComments);
+                }
+            }
+
+            // 先处理前置命中的黑名单（直接拉黑，不走 AI）
+            if (preFilterBlacklist.length > 0) {
+                const preMap = new Map(allComments
+                    .filter(c => preFilterBlacklist.includes(c.username))
+                    .map(c => [c.username, { text: c.text, displayName: c.displayName, avatarUrl: c.avatarUrl }]));
+                await processAIFilterResults({ blacklist: preFilterBlacklist, spam: [] }, preMap);
+                preFilterBlacklist.forEach(u => aiFilterProcessed.add(u));
+            }
+
+            if (comments.length === 0) {
+                updateAIFilterStatus(t('aiFilterStatusComplete'), true);
+                aiFilterInProgress = false;
+                return;
+            }
+
+            // 提取原推文内容，用于让 AI 判断评论与原文的相关性
+            const mainTweet = extractTweetContent();
 
             // 显示状态指示器
             updateAIFilterStatus(t('aiFilterStatusProcessing', { current: 0, total: comments.length }));
@@ -2023,12 +2486,17 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
 
             for (let i = 0; i < comments.length; i += batchSize) {
                 const batch = comments.slice(i, i + batchSize);
+                const batchDataMap = new Map(batch.map(c => [c.username, {
+                    text: c.text,
+                    displayName: c.displayName,
+                    avatarUrl: c.avatarUrl
+                }]));
 
                 try {
-                    const results = await classifyCommentsByAI(batch);
+                    const results = await classifyCommentsByAI(batch, mainTweet);
 
                     // 处理结果
-                    await processAIFilterResults(results);
+                    await processAIFilterResults(results, batchDataMap);
 
                     // 标记已处理
                     batch.forEach(c => aiFilterProcessed.add(c.username));
@@ -2088,7 +2556,7 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
      */
     async function handleManualAIFilter() {
         if (aiFilterInProgress) {
-            alert(t('alertAiFilterInProgress'));
+            showAlert(t('alertAiFilterInProgress'));
             return;
         }
 
@@ -2220,9 +2688,16 @@ ${comments.map((c, i) => `${i + 1}. @${c.username}: ${c.text.substring(0, 200)}`
         const url = location.href;
         if (url !== lastUrl) {
             lastUrl = url;
-            // Remove old toolbar
+            // Preserve toolbar position before removing (to avoid jumping between pages with different viewport sizes)
             const oldToolbar = document.getElementById('x-toolkit-toolbar');
-            if (oldToolbar) oldToolbar.remove();
+            if (oldToolbar) {
+                const currentLeft = parseInt(oldToolbar.style.left) || 0;
+                const currentTop = parseInt(oldToolbar.style.top) || 0;
+                // Save current actual position so createFloatingToolbar uses it instead of stale saved position
+                GM_setValue('toolbar_position_x', currentLeft);
+                GM_setValue('toolbar_position_y', currentTop);
+                oldToolbar.remove();
+            }
             // Remove old AI filter status indicator
             const oldStatus = document.getElementById('ai-filter-status');
             if (oldStatus) oldStatus.remove();
