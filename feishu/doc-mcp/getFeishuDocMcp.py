@@ -555,25 +555,121 @@ async def wiki_read_document(wiki_token: str) -> str:
     return await _get_document_raw_content(auth_token, obj_token)
 
 
-# 注：飞书文档搜索 API (/open-apis/suite/docs-api/search/object) 仅支持 user_access_token，
-# 不支持 tenant_access_token（应用身份），因此暂时注释掉。
-# 如需搜索功能，需接入 OAuth 获取 user_access_token。
-# @mcp.tool()
-# async def wiki_search(keyword: str, wiki_token: str = None, count: int = 10) -> str:
-#     """【知识库】在知识库中搜索包含关键词的文档（全文检索）。
-#
-#     递归收集知识库节点，然后并发读取 docx 文档内容进行关键词匹配。
-#     注：飞书搜索 API 仅支持 user_access_token，当前使用 tenant_access_token
-#     无法调用，因此采用遍历+并发方式实现。
-#     参数:
-#         keyword: 搜索关键词
-#         wiki_token: 知识库节点 token（从 /wiki/xxx 的 URL 中提取），
-#                    搜索该节点及其所有子文档
-#         count: 最多返回结果数（默认 10）
-#     返回:
-#         匹配的文档列表 JSON，包含 title、node_token、obj_token、snippet
-#     """
-#     pass
+# === wiki_search 全文搜索 ===
+# 状态：有 bug，搜索不到已知存在的内容（如 note_simplify_websocket_url）
+# 已知问题：
+#   1. 飞书服务端搜索 API (/open-apis/suite/docs-api/search/object) 仅支持 user_access_token，
+#      不支持 tenant_access_token（应用身份），无法使用服务端索引搜索
+#   2. 当前方案是遍历节点 + 并发读取文档内容 + 客户端匹配，但搜索结果为空
+#   3. 待排查：
+#      - _collect_nodes 是否正确收集了所有深层子节点（递归是否完整）
+#      - _get_all_pages 在 wiki_search 内联调用时分页是否正常
+#      - 文档内容是否真的包含关键词（raw_content 返回的纯文本格式是否有差异）
+#      - 并发 cancel 逻辑是否导致任务被提前取消
+# 优化方向（待 bug 修复后）：
+#   - 复用 HTTP 连接池（避免每次请求 TCP+TLS 握手）
+#   - 高并发 Semaphore(15) 读取文档内容
+#   - asyncio.as_completed + 提前终止（找够结果立即 cancel 剩余任务）
+@mcp.tool()
+async def wiki_search(keyword: str, wiki_token: str = None, count: int = 10) -> str:
+    """【知识库】在知识库中搜索包含关键词的文档（全文检索）。
+
+    注：飞书搜索 API 仅支持 user_access_token，当前使用 tenant_access_token
+    无法调用服务端搜索，因此采用并发遍历方式实现。
+    优化策略：复用 HTTP 连接池 + 高并发 + 提前终止。
+    参数:
+        keyword: 搜索关键词
+        wiki_token: 知识库节点 token（从 /wiki/xxx 的 URL 中提取），
+                   搜索该节点及其所有子文档
+        count: 最多返回结果数（默认 10）
+    返回:
+        匹配的文档列表 JSON，包含 title、node_token、obj_token、snippet
+    """
+    if not wiki_token:
+        return json.dumps({"error": "需要提供 wiki_token 参数指定搜索范围"}, ensure_ascii=False)
+
+    auth_token = await get_tenant_auth()
+    headers = _make_headers(auth_token)
+
+    # 1. 获取根节点信息，得到 space_id
+    root_info = await _get_wiki_node_info(auth_token, wiki_token)
+    space_id = root_info.get("space_id")
+    if not space_id:
+        return json.dumps({"error": "无法获取 space_id"}, ensure_ascii=False)
+
+    # 2. 并发递归收集所有 docx 节点（复用连接池）
+    all_nodes = []
+    if root_info.get("obj_type") == "docx":
+        all_nodes.append(root_info)
+
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        sem_collect = asyncio.Semaphore(10)
+
+        async def _collect_nodes(parent_token):
+            async with sem_collect:
+                url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/{space_id}/nodes"
+                params = {"page_size": 50, "parent_node_token": parent_token}
+                children = await _get_all_pages(client, url, headers, params)
+                for n in children:
+                    if n.get("obj_type") == "docx":
+                        all_nodes.append(n)
+                tasks = [
+                    _collect_nodes(n.get("node_token"))
+                    for n in children if n.get("has_child")
+                ]
+                if tasks:
+                    await asyncio.gather(*tasks)
+
+        await _collect_nodes(wiki_token)
+
+    # 3. 并发读取文档内容匹配关键词（复用连接池 + 高并发 + 提前终止）
+    results = []
+    keyword_lower = keyword.lower()
+
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        sem_read = asyncio.Semaphore(15)
+
+        async def _check_content(node):
+            if len(results) >= count:
+                return None
+            async with sem_read:
+                if len(results) >= count:
+                    return None
+                try:
+                    url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{node.get('obj_token')}/raw_content"
+                    resp = await client.get(url, headers=headers)
+                    resp.raise_for_status()
+                    content = resp.json().get("data", {}).get("content", "")
+                    title = node.get("title", "")
+                    if keyword_lower in content.lower() or keyword_lower in title.lower():
+                        idx = content.lower().find(keyword_lower)
+                        if idx >= 0:
+                            start = max(0, idx - 50)
+                            end = min(len(content), idx + len(keyword) + 50)
+                            snippet = content[start:end]
+                        else:
+                            snippet = content[:100]
+                        return {
+                            "title": title,
+                            "node_token": node.get("node_token"),
+                            "obj_token": node.get("obj_token"),
+                            "snippet": snippet,
+                        }
+                except Exception:
+                    pass
+                return None
+
+        tasks = [asyncio.create_task(_check_content(n)) for n in all_nodes]
+        for coro in asyncio.as_completed(tasks):
+            hit = await coro
+            if hit:
+                results.append(hit)
+                if len(results) >= count:
+                    for t in tasks:
+                        t.cancel()
+                    break
+
+    return json.dumps(results, ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":

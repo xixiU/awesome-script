@@ -20,6 +20,7 @@
     python test_mcp.py wiki_info <wiki_token>       # 获取知识库节点信息
     python test_mcp.py wiki_nodes <wiki_token> [recursive]  # 列出知识库子节点
     python test_mcp.py wiki_doc <wiki_token>        # 读取知识库文档
+    python test_mcp.py wiki_search <keyword> <wiki_token>  # 知识库全文搜索
 """
 import asyncio
 import sys
@@ -56,6 +57,7 @@ def print_help():
     print("  python test_mcp.py wiki_info <wiki_token>        # 节点信息")
     print("  python test_mcp.py wiki_nodes <wiki_token> [recursive]       # 列出子节点")
     print("  python test_mcp.py wiki_doc <wiki_token>         # 读取知识库文档")
+    print("  python test_mcp.py wiki_search <keyword> <wiki_token>  # 全文搜索")
 
 
 async def main():
@@ -171,6 +173,19 @@ async def main():
                 print(f"--- 读取知识库文档: {wiki_token} ---")
                 result = await session.call_tool("wiki_read_document", {"wiki_token": wiki_token})
                 print(str(result.content[0].text)[:500])
+
+            elif cmd == "wiki_search":
+                if len(sys.argv) < 4:
+                    print("用法: python test_mcp.py wiki_search <keyword> <wiki_token>")
+                    return
+                keyword = sys.argv[2]
+                wiki_token = sys.argv[3]
+                print(f"--- 知识库全文搜索: keyword={keyword}, wiki_token={wiki_token} ---")
+                result = await session.call_tool(
+                    "wiki_search",
+                    {"keyword": keyword, "wiki_token": wiki_token}
+                )
+                print_json(str(result.content[0].text))
 
             else:
                 print_help()
