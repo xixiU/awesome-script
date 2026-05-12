@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.3.0
-// @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。支持通配符批量排除网站。
+// @version      4.3.1
+// @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。支持通配符批量排除网站。支持滑块验证码。
 // @author       xixiu
 // @thanks       哈士奇
 // @match        *://*/*
@@ -210,7 +210,7 @@
 
         doCheckTask() {
             this.findCaptcha();
-            // this.checkSlideCaptcha();
+            this.checkSlideCaptcha();
         }
         init() {
             if (blackListCheck()) {
@@ -624,37 +624,37 @@
                         onload: function (response) {
                             console.log(response.response);
                             let res = JSON.parse(response.response) || {};
-                            if (response.status === 429) {
+
+                            // 统一的接口格式：{code: 0, data: {...}, msg: ""}
+                            if (res.code === 0 && res.data && res.data.code) {
+                                resolve(res.data.code);
+                            } else {
+                                // 处理错误情况
                                 let msg = res.msg || '获取验证码失败';
-                                let date = new Date().getDate();
-                                let tipsConfig = {
-                                    date,
-                                    times: 1,
-                                };
-                                let cache =
-                                    GM_getValue("tipsConfig") &&
-                                    JSON.parse(GM_getValue("tipsConfig"));
-                                if (cache && cache.times > 5) {
-                                } else {
-                                    if (!cache) {
-                                        GM_setValue("tipsConfig", JSON.stringify(tipsConfig));
+                                if (response.status === 429) {
+                                    let date = new Date().getDate();
+                                    let tipsConfig = {
+                                        date,
+                                        times: 1,
+                                    };
+                                    let cache =
+                                        GM_getValue("tipsConfig") &&
+                                        JSON.parse(GM_getValue("tipsConfig"));
+                                    if (cache && cache.times > 5) {
                                     } else {
-                                        cache.times = cache.times + 1;
-                                        GM_setValue("tipsConfig", JSON.stringify(cache));
-                                    }
-                                    if (typeof Vue !== "undefined") {
-                                        new Vue().$message.error(msg);
+                                        if (!cache) {
+                                            GM_setValue("tipsConfig", JSON.stringify(tipsConfig));
+                                        } else {
+                                            cache.times = cache.times + 1;
+                                            GM_setValue("tipsConfig", JSON.stringify(cache));
+                                        }
+                                        if (typeof Vue !== "undefined") {
+                                            new Vue().$message.error(msg);
+                                        }
                                     }
                                 }
                                 console.error("获取验证码失败:", res);
                                 reject();
-                            } else {
-                                if (res.data.code) {
-                                    resolve(res.data.code);
-                                } else {
-                                    console.error("获取验证码失败，验证码为空:", response);
-                                    reject();
-                                }
                             }
                         },
                         onerror: function (err) {
@@ -1060,70 +1060,159 @@
         }
         checkSlideCaptcha() {
             const check = async () => {
-                const slideCache =
-                    (GM_getValue(SLIDE_STORE_KEY) &&
-                        JSON.parse(GM_getValue(SLIDE_STORE_KEY))) ||
-                    {};
-                const { bgImg, targetImg, moveItem } = slideCache;
-                if (
-                    bgImg &&
-                    targetImg &&
-                    moveItem &&
-                    selector(targetImg) &&
-                    selector(bgImg) &&
-                    selector(moveItem) &&
-                    this.elDisplay(selector(targetImg)) &&
-                    this.elDisplay(selector(bgImg)) &&
-                    this.elDisplay(selector(moveItem))
-                ) {
-                    const target_url =
-                        selector(targetImg).getAttribute("src") ||
-                        getStyle(selector(targetImg))["background-image"].split('"')[1];
-                    const bg_url =
-                        selector(bgImg).getAttribute("src") ||
-                        getStyle(selector(bgImg))["background-image"].split('"')[1];
-                    if (!this.hasRequest(target_url, { record: true, type: "url" })) {
-                        const target_base64 = await this.getImgViaBlob(target_url);
-                        const bg_base64 = await this.getImgViaBlob(bg_url);
-                        return new Promise(async (resolve, reject) => {
-                            let host = location.href;
-                            let href = location.href.split("?")[0].split("#")[0];
-                            if (self === top) {
-                                host = location.host;
-                            }
-                            let detail = {
-                                path: slideCache,
-                                host,
-                                href,
-                            };
-                            let formData = new FormData();
-                            let requestUrl = routePrefix + "/slideCaptcha";
-                            let targetWidth = getNumber(getStyle(selector(targetImg)).width);
-                            let bgWidth = getNumber(getStyle(selector(bgImg)).width);
-                            formData.append("target_img", this.dataURLtoFile(target_base64));
-                            formData.append("bg_img", this.dataURLtoFile(bg_base64));
-                            formData.append("targetWidth", targetWidth);
-                            formData.append("bgWidth", bgWidth);
-                            formData.append("detail", JSON.stringify(detail));
-                            GM_xmlhttpRequest({
-                                method: "post",
-                                url: requestUrl,
-                                data: formData,
-                                onload: (response) => {
-                                    const data = JSON.parse(response.response);
-                                    this.moveSideCaptcha(
-                                        selector(targetImg),
-                                        selector(moveItem),
-                                        data.result.target[0]
-                                    );
-                                    // resolve()
-                                },
-                                onerror: function (err) {
-                                    console.error(err);
-                                    reject();
-                                },
+                // 主流滑块验证码自动识别配置
+                const autoDetectConfigs = [
+                    // 网易易盾
+                    {
+                        name: '网易易盾',
+                        bgImg: '.yidun_bg-img',
+                        targetImg: '.yidun_jigsaw',
+                        moveItem: '.yidun_slider'
+                    },
+                    // 京东 JDJRV
+                    {
+                        name: '京东JDJRV',
+                        bgImg: '.JDJRV-bigimg img',
+                        targetImg: '.JDJRV-smallimg img',
+                        moveItem: '.JDJRV-slide-btn'
+                    },
+                    // 极验 geetest
+                    {
+                        name: '极验geetest',
+                        bgImg: '.geetest_canvas_bg',
+                        targetImg: '.geetest_canvas_slice',
+                        moveItem: '.geetest_slider_button'
+                    },
+                    // 阿里云盾 nc
+                    {
+                        name: '阿里云盾',
+                        bgImg: '#nc_img',
+                        targetImg: '#nc_slice',
+                        moveItem: '.nc_iconfont.btn_slide'
+                    }
+                ];
+
+                // 尝试自动识别主流滑块验证码
+                let detectedConfig = null;
+                for (const config of autoDetectConfigs) {
+                    const bgEl = selector(config.bgImg);
+                    const targetEl = selector(config.targetImg);
+                    const moveEl = selector(config.moveItem);
+
+                    if (bgEl && targetEl && moveEl &&
+                        this.elDisplay(bgEl) &&
+                        this.elDisplay(targetEl) &&
+                        this.elDisplay(moveEl)) {
+                        detectedConfig = {
+                            bgImg: config.bgImg,
+                            targetImg: config.targetImg,
+                            moveItem: config.moveItem,
+                            name: config.name
+                        };
+                        console.log(`[验证码助手] 自动检测到${config.name}滑块验证码`);
+                        break;
+                    }
+                }
+
+                // 如果自动识别成功，使用自动识别的配置
+                let slideConfig = detectedConfig;
+
+                // 如果自动识别失败，尝试使用用户手动配置
+                if (!slideConfig) {
+                    const slideCache =
+                        (GM_getValue(SLIDE_STORE_KEY) &&
+                            JSON.parse(GM_getValue(SLIDE_STORE_KEY))) ||
+                        {};
+                    const { bgImg, targetImg, moveItem } = slideCache;
+                    if (bgImg && targetImg && moveItem) {
+                        slideConfig = { bgImg, targetImg, moveItem, name: '用户配置' };
+                    }
+                }
+
+                // 如果有配置（自动或手动），执行识别
+                if (slideConfig) {
+                    const { bgImg, targetImg, moveItem } = slideConfig;
+                    const bgEl = selector(bgImg);
+                    const targetEl = selector(targetImg);
+                    const moveEl = selector(moveItem);
+
+                    if (
+                        bgEl &&
+                        targetEl &&
+                        moveEl &&
+                        this.elDisplay(bgEl) &&
+                        this.elDisplay(targetEl) &&
+                        this.elDisplay(moveEl)
+                    ) {
+                        const target_url =
+                            targetEl.getAttribute("src") ||
+                            getStyle(targetEl)["background-image"]?.split('"')[1];
+                        const bg_url =
+                            bgEl.getAttribute("src") ||
+                            getStyle(bgEl)["background-image"]?.split('"')[1];
+
+                        if (!target_url || !bg_url) {
+                            console.log('[验证码助手] 无法获取滑块图片URL');
+                            return;
+                        }
+
+                        if (!this.hasRequest(target_url, { record: true, type: "url" })) {
+                            console.log(`[验证码助手] 开始识别滑块验证码 (${slideConfig.name})`);
+                            const target_base64 = await this.getImgViaBlob(target_url);
+                            const bg_base64 = await this.getImgViaBlob(bg_url);
+                            return new Promise(async (resolve, reject) => {
+                                let host = location.href;
+                                let href = location.href.split("?")[0].split("#")[0];
+                                if (self === top) {
+                                    host = location.host;
+                                }
+                                let detail = {
+                                    path: slideConfig,
+                                    host,
+                                    href,
+                                    type: slideConfig.name
+                                };
+                                let formData = new FormData();
+                                let requestUrl = routePrefix + "/slideCaptcha";
+                                let targetWidth = getNumber(getStyle(targetEl).width);
+                                let bgWidth = getNumber(getStyle(bgEl).width);
+                                formData.append("target_img", this.dataURLtoFile(target_base64));
+                                formData.append("bg_img", this.dataURLtoFile(bg_base64));
+                                formData.append("targetWidth", targetWidth);
+                                formData.append("bgWidth", bgWidth);
+                                formData.append("detail", JSON.stringify(detail));
+                                GM_xmlhttpRequest({
+                                    method: "post",
+                                    url: requestUrl,
+                                    data: formData,
+                                    onload: (response) => {
+                                        try {
+                                            const data = JSON.parse(response.response);
+                                            // 统一的接口格式：{code: 0, data: {...}, msg: ""}
+                                            if (data.code === 0 && data.data && data.data.target) {
+                                                console.log(`[验证码助手] 滑块识别成功，缺口位置: ${data.data.target[0]}`);
+                                                this.moveSideCaptcha(
+                                                    targetEl,
+                                                    moveEl,
+                                                    data.data.target[0]
+                                                );
+                                                resolve();
+                                            } else {
+                                                console.error('[验证码助手] 滑块识别失败：', data.msg || '未知错误', data);
+                                                reject(new Error(data.msg || '识别失败'));
+                                            }
+                                        } catch (e) {
+                                            console.error('[验证码助手] 滑块识别失败：', e);
+                                            reject(e);
+                                        }
+                                    },
+                                    onerror: function (err) {
+                                        console.error('[验证码助手] 滑块识别请求失败：', err);
+                                        reject(err);
+                                    },
+                                });
                             });
-                        });
+                        }
                     }
                 }
             };
@@ -1131,13 +1220,38 @@
             // const interval = 3000;
             // simulateInterval(check, interval);
         }
-        moveSideCaptcha(targetImg, moveItem, distance) {
-            if (distance === 0) {
-                console.log("distance", distance);
+        moveSideCaptcha(targetImg, moveItem, gapPosition) {
+            // gapPosition 是缺口在背景图中的绝对位置（已经按显示尺寸缩放）
+            // 需要计算滑块需要移动的相对距离
+
+            if (gapPosition === 0) {
+                console.log("[验证码助手] 缺口位置为0，跳过拖动");
                 return;
             }
+
             var btn = moveItem;
             let target = targetImg;
+
+            // 获取滑块图片的初始位置
+            let targetRect = target.getBoundingClientRect();
+            let targetInitialX = targetRect.left;
+
+            // 获取背景图的位置
+            let bgImg = target.parentElement?.querySelector('img') || target.parentElement;
+            let bgRect = bgImg?.getBoundingClientRect();
+            let bgInitialX = bgRect ? bgRect.left : 0;
+
+            // 计算滑块需要移动的相对距离
+            // 相对距离 = 缺口绝对位置 - 滑块初始相对位置
+            let sliderInitialOffset = targetInitialX - bgInitialX;
+            let distance = gapPosition - sliderInitialOffset;
+
+            console.log(`[验证码助手] 缺口位置: ${gapPosition}px, 滑块初始偏移: ${sliderInitialOffset}px, 需要移动: ${distance}px`);
+
+            if (distance <= 0) {
+                console.log("[验证码助手] 计算的移动距离 <= 0，跳过拖动");
+                return;
+            }
 
             let varible = null;
             let targetLeft = Number(getStyle(target).left.replace("px", "")) || 0;
@@ -1147,52 +1261,40 @@
             let targetParentTransform =
                 Number(getEleTransform(target.parentNode)) || 0;
 
-            var mousedown = document.createEvent("MouseEvents");
             var rect = btn.getBoundingClientRect();
             var x = rect.x;
             var y = rect.y;
-            mousedown.initMouseEvent(
-                "mousedown",
-                true,
-                true,
-                document.defaultView,
-                0,
-                x,
-                y,
-                x,
-                y,
-                false,
-                false,
-                false,
-                false,
-                0,
-                null
-            );
+
+            // 使用现代的 MouseEvent API 替代已弃用的 createEvent
+            var mousedown = new MouseEvent("mousedown", {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: x,
+                clientY: y,
+                screenX: x,
+                screenY: y,
+                button: 0
+            });
             btn.dispatchEvent(mousedown);
 
             var dx = 0;
             var dy = 0;
             var interval = setInterval(function () {
-                var mousemove = document.createEvent("MouseEvents");
                 var _x = x + dx;
                 var _y = y + dy;
-                mousemove.initMouseEvent(
-                    "mousemove",
-                    true,
-                    true,
-                    document.defaultView,
-                    0,
-                    _x,
-                    _y,
-                    _x,
-                    _y,
-                    false,
-                    false,
-                    false,
-                    false,
-                    0,
-                    null
-                );
+
+                // 使用现代的 MouseEvent API 替代已弃用的 createEvent
+                var mousemove = new MouseEvent("mousemove", {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: _x,
+                    clientY: _y,
+                    screenX: _x,
+                    screenY: _y,
+                    button: 0
+                });
                 btn.dispatchEvent(mousemove);
                 btn.dispatchEvent(mousemove);
 
@@ -1215,24 +1317,17 @@
                 }
                 if (varible >= distance) {
                     clearInterval(interval);
-                    var mouseup = document.createEvent("MouseEvents");
-                    mouseup.initMouseEvent(
-                        "mouseup",
-                        true,
-                        true,
-                        document.defaultView,
-                        0,
-                        _x,
-                        _y,
-                        _x,
-                        _y,
-                        false,
-                        false,
-                        false,
-                        false,
-                        0,
-                        null
-                    );
+                    // 使用现代的 MouseEvent API 替代已弃用的 createEvent
+                    var mouseup = new MouseEvent("mouseup", {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        clientX: _x,
+                        clientY: _y,
+                        screenX: _x,
+                        screenY: _y,
+                        button: 0
+                    });
                     setTimeout(() => {
                         btn.dispatchEvent(mouseup);
                     }, Math.ceil(Math.random() * 2000));
@@ -1418,7 +1513,7 @@
         }
     };
 
-    // GM_registerMenuCommand("手动定位滑动验证码", handleSlideMenuClick);
+    GM_registerMenuCommand("手动定位滑动验证码", handleSlideMenuClick);
 
     function handleClearMenuClick() {
         GM_listValues().forEach((name) => {

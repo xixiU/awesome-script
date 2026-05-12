@@ -1501,8 +1501,9 @@
                                             onload: function (response) {
                                                 try {
                                                     const result = JSON.parse(response.responseText);
-                                                    if (result && result.result) {
-                                                        const captchaText = result.result;
+                                                    // 统一的接口格式：{code: 0, data: {result: "识别结果"}, msg: ""}
+                                                    if (result && result.code === 0 && result.data && result.data.result) {
+                                                        const captchaText = result.data.result;
                                                         utils.log(`[QChengKeji] Captcha recognized: ${captchaText}`);
                                                         $captchaInput.val(captchaText);
                                                         utils.log('[QChengKeji] Filled captcha input. Clicking play button.');

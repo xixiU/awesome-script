@@ -32,8 +32,8 @@ except Exception:
         ocr = None
 
 try:
-    # 滑动验证码检测引擎（用于检测缺口位置）
-    det_ocr = ddddocr.DdddOcr(det=False, ocr=False, show_ad=False)
+    # 滑动验证码检测引擎（slide_match 是纯 OpenCV 模板匹配，不需要 OCR 模型）
+    det_ocr = ddddocr.DdddOcr(ocr=False, show_ad=False)
     print("✓ 滑动验证码检测引擎初始化成功")
 except Exception as e:
     print(f"✗ 初始化滑动验证码检测引擎失败: {e}")
@@ -303,28 +303,29 @@ def recognize_captcha():
 
     请求: POST /recognize_captcha  Content-Type: application/json
           {"image_base64": "base64编码的图像数据"}
-    响应: {"result": "识别结果"} 或 {"error": "错误信息"}
+    响应: {"code": 0, "data": {"result": "识别结果"}, "msg": "success"}
+          {"code": 1, "data": null, "msg": "错误信息"}
     """
     if ocr is None:
-        return jsonify({"error": "OCR服务未初始化，请检查服务器日志。"}), 500
+        return jsonify({"code": 1, "data": None, "msg": "OCR服务未初始化，请检查服务器日志。"}), 500
 
     try:
         data = request.get_json()
         if not data or 'image_base64' not in data:
-            return jsonify({"error": "请求体中未找到 'image_base64' 字段或请求体不是有效的JSON。"}), 400
+            return jsonify({"code": 1, "data": None, "msg": "请求体中未找到 'image_base64' 字段或请求体不是有效的JSON。"}), 400
 
         image_bytes = parse_base64_image(data['image_base64'])
         if not image_bytes:
-            return jsonify({"error": "解码后的图像数据为空。"}), 400
+            return jsonify({"code": 1, "data": None, "msg": "解码后的图像数据为空。"}), 400
 
         result = do_recognize(image_bytes)
-        return jsonify({"result": result})
+        return jsonify({"code": 0, "data": {"result": result}, "msg": "success"})
 
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"code": 1, "data": None, "msg": str(e)}), 400
     except Exception as e:
         app.logger.error(f"处理请求时发生错误: {e}", exc_info=True)
-        return jsonify({"error": f"处理请求时发生内部错误: {str(e)}"}), 500
+        return jsonify({"code": 1, "data": None, "msg": f"处理请求时发生内部错误: {str(e)}"}), 500
 
 
 @app.route('/captcha', methods=['POST'])
@@ -334,27 +335,27 @@ def captcha():
 
     请求: POST /captcha  Content-Type: multipart/form-data
           img: 图像文件  detail: JSON 字符串（可选，含来源 href）
-    响应: {"data": {"code": "识别结果"}, "msg": "success"}
-          {"error": "错误信息", "msg": "fail"}
+    响应: {"code": 0, "data": {"code": "识别结果"}, "msg": "success"}
+          {"code": 1, "data": null, "msg": "错误信息"}
     """
     if ocr is None:
-        return jsonify({"error": "OCR 服务未初始化", "msg": "OCR service not initialized"}), 500
+        return jsonify({"code": 1, "data": None, "msg": "OCR 服务未初始化"}), 500
 
     try:
         if 'img' not in request.files:
-            return jsonify({"error": "请求中未找到 'img' 字段", "msg": "Missing 'img' field in request"}), 400
+            return jsonify({"code": 1, "data": None, "msg": "请求中未找到 'img' 字段"}), 400
 
         img_file = request.files['img']
         if img_file.filename == '':
-            return jsonify({"error": "未选择文件", "msg": "No file selected"}), 400
+            return jsonify({"code": 1, "data": None, "msg": "未选择文件"}), 400
 
         try:
             image_bytes = file_to_bytes(img_file)
         except ValueError as e:
-            return jsonify({"error": str(e), "msg": "Failed to read file"}), 400
+            return jsonify({"code": 1, "data": None, "msg": str(e)}), 400
 
         if not validate_image_bytes(image_bytes):
-            return jsonify({"error": "上传的文件不是有效的图像", "msg": "Invalid image file"}), 400
+            return jsonify({"code": 1, "data": None, "msg": "上传的文件不是有效的图像"}), 400
 
         result = do_recognize(image_bytes)
 
@@ -369,6 +370,7 @@ def captcha():
             pass
 
         return jsonify({
+            "code": 0,
             "data": {
                 "code": result.strip() if result else ""
             },
@@ -380,8 +382,9 @@ def captcha():
         app.logger.error(f"验证码识别失败: {e}")
         app.logger.error(traceback.format_exc())
         return jsonify({
-            "error": f"识别失败: {str(e)}",
-            "msg": "Recognition failed"
+            "code": 1,
+            "data": None,
+            "msg": f"识别失败: {str(e)}"
         }), 500
 
 
@@ -390,9 +393,9 @@ def slide_captcha():
     """
     【滑动验证码识别接口】
     识别滑动验证码的缺口位置
-    
+
     原理：使用图像匹配算法找到小图在大图中的位置
-    
+
     请求格式:
         POST /slideCaptcha
         Content-Type: multipart/form-data
@@ -402,38 +405,41 @@ def slide_captcha():
             - targetWidth: 目标图片的显示宽度（像素）
             - bgWidth: 背景图片的显示宽度（像素）
             - detail: JSON 字符串，包含额外信息（可选）
-    
+
     响应格式:
-        成功: {"result": {"target": [x坐标, y坐标, 宽度, 高度]}, "msg": "success"}
-        失败: {"error": "错误信息", "msg": "fail"}
+        成功: {"code": 0, "data": {"target": [x坐标, y坐标, 宽度, 高度]}, "msg": "success"}
+        失败: {"code": 1, "data": null, "msg": "错误信息"}
     """
     if det_ocr is None:
         return jsonify({
-            "error": "滑动验证码检测服务未初始化",
-            "msg": "Slide captcha detection service not initialized"
+            "code": 1,
+            "data": None,
+            "msg": "滑动验证码检测服务未初始化"
         }), 500
 
     try:
         # 1. 获取上传的图像文件
         if 'target_img' not in request.files or 'bg_img' not in request.files:
             return jsonify({
-                "error": "请求中未找到 'target_img' 或 'bg_img' 字段",
-                "msg": "Missing required image fields"
+                "code": 1,
+                "data": None,
+                "msg": "请求中未找到 'target_img' 或 'bg_img' 字段"
             }), 400
-        
+
         target_file = request.files['target_img']
         bg_file = request.files['bg_img']
-        
+
         # 2. 读取图像字节数据
         try:
             target_bytes = file_to_bytes(target_file)
             bg_bytes = file_to_bytes(bg_file)
         except ValueError as e:
             return jsonify({
-                "error": str(e),
-                "msg": "Failed to read files"
+                "code": 1,
+                "data": None,
+                "msg": str(e)
             }), 400
-        
+
         # 3. 获取图片尺寸信息（用于坐标换算）
         try:
             target_width = int(request.form.get('targetWidth', 0))
@@ -441,39 +447,50 @@ def slide_captcha():
         except:
             target_width = 0
             bg_width = 0
-        
+
         # 4. 使用 ddddocr 的滑动验证码检测功能
         # 注意：这个方法会返回缺口在背景图中的位置
         result = det_ocr.slide_match(target_bytes, bg_bytes, simple_target=True)
-        
+
         # 5. 处理结果
         # result 是一个字典，包含 'target' 键，值为 [x, y, width, height]
         if result and 'target' in result:
             x_coordinate = result['target'][0]
-            
+
             # 如果提供了实际显示尺寸，需要按比例缩放坐标
             # 因为图片的原始尺寸可能与浏览器中显示的尺寸不同
             if bg_width > 0:
                 # 获取原始图片宽度
                 bg_img = Image.open(io.BytesIO(bg_bytes))
                 original_width = bg_img.width
-                
+
                 # 计算缩放比例并调整坐标
                 if original_width > 0:
                     scale = bg_width / original_width
                     x_coordinate = int(x_coordinate * scale)
                     result['target'][0] = x_coordinate
-            
-            app.logger.info(f"滑动验证码识别成功 - 缺口位置: {result['target']}")
-            
+
+            # 记录来源（可选）
+            detail_str = request.form.get('detail', '{}')
+            try:
+                import json
+                detail = json.loads(detail_str)
+                captcha_type = detail.get('type', '未知')
+                href = detail.get('href', '')
+                app.logger.info(f"滑动验证码识别成功 - 类型: {captcha_type}, 来源: {href}, 缺口位置: {result['target']}")
+            except Exception:
+                app.logger.info(f"滑动验证码识别成功 - 缺口位置: {result['target']}")
+
             return jsonify({
-                "result": result,
+                "code": 0,
+                "data": {"target": result['target']},
                 "msg": "success"
             }), 200
         else:
             return jsonify({
-                "error": "未能检测到缺口位置",
-                "msg": "Failed to detect gap position"
+                "code": 1,
+                "data": None,
+                "msg": "未能检测到缺口位置"
             }), 500
 
     except Exception as e:
@@ -481,8 +498,9 @@ def slide_captcha():
         app.logger.error(f"滑动验证码识别失败: {e}")
         app.logger.error(traceback.format_exc())
         return jsonify({
-            "error": f"识别失败: {str(e)}",
-            "msg": "Recognition failed"
+            "code": 1,
+            "data": None,
+            "msg": f"识别失败: {str(e)}"
         }), 500
 
 
