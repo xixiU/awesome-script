@@ -967,9 +967,15 @@
             if (item.type === 'checkbox') {
                 input.checked = currentValue;
             } else if (item.type === 'select') {
-                // 如果存储值不在 options 里（空/undefined/旧版本残留），回退到第一个 option
+                // 如果存储值不在 options 里（空/undefined/旧版本残留），回退到第一个 option 并写回存储
                 const validValues = Array.from(input.options).map(o => o.value);
-                input.value = validValues.includes(currentValue) ? currentValue : (validValues[0] || '');
+                if (!validValues.includes(currentValue) && validValues.length > 0) {
+                    const fallbackValue = validValues[0];
+                    input.value = fallbackValue;
+                    this.set(item.key, fallbackValue);  // 立即写回存储
+                } else {
+                    input.value = currentValue != null ? currentValue : '';
+                }
             } else {
                 input.value = currentValue != null ? currentValue : '';
             }
@@ -1119,9 +1125,15 @@
                 if (item.type === 'checkbox') {
                     input.checked = currentValue;
                 } else if (item.type === 'select') {
-                    // select 同样做 fallback
+                    // select 同样做 fallback 并写回存储
                     const validValues = Array.from(input.options).map(o => o.value);
-                    input.value = validValues.includes(currentValue) ? currentValue : (validValues[0] || '');
+                    if (!validValues.includes(currentValue) && validValues.length > 0) {
+                        const fallbackValue = validValues[0];
+                        input.value = fallbackValue;
+                        this.set(item.key, fallbackValue);
+                    } else {
+                        input.value = currentValue || '';
+                    }
                 } else {
                     input.value = currentValue || '';
                 }
