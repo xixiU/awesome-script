@@ -176,8 +176,51 @@
             style.getPropertyValue("-ms-transform") ||
             style.getPropertyValue("-o-transform") ||
             style.getPropertyValue("transform") ||
-            "null";
-        return transform && transform.split(",")[4];
+            "none";
+
+        // 处理 none 或 null 的情况
+        if (!transform || transform === "none" || transform === "null") {
+            return 0;
+        }
+
+        try {
+            // 处理 matrix(a, b, c, d, tx, ty) 格式
+            // tx 是第 5 个参数（索引 4）
+            if (transform.startsWith("matrix(")) {
+                const values = transform.match(/matrix\(([^)]+)\)/);
+                if (values && values[1]) {
+                    const parts = values[1].split(",").map(v => parseFloat(v.trim()));
+                    return parts[4] || 0; // translateX
+                }
+            }
+
+            // 处理 matrix3d(a1, b1, c1, d1, a2, b2, c2, d2, a3, b3, c3, d3, tx, ty, tz, d4) 格式
+            // tx 是第 13 个参数（索引 12）
+            if (transform.startsWith("matrix3d(")) {
+                const values = transform.match(/matrix3d\(([^)]+)\)/);
+                if (values && values[1]) {
+                    const parts = values[1].split(",").map(v => parseFloat(v.trim()));
+                    return parts[12] || 0; // translateX
+                }
+            }
+
+            // 处理 translate(x, y) 或 translateX(x) 格式
+            if (transform.includes("translate")) {
+                const translateX = transform.match(/translateX\(([^)]+)\)/);
+                if (translateX && translateX[1]) {
+                    return parseFloat(translateX[1]);
+                }
+
+                const translate = transform.match(/translate\(([^,)]+)/);
+                if (translate && translate[1]) {
+                    return parseFloat(translate[1]);
+                }
+            }
+        } catch (e) {
+            console.warn("[验证码助手] transform 解析失败:", e, transform);
+        }
+
+        return 0;
     }
 
     class Captcha {
@@ -1144,15 +1187,42 @@
                         this.elDisplay(targetEl) &&
                         this.elDisplay(moveEl)
                     ) {
-                        const target_url =
-                            targetEl.getAttribute("src") ||
-                            getStyle(targetEl)["background-image"]?.split('"')[1];
-                        const bg_url =
-                            bgEl.getAttribute("src") ||
-                            getStyle(bgEl)["background-image"]?.split('"')[1];
+                        // 优化图片 URL 获取逻辑，支持多种情况
+                        const getImageUrl = (el) => {
+                            // 1. 尝试从 src 属性获取
+                            let url = el.getAttribute("src");
+                            if (url) return url;
+
+                            // 2. 尝试从 background-image 样式获取
+                            const bgImage = getStyle(el)["background-image"];
+                            if (bgImage && bgImage !== "none") {
+                                // 处理 url("...") 或 url('...') 格式
+                                const match = bgImage.match(/url\(['"]?([^'"]+)['"]?\)/);
+                                if (match && match[1]) return match[1];
+                            }
+
+                            // 3. 尝试从 data-src 属性获取（懒加载）
+                            url = el.getAttribute("data-src");
+                            if (url) return url;
+
+                            // 4. 尝试从 srcset 属性获取第一个 URL
+                            const srcset = el.getAttribute("srcset");
+                            if (srcset) {
+                                const firstUrl = srcset.split(",")[0].trim().split(" ")[0];
+                                if (firstUrl) return firstUrl;
+                            }
+
+                            return null;
+                        };
+
+                        const target_url = getImageUrl(targetEl);
+                        const bg_url = getImageUrl(bgEl);
 
                         if (!target_url || !bg_url) {
-                            console.log('[验证码助手] 无法获取滑块图片URL');
+                            console.log('[验证码助手] 无法获取滑块图片URL', {
+                                target: target_url,
+                                bg: bg_url
+                            });
                             return;
                         }
 
@@ -1160,58 +1230,88 @@
                             console.log(`[验证码助手] 开始识别滑块验证码 (${slideConfig.name})`);
                             const target_base64 = await this.getImgViaBlob(target_url);
                             const bg_base64 = await this.getImgViaBlob(bg_url);
-                            return new Promise(async (resolve, reject) => {
-                                let host = location.href;
-                                let href = location.href.split("?")[0].split("#")[0];
-                                if (self === top) {
-                                    host = location.host;
-                                }
-                                let detail = {
-                                    path: slideConfig,
-                                    host,
-                                    href,
-                                    type: slideConfig.name
-                                };
-                                let formData = new FormData();
-                                let requestUrl = routePrefix + "/slideCaptcha";
-                                let targetWidth = getNumber(getStyle(targetEl).width);
-                                let bgWidth = getNumber(getStyle(bgEl).width);
-                                formData.append("target_img", this.dataURLtoFile(target_base64));
-                                formData.append("bg_img", this.dataURLtoFile(bg_base64));
-                                formData.append("targetWidth", targetWidth);
-                                formData.append("bgWidth", bgWidth);
-                                formData.append("detail", JSON.stringify(detail));
-                                GM_xmlhttpRequest({
-                                    method: "post",
-                                    url: requestUrl,
-                                    data: formData,
-                                    onload: (response) => {
-                                        try {
-                                            const data = JSON.parse(response.response);
-                                            // 统一的接口格式：{code: 0, data: {...}, msg: ""}
-                                            if (data.code === 0 && data.data && data.data.target) {
-                                                console.log(`[验证码助手] 滑块识别成功，缺口位置: ${data.data.target[0]}`);
-                                                this.moveSideCaptcha(
-                                                    targetEl,
-                                                    moveEl,
-                                                    data.data.target[0]
-                                                );
-                                                resolve();
-                                            } else {
-                                                console.error('[验证码助手] 滑块识别失败：', data.msg || '未知错误', data);
-                                                reject(new Error(data.msg || '识别失败'));
+
+                            // 重试机制：最多尝试 3 次
+                            const maxRetries = 3;
+                            let retryCount = 0;
+
+                            const attemptRecognition = () => {
+                                return new Promise(async (resolve, reject) => {
+                                    let host = location.href;
+                                    let href = location.href.split("?")[0].split("#")[0];
+                                    if (self === top) {
+                                        host = location.host;
+                                    }
+                                    let detail = {
+                                        path: slideConfig,
+                                        host,
+                                        href,
+                                        type: slideConfig.name,
+                                        retry: retryCount
+                                    };
+                                    let formData = new FormData();
+                                    let requestUrl = routePrefix + "/slideCaptcha";
+                                    let targetWidth = getNumber(getStyle(targetEl).width);
+                                    let bgWidth = getNumber(getStyle(bgEl).width);
+                                    formData.append("target_img", this.dataURLtoFile(target_base64));
+                                    formData.append("bg_img", this.dataURLtoFile(bg_base64));
+                                    formData.append("targetWidth", targetWidth);
+                                    formData.append("bgWidth", bgWidth);
+                                    formData.append("detail", JSON.stringify(detail));
+
+                                    GM_xmlhttpRequest({
+                                        method: "post",
+                                        url: requestUrl,
+                                        data: formData,
+                                        onload: (response) => {
+                                            try {
+                                                const data = JSON.parse(response.response);
+                                                // 统一的接口格式：{code: 0, data: {...}, msg: ""}
+                                                if (data.code === 0 && data.data && data.data.target) {
+                                                    console.log(`[验证码助手] 滑块识别成功，缺口位置: ${data.data.target[0]}`);
+                                                    this.moveSideCaptcha(
+                                                        targetEl,
+                                                        moveEl,
+                                                        data.data.target[0]
+                                                    );
+                                                    resolve();
+                                                } else {
+                                                    console.error('[验证码助手] 滑块识别失败：', data.msg || '未知错误', data);
+                                                    reject(new Error(data.msg || '识别失败'));
+                                                }
+                                            } catch (e) {
+                                                console.error('[验证码助手] 滑块识别失败：', e);
+                                                reject(e);
                                             }
-                                        } catch (e) {
-                                            console.error('[验证码助手] 滑块识别失败：', e);
-                                            reject(e);
-                                        }
-                                    },
-                                    onerror: function (err) {
-                                        console.error('[验证码助手] 滑块识别请求失败：', err);
-                                        reject(err);
-                                    },
+                                        },
+                                        onerror: function (err) {
+                                            console.error('[验证码助手] 滑块识别请求失败：', err);
+                                            reject(err);
+                                        },
+                                    });
                                 });
-                            });
+                            };
+
+                            // 执行重试逻辑
+                            const executeWithRetry = async () => {
+                                while (retryCount < maxRetries) {
+                                    try {
+                                        await attemptRecognition();
+                                        return; // 成功则退出
+                                    } catch (error) {
+                                        retryCount++;
+                                        if (retryCount < maxRetries) {
+                                            console.log(`[验证码助手] 第 ${retryCount} 次尝试失败，${2}秒后重试...`);
+                                            await new Promise(resolve => setTimeout(resolve, 2000));
+                                        } else {
+                                            console.error(`[验证码助手] 已达到最大重试次数 (${maxRetries})，放弃识别`);
+                                            throw error;
+                                        }
+                                    }
+                                }
+                            };
+
+                            return executeWithRetry();
                         }
                     }
                 }
@@ -1278,9 +1378,72 @@
             });
             btn.dispatchEvent(mousedown);
 
-            var dx = 0;
-            var dy = 0;
+            // 生成更自然的拖动轨迹（模拟人类行为）
+            // 使用三段式轨迹：加速 -> 匀速 -> 减速
+            const generateTrack = (distance) => {
+                const track = [];
+                let current = 0;
+                let mid = distance * 0.8; // 80% 位置开始减速
+
+                // 加速阶段
+                while (current < mid) {
+                    let step = Math.random() * 8 + 5; // 5-13px 随机步长
+                    if (current + step > mid) {
+                        step = mid - current;
+                    }
+                    current += step;
+                    track.push(Math.round(current));
+                }
+
+                // 减速阶段
+                while (current < distance) {
+                    let step = Math.random() * 3 + 1; // 1-4px 随机步长
+                    if (current + step > distance) {
+                        step = distance - current;
+                    }
+                    current += step;
+                    track.push(Math.round(current));
+                }
+
+                return track;
+            };
+
+            const track = generateTrack(distance);
+            let trackIndex = 0;
+            let dx = 0;
+            let dy = 0;
+
             var interval = setInterval(function () {
+                if (trackIndex >= track.length) {
+                    clearInterval(interval);
+
+                    // 使用现代的 MouseEvent API 替代已弃用的 createEvent
+                    var mouseup = new MouseEvent("mouseup", {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        clientX: x + dx,
+                        clientY: y + dy,
+                        screenX: x + dx,
+                        screenY: y + dy,
+                        button: 0
+                    });
+
+                    // 随机延迟释放鼠标（100-300ms）
+                    setTimeout(() => {
+                        btn.dispatchEvent(mouseup);
+                    }, Math.ceil(Math.random() * 200 + 100));
+                    return;
+                }
+
+                dx = track[trackIndex];
+                trackIndex++;
+
+                // 添加随机的垂直抖动（模拟人手不稳）
+                let sign = Math.random() > 0.5 ? -1 : 1;
+                dy += Math.ceil(Math.random() * 2 * sign);
+                dy = Math.max(-5, Math.min(5, dy)); // 限制垂直偏移在 ±5px 内
+
                 var _x = x + dx;
                 var _y = y + dy;
 
@@ -1296,8 +1459,8 @@
                     button: 0
                 });
                 btn.dispatchEvent(mousemove);
-                btn.dispatchEvent(mousemove);
 
+                // 更新位置变量用于检测
                 let newTargetLeft =
                     Number(getStyle(target).left.replace("px", "")) || 0;
                 let newTargetParentLeft =
@@ -1315,32 +1478,9 @@
                 } else if (newTargetParentTransform != targetParentTransform) {
                     varible = newTargetParentTransform;
                 }
-                if (varible >= distance) {
-                    clearInterval(interval);
-                    // 使用现代的 MouseEvent API 替代已弃用的 createEvent
-                    var mouseup = new MouseEvent("mouseup", {
-                        bubbles: true,
-                        cancelable: true,
-                        view: window,
-                        clientX: _x,
-                        clientY: _y,
-                        screenX: _x,
-                        screenY: _y,
-                        button: 0
-                    });
-                    setTimeout(() => {
-                        btn.dispatchEvent(mouseup);
-                    }, Math.ceil(Math.random() * 2000));
-                } else {
-                    if (dx >= distance - 20) {
-                        dx += Math.ceil(Math.random() * 2);
-                    } else {
-                        dx += Math.ceil(Math.random() * 10);
-                    }
-                    let sign = Math.random() > 0.5 ? -1 : 1;
-                    dy += Math.ceil(Math.random() * 3 * sign);
-                }
             }, 10);
+
+            // 超时保护
             setTimeout(() => {
                 clearInterval(interval);
             }, 10000);

@@ -42,6 +42,47 @@ except Exception as e:
 app = Flask(__name__)
 CORS(app)  # 允许跨域请求，因为前端脚本可能来自不同域名
 
+# 配置日志
+import logging
+from logging.handlers import RotatingFileHandler
+import os
+
+# 创建日志目录
+log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+
+# 配置日志格式
+log_formatter = logging.Formatter(
+    '%(asctime)s [%(levelname)s] [%(name)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# 配置文件日志处理器（自动轮转，最大 10MB，保留 5 个备份）
+file_handler = RotatingFileHandler(
+    os.path.join(log_dir, 'captcha_service.log'),
+    maxBytes=10 * 1024 * 1024,  # 10MB
+    backupCount=5,
+    encoding='utf-8'
+)
+file_handler.setFormatter(log_formatter)
+file_handler.setLevel(logging.INFO)
+
+# 配置控制台日志处理器
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_formatter)
+console_handler.setLevel(logging.INFO)
+
+# 配置应用日志
+app.logger.setLevel(logging.INFO)
+app.logger.addHandler(file_handler)
+app.logger.addHandler(console_handler)
+
+app.logger.info("=" * 60)
+app.logger.info("验证码识别服务启动")
+app.logger.info(f"OCR 引擎状态: {'可用' if ocr else '不可用'}")
+app.logger.info(f"滑块检测引擎状态: {'可用' if det_ocr else '不可用'}")
+app.logger.info("=" * 60)
+
 
 # ==================== 辅助函数 ====================
 
@@ -306,25 +347,34 @@ def recognize_captcha():
     响应: {"code": 0, "data": {"result": "识别结果"}, "msg": "success"}
           {"code": 1, "data": null, "msg": "错误信息"}
     """
+    request_id = id(request)  # 生成请求 ID 用于追踪
+    app.logger.info(f"[{request_id}] 收到普通验证码识别请求")
+
     if ocr is None:
+        app.logger.error(f"[{request_id}] OCR服务未初始化")
         return jsonify({"code": 1, "data": None, "msg": "OCR服务未初始化，请检查服务器日志。"}), 500
 
     try:
         data = request.get_json()
         if not data or 'image_base64' not in data:
+            app.logger.warning(f"[{request_id}] 请求体格式错误")
             return jsonify({"code": 1, "data": None, "msg": "请求体中未找到 'image_base64' 字段或请求体不是有效的JSON。"}), 400
 
         image_bytes = parse_base64_image(data['image_base64'])
         if not image_bytes:
+            app.logger.warning(f"[{request_id}] 图像解码失败")
             return jsonify({"code": 1, "data": None, "msg": "解码后的图像数据为空。"}), 400
 
+        app.logger.info(f"[{request_id}] 开始识别验证码，图像大小: {len(image_bytes)} bytes")
         result = do_recognize(image_bytes)
+        app.logger.info(f"[{request_id}] 识别成功: {result}")
         return jsonify({"code": 0, "data": {"result": result}, "msg": "success"})
 
     except ValueError as e:
+        app.logger.error(f"[{request_id}] 参数错误: {e}")
         return jsonify({"code": 1, "data": None, "msg": str(e)}), 400
     except Exception as e:
-        app.logger.error(f"处理请求时发生错误: {e}", exc_info=True)
+        app.logger.error(f"[{request_id}] 处理请求时发生错误: {e}", exc_info=True)
         return jsonify({"code": 1, "data": None, "msg": f"处理请求时发生内部错误: {str(e)}"}), 500
 
 
@@ -410,7 +460,11 @@ def slide_captcha():
         成功: {"code": 0, "data": {"target": [x坐标, y坐标, 宽度, 高度]}, "msg": "success"}
         失败: {"code": 1, "data": null, "msg": "错误信息"}
     """
+    request_id = id(request)  # 生成请求 ID 用于追踪
+    app.logger.info(f"[{request_id}] 收到滑块验证码识别请求")
+
     if det_ocr is None:
+        app.logger.error(f"[{request_id}] 滑动验证码检测服务未初始化")
         return jsonify({
             "code": 1,
             "data": None,
@@ -420,6 +474,7 @@ def slide_captcha():
     try:
         # 1. 获取上传的图像文件
         if 'target_img' not in request.files or 'bg_img' not in request.files:
+            app.logger.warning(f"[{request_id}] 请求中缺少必要的图像文件")
             return jsonify({
                 "code": 1,
                 "data": None,
@@ -433,7 +488,9 @@ def slide_captcha():
         try:
             target_bytes = file_to_bytes(target_file)
             bg_bytes = file_to_bytes(bg_file)
+            app.logger.info(f"[{request_id}] 图像读取成功，target: {len(target_bytes)} bytes, bg: {len(bg_bytes)} bytes")
         except ValueError as e:
+            app.logger.error(f"[{request_id}] 图像读取失败: {e}")
             return jsonify({
                 "code": 1,
                 "data": None,
@@ -444,13 +501,30 @@ def slide_captcha():
         try:
             target_width = int(request.form.get('targetWidth', 0))
             bg_width = int(request.form.get('bgWidth', 0))
+            app.logger.info(f"[{request_id}] 显示尺寸 - target: {target_width}px, bg: {bg_width}px")
         except:
             target_width = 0
             bg_width = 0
 
         # 4. 使用 ddddocr 的滑动验证码检测功能
         # 注意：这个方法会返回缺口在背景图中的位置
-        result = det_ocr.slide_match(target_bytes, bg_bytes, simple_target=True)
+        # simple_target 参数说明：
+        # - True: 适用于简单的缺口图片（如纯色背景的缺口块）
+        # - False: 适用于复杂的目标图片（如带有完整图案的滑块）
+        # 默认使用 True，如果识别失败会自动尝试 False
+
+        result = None
+        try:
+            # 首先尝试 simple_target=True（适用于大多数情况）
+            result = det_ocr.slide_match(target_bytes, bg_bytes, simple_target=True)
+        except Exception as e:
+            app.logger.warning(f"使用 simple_target=True 识别失败: {e}，尝试 simple_target=False")
+            try:
+                # 如果失败，尝试 simple_target=False
+                result = det_ocr.slide_match(target_bytes, bg_bytes, simple_target=False)
+            except Exception as e2:
+                app.logger.error(f"使用 simple_target=False 也识别失败: {e2}")
+                raise
 
         # 5. 处理结果
         # result 是一个字典，包含 'target' 键，值为 [x, y, width, height]
@@ -509,15 +583,51 @@ def health_check():
     """
     【健康检查接口】
     检查服务状态和各个引擎的可用性
+
+    响应: {"code": 0, "data": {...}, "msg": "success"}
     """
-    status = {
-        "service": "running",
-        "ocr_available": ocr is not None,
-        "slide_detection_available": det_ocr is not None,
-        "timestamp": import_time()
-    }
-    
-    return jsonify(status), 200
+    try:
+        # 检查 OCR 引擎
+        ocr_status = "available" if ocr is not None else "unavailable"
+        ocr_error = None
+        if ocr is None:
+            ocr_error = "OCR 引擎未初始化，请检查 ddddocr 安装"
+
+        # 检查滑块检测引擎
+        slide_status = "available" if det_ocr is not None else "unavailable"
+        slide_error = None
+        if det_ocr is None:
+            slide_error = "滑块检测引擎未初始化，请检查 ddddocr 安装"
+
+        # 整体服务状态
+        service_status = "healthy" if (ocr is not None and det_ocr is not None) else "degraded"
+
+        status = {
+            "service": service_status,
+            "ocr": {
+                "status": ocr_status,
+                "error": ocr_error
+            },
+            "slide_detection": {
+                "status": slide_status,
+                "error": slide_error
+            },
+            "timestamp": import_time(),
+            "version": "4.3.1"
+        }
+
+        return jsonify({
+            "code": 0,
+            "data": status,
+            "msg": "success"
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "code": 1,
+            "data": None,
+            "msg": f"健康检查失败: {str(e)}"
+        }), 500
 
 
 def import_time():
