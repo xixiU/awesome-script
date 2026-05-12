@@ -552,6 +552,8 @@
                     border: 2px solid #e5e7eb;
                     border-radius: 8px;
                     font-size: 14px;
+                    color: #1f2937;
+                    background-color: #fff;
                     transition: border-color 0.2s, box-shadow 0.2s;
                     box-sizing: border-box;
                 }
@@ -571,6 +573,7 @@
                     appearance: none;
                     -webkit-appearance: none;
                     -moz-appearance: none;
+                    color: #1f2937;
                     background-color: #fff;
                     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7280' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
                     background-repeat: no-repeat;
@@ -578,6 +581,11 @@
                     background-size: 12px 8px;
                     padding-right: 36px;
                     cursor: pointer;
+                }
+
+                .config-select option {
+                    color: #1f2937;
+                    background-color: #fff;
                 }
 
                 .config-help {
