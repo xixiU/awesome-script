@@ -12,6 +12,8 @@
 // @grant        GM_registerMenuCommand
 // @run-at       document-end
 // @license      MIT
+// @downloadURL  https://github.com/xixiU/awesome-script/raw/refs/heads/master/common/config_manager.js
+// @updateURL    https://github.com/xixiU/awesome-script/raw/refs/heads/master/common/config_manager.js
 // ==/UserScript==
 
 (function () {
