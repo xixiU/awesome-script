@@ -453,7 +453,7 @@
                     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
                     z-index: 10000;
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-                    overflow: hidden;
+                    overflow: visible;
                     display: none;
                 }
 
@@ -705,7 +705,7 @@
                     flex-direction: column;
                     transform: scale(0.9);
                     transition: transform 0.3s ease-out;
-                    overflow: hidden;
+                    overflow: visible;
                     z-index: 1;
                 }
 
@@ -966,6 +966,10 @@
             const currentValue = this.get(item.key);
             if (item.type === 'checkbox') {
                 input.checked = currentValue;
+            } else if (item.type === 'select') {
+                // 如果存储值不在 options 里（空/undefined/旧版本残留），回退到第一个 option
+                const validValues = Array.from(input.options).map(o => o.value);
+                input.value = validValues.includes(currentValue) ? currentValue : (validValues[0] || '');
             } else {
                 input.value = currentValue != null ? currentValue : '';
             }
@@ -1114,6 +1118,10 @@
                 const currentValue = this.get(item.key);
                 if (item.type === 'checkbox') {
                     input.checked = currentValue;
+                } else if (item.type === 'select') {
+                    // select 同样做 fallback
+                    const validValues = Array.from(input.options).map(o => o.value);
+                    input.value = validValues.includes(currentValue) ? currentValue : (validValues[0] || '');
                 } else {
                     input.value = currentValue || '';
                 }
@@ -1438,7 +1446,7 @@
                 box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.1) !important;
                 display: flex !important;
                 flex-direction: column !important;
-                overflow: hidden !important;
+                overflow: visible !important;
                 z-index: 1 !important;
             `;
 
