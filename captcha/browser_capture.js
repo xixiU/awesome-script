@@ -1369,7 +1369,6 @@
             var mousedown = new MouseEvent("mousedown", {
                 bubbles: true,
                 cancelable: true,
-                view: window,
                 clientX: x,
                 clientY: y,
                 screenX: x,
@@ -1421,7 +1420,6 @@
                     var mouseup = new MouseEvent("mouseup", {
                         bubbles: true,
                         cancelable: true,
-                        view: window,
                         clientX: x + dx,
                         clientY: y + dy,
                         screenX: x + dx,
@@ -1451,7 +1449,6 @@
                 var mousemove = new MouseEvent("mousemove", {
                     bubbles: true,
                     cancelable: true,
-                    view: window,
                     clientX: _x,
                     clientY: _y,
                     screenX: _x,
