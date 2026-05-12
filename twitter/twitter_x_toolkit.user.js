@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.4.2
+// @version      2.4.3
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -72,7 +72,7 @@
             configBlockKeywordsHelp: 'Only block commenters whose comments contain these keywords (one per line). Leave empty to block all.',
             configAutoBlockLabel: 'Auto Block',
             configAutoBlockHelp: 'Automatically block commenters with keywords when opening tweet detail page (runs in background)',
-            consoleKeywordMatched: 'Keywblacklistord matched [{keyword}] for @{username}: {text}',
+            consoleKeywordMatched: 'Keyword matched [{keyword}] for @{username}: {text}',
             consoleKeywordSkipped: 'Skipped @{username}: no keywords matched',
             consoleAutoBlockStart: 'Auto-block started in background...',
             consoleAutoBlockComplete: 'Auto-block completed: {success} blocked, {failed} failed',
@@ -80,16 +80,10 @@
             // AI总结功能相关
             summarizeButtonText: '🤖 AI Summary',
             summarizeButtonLoading: '🔄 Generating...',
-            configAiBaseUrlLabel: 'OpenAI API Base URL',
-            configAiBaseUrlHelp: 'OpenAI-compatible API base URL (e.g., https://api.openai.com/v1)',
-            configAiApiKeyLabel: 'API Key',
-            configAiApiKeyHelp: 'Your OpenAI API Key',
-            configAiModelLabel: 'AI Model',
-            configAiModelHelp: 'Model name (e.g., gpt-4, gpt-3.5-turbo)',
             configAiMultimodalLabel: 'Multimodal Model',
             configAiMultimodalHelp: 'Enable if your model supports image recognition (e.g., GPT-4V, Claude 3.5, Qwen-VL). Avatar images will be sent to the model for text recognition.',
             alertSummarizing: 'AI summarization in progress, please wait...',
-            alertNoApiKey: 'Please configure your OpenAI API Key first!\nClick the config panel to set it up.',
+            alertNoApiKey: 'Please configure your LLM API Key first!\nClick the config panel to set it up.',
             alertNoContent: 'No content found to summarize!',
             panelTitle: 'AI Summary',
             panelClose: 'Close',
@@ -175,16 +169,10 @@
             // AI总结功能相关
             summarizeButtonText: '🤖 AI总结',
             summarizeButtonLoading: '🔄 生成中...',
-            configAiBaseUrlLabel: 'OpenAI API地址',
-            configAiBaseUrlHelp: 'OpenAI兼容的API基础地址（如：https://api.openai.com/v1）',
-            configAiApiKeyLabel: 'API密钥',
-            configAiApiKeyHelp: '你的OpenAI API Key',
-            configAiModelLabel: 'AI模型',
-            configAiModelHelp: '模型名称（如：gpt-4, gpt-3.5-turbo）',
             configAiMultimodalLabel: '多模态模型',
             configAiMultimodalHelp: '如果你的模型支持图像识别（如 GPT-4V、Claude 3.5、Qwen-VL），请开启。开启后会将头像图片发送给模型识别其中的文字。',
             alertSummarizing: 'AI总结进行中，请稍候...',
-            alertNoApiKey: '请先配置你的OpenAI API Key！\n点击配置面板进行设置。',
+            alertNoApiKey: '请先配置你的LLM API Key！\n点击配置面板进行设置。',
             alertNoContent: '未找到可总结的内容！',
             panelTitle: 'AI总结',
             panelClose: '关闭',
@@ -252,10 +240,9 @@
         scrollAttempts: 5,
         blockKeywords: '有弟弟线下吗\n有万达广场附近的吗\n蹲一个男搭子\n线下蹲个弟弟\n主人快来领我\n有哥哥线下吗',
         autoBlock: false,
-        // AI总结功能配置
-        aiBaseUrl: 'https://api.openai.com/v1',
-        aiApiKey: '',
-        aiModel: 'gpt-3.5-turbo',
+        // LLM 配置（api格式 / 地址 / 密钥 / 模型）由 ConfigManager 统一提供
+        ...ConfigManager.llmDefaults(),
+        // AI 业务扩展：多模态头像识别
         aiMultimodal: false,
         // AI过滤功能配置
         aiFilterEnabled: false,
@@ -302,28 +289,9 @@
             type: 'checkbox',
             help: t('configAutoBlockHelp')
         },
-        // AI总结功能配置项
-        {
-            key: 'aiBaseUrl',
-            label: t('configAiBaseUrlLabel'),
-            type: 'text',
-            placeholder: 'https://api.openai.com/v1',
-            help: t('configAiBaseUrlHelp')
-        },
-        {
-            key: 'aiApiKey',
-            label: t('configAiApiKeyLabel'),
-            type: 'password',
-            placeholder: 'sk-...',
-            help: t('configAiApiKeyHelp')
-        },
-        {
-            key: 'aiModel',
-            label: t('configAiModelLabel'),
-            type: 'text',
-            placeholder: 'gpt-3.5-turbo',
-            help: t('configAiModelHelp')
-        },
+        // AI LLM 基础配置（由 ConfigManager 统一提供：API格式 / 地址 / 密钥 / 模型）
+        ...ConfigManager.llmConfigItems({ i18n, lang: currentLang }),
+        // 业务扩展：多模态头像识别
         {
             key: 'aiMultimodal',
             label: t('configAiMultimodalLabel'),
@@ -365,6 +333,53 @@
         const content = document.querySelector('#TwitterXToolkit-config-panel .config-content');
         if (!content) return;
 
+        // ---- 将 aiMultimodal 复选框移到 aiBaseUrl 同行右侧，描述用 ⓘ tooltip ----
+        const multimodalInput = document.getElementById('TwitterXToolkit-aiMultimodal');
+        const baseUrlInput = document.getElementById('TwitterXToolkit-aiBaseUrl');
+        if (multimodalInput && baseUrlInput) {
+            const multimodalGroup = multimodalInput.closest('.config-form-group');
+            const baseUrlGroup = baseUrlInput.closest('.config-form-group');
+            if (multimodalGroup && baseUrlGroup) {
+                // 在 baseUrl group 的 label 行内追加多模态复选框 + ⓘ 提示
+                const baseUrlLabel = baseUrlGroup.querySelector('.config-label');
+                if (baseUrlLabel) {
+                    // 创建一个 label 容器，使 label 与多模态控件横向并排
+                    const labelRow = document.createElement('div');
+                    labelRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px;';
+
+                    // 把原 label 包进去
+                    baseUrlLabel.parentNode.insertBefore(labelRow, baseUrlLabel);
+                    labelRow.appendChild(baseUrlLabel);
+
+                    // 构造右侧的多模态控件
+                    const mmWrap = document.createElement('label');
+                    mmWrap.setAttribute('for', 'TwitterXToolkit-aiMultimodal');
+                    mmWrap.style.cssText = 'display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#374151;cursor:pointer;font-weight:500;white-space:nowrap;';
+
+                    // 复用原 checkbox 节点
+                    multimodalInput.style.cssText = 'width:auto;margin:0;cursor:pointer;';
+                    mmWrap.appendChild(multimodalInput);
+
+                    // 标签文字
+                    const mmText = document.createElement('span');
+                    mmText.textContent = t('configAiMultimodalLabel');
+                    mmWrap.appendChild(mmText);
+
+                    // ⓘ 提示图标，hover 显示描述
+                    const infoIcon = document.createElement('span');
+                    infoIcon.textContent = 'ⓘ';
+                    infoIcon.title = t('configAiMultimodalHelp');
+                    infoIcon.style.cssText = 'color:#9ca3af;cursor:help;font-size:13px;user-select:none;';
+                    mmWrap.appendChild(infoIcon);
+
+                    labelRow.appendChild(mmWrap);
+
+                    // 隐藏原来的多模态 group（已把 checkbox 转移走）
+                    multimodalGroup.style.display = 'none';
+                }
+            }
+        }
+
         // 按功能分组，顺序就是最终展示顺序
         const groups = [
             {
@@ -373,7 +388,7 @@
             },
             {
                 title: currentLang === 'zh' ? 'AI 功能' : 'AI Features',
-                keys: ['aiFilterEnabled', 'aiMultimodal']
+                keys: ['aiFilterEnabled']
             },
             {
                 title: currentLang === 'zh' ? '通知' : 'Notifications',
@@ -381,14 +396,15 @@
             }
         ];
 
-        // 找到所有 checkbox group
+        // 找到所有 checkbox group（排除已被搬走的 aiMultimodal）
         const allGroups = Array.from(content.querySelectorAll('.config-form-group'));
         const checkboxGroupByKey = new Map();
         allGroups.forEach(g => {
             const input = g.querySelector('input[type="checkbox"]');
             if (!input) return;
-            // input id 形如 'TwitterXToolkit-excludeOriginalPoster'
             const key = input.id.replace(/^TwitterXToolkit-/, '');
+            // aiMultimodal 已经被搬到 aiBaseUrl 同行了，跳过它
+            if (key === 'aiMultimodal') return;
             checkboxGroupByKey.set(key, g);
         });
 
@@ -634,18 +650,12 @@
 
     // ==================== AI总结功能 ====================
 
-    // Call OpenAI-compatible API for summarization
-    function callAISummarize(content, apiKey, baseUrl, model) {
-        return new Promise((resolve, reject) => {
-            if (!apiKey) {
-                reject(new Error(t('alertNoApiKey')));
-                return;
-            }
-
-            // Build prompt based on content type
-            let prompt = '';
-            if (content.type === 'tweet_with_comments') {
-                prompt = `请对以下推文及其评论进行智能总结：
+    // Call LLM for summarization
+    function callAISummarize(content) {
+        // Build prompt based on content type
+        let prompt = '';
+        if (content.type === 'tweet_with_comments') {
+            prompt = `请对以下推文及其评论进行智能总结：
 
 原推文：
 作者: @${content.tweet.author}
@@ -662,8 +672,8 @@ ${content.comments.slice(0, 100).map((c, i) => `${i + 1}. @${c.author}: ${c.text
 4. 整体舆论倾向
 
 请使用markdown格式输出，包含清晰的结构。`;
-            } else if (content.type === 'user_tweets') {
-                prompt = `请对以下用户的推文进行智能总结：
+        } else if (content.type === 'user_tweets') {
+            prompt = `请对以下用户的推文进行智能总结：
 
 用户: @${content.username}
 推文列表（共${content.tweets.length}条）：
@@ -676,50 +686,9 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 4. 最近的活跃主题
 
 请使用markdown格式输出，包含清晰的结构。`;
-            }
+        }
 
-            const requestData = {
-                model: model || 'gpt-3.5-turbo',
-                messages: [
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ],
-                temperature: 0.7
-            };
-
-            GM_xmlhttpRequest({
-                method: 'POST',
-                url: `${baseUrl}/chat/completions`,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                data: JSON.stringify(requestData),
-                timeout: 60000,
-                onload: function (response) {
-                    try {
-                        console.log(`req: ${JSON.stringify(requestData)},resp:${response.responseText}`);
-                        if (response.status === 200) {
-                            const data = JSON.parse(response.responseText);
-                            const result = data.choices?.[0]?.message?.content || 'No response';
-                            resolve(result);
-                        } else {
-                            reject(new Error(`API request failed: ${response.status} ${response.statusText}\n${response.responseText}`));
-                        }
-                    } catch (e) {
-                        reject(new Error(`Parse response failed: ${e.message}\n${response.responseText}`));
-                    }
-                },
-                onerror: function (error) {
-                    reject(new Error(`Network request failed: ${error.message || 'Unknown error'}`));
-                },
-                ontimeout: function () {
-                    reject(new Error('Request timeout, please try again later'));
-                }
-            });
-        });
+        return config.callLLM({ prompt, temperature: 0.7, maxTokens: 4096 });
     }
 
     // ==================== AI评论过滤 ====================
@@ -968,34 +937,29 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     }
 
     async function classifyCommentsByAI(comments, mainTweet) {
-        return new Promise((resolve, reject) => {
-            const baseUrl = config.get('aiBaseUrl') || 'https://api.openai.com/v1';
-            const apiKey = config.get('aiApiKey');
-            const model = config.get('aiModel') || 'gpt-3.5-turbo';
-            const customPrompt = config.get('aiFilterPrompt') || '';
-            const keywordsRaw = config.get('blockKeywords') || '';
-            const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
+        const customPrompt = config.get('aiFilterPrompt') || '';
+        const keywordsRaw = config.get('blockKeywords') || '';
+        const keywords = keywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
 
-            if (!apiKey) {
-                reject(new Error(t('alertNoApiKey')));
-                return;
-            }
+        if (!config.isLLMReady()) {
+            throw new Error(t('alertNoApiKey'));
+        }
 
-            const tweetSection = mainTweet && mainTweet.text
-                ? `原推文（作者 @${mainTweet.author || 'unknown'}）：
+        const tweetSection = mainTweet && mainTweet.text
+            ? `原推文（作者 @${mainTweet.author || 'unknown'}）：
 ${mainTweet.text.substring(0, 500)}`
-                : '原推文：（未能获取）';
+            : '原推文：（未能获取）';
 
-            const keywordsSection = keywords.length > 0
-                ? `
+        const keywordsSection = keywords.length > 0
+            ? `
 
 用户黑名单关键词（最高优先级，必须严格执行）：
 ${keywords.map(k => `- ${k}`).join('\n')}
 规则：任何评论内容中只要出现上述关键词中的任意一个（作为完整词或子串），该评论的 username 必须归入 blacklist，无视评论的其他特征或风格，也无视是否与原推文相关。`
-                : '';
+            : '';
 
-            // 默认提示词：只让模型返回需要隐藏/拉黑的 username 列表，降低对小模型的要求
-            const defaultPrompt = `你是一个社交媒体内容审核助手。请结合原推文内容，从以下评论中筛选出需要处理的用户名，只输出 username，不需要解释。
+        // 默认提示词：只让模型返回需要隐藏/拉黑的 username 列表，降低对小模型的要求
+        const defaultPrompt = `你是一个社交媒体内容审核助手。请结合原推文内容，从以下评论中筛选出需要处理的用户名，只输出 username，不需要解释。
 
 ${tweetSection}${keywordsSection}
 
@@ -1012,62 +976,24 @@ ${config.get('aiMultimodal') ? `
 
 评论列表：
 ${comments.map((c, i) => {
-                const avatarPart = config.get('aiMultimodal') ? ` | 头像: ${c.avatarUrl}` : '';
-                return `${i + 1}. 昵称: ${c.displayName} ,username: @${c.username}${avatarPart},评论: ${c.text.substring(0, 200)}`;
-            }).join('\n\n')}
+            const avatarPart = config.get('aiMultimodal') ? ` | 头像: ${c.avatarUrl}` : '';
+            return `${i + 1}. 昵称: ${c.displayName} ,username: @${c.username}${avatarPart},评论: ${c.text.substring(0, 200)}`;
+        }).join('\n\n')}
 
 严格按以下 JSON 格式返回（不要任何解释文字，不要 markdown 代码块）：
 {"blacklist":["user1","user2"],"spam":["user3"]}
 
 如果没有匹配的用户，返回：{"blacklist":[],"spam":[]}`;
 
-            const prompt = customPrompt || defaultPrompt;
+        const prompt = customPrompt || defaultPrompt;
 
-            const requestData = {
-                model: model,
-                messages: [
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ],
-                temperature: 0.3 // 降低温度以获得更一致的分类结果
-            };
-
-            GM_xmlhttpRequest({
-                method: 'POST',
-                url: `${baseUrl}/chat/completions`,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                data: JSON.stringify(requestData),
-                timeout: 60000,
-                onload: function (response) {
-                    try {
-                        console.log(`AI Filter Request: ${JSON.stringify(requestData)}`);
-                        console.log(`AI Filter Response: ${response.responseText}`);
-
-                        if (response.status === 200) {
-                            const data = JSON.parse(response.responseText);
-                            const content = data.choices?.[0]?.message?.content || '';
-                            const buckets = extractUsernameBuckets(content);
-                            resolve(buckets);
-                        } else {
-                            reject(new Error(`API request failed: ${response.status} ${response.statusText}\n${response.responseText}`));
-                        }
-                    } catch (e) {
-                        reject(new Error(`Parse response failed: ${e.message}\n${response.responseText}`));
-                    }
-                },
-                onerror: function (error) {
-                    reject(new Error(`Network request failed: ${error.message || 'Unknown error'}`));
-                },
-                ontimeout: function () {
-                    reject(new Error('Request timeout, please try again later'));
-                }
-            });
+        const responseText = await config.callLLM({
+            prompt,
+            temperature: 0.3, // 降低温度以获得更一致的分类结果
+            maxTokens: 2048
         });
+
+        return extractUsernameBuckets(responseText);
     }
 
     /**
@@ -1808,8 +1734,7 @@ ${comments.map((c, i) => {
             return;
         }
 
-        const apiKey = config.get('aiApiKey');
-        if (!apiKey) {
+        if (!config.isLLMReady()) {
             alert(t('alertNoApiKey'));
             return;
         }
@@ -1820,8 +1745,6 @@ ${comments.map((c, i) => {
         try {
             console.log(t('consoleSummarizing'));
 
-            const baseUrl = config.get('aiBaseUrl') || 'https://api.openai.com/v1';
-            const model = config.get('aiModel') || 'gpt-3.5-turbo';
             const maxScrollAttempts = parseInt(config.get('scrollAttempts')) || 3;
 
             let contentToSummarize = null;
@@ -1863,7 +1786,7 @@ ${comments.map((c, i) => {
             }
 
             // Call AI API
-            const result = await callAISummarize(contentToSummarize, apiKey, baseUrl, model);
+            const result = await callAISummarize(contentToSummarize);
 
             console.log(t('consoleSummarizeSuccess'));
             showResult(result);
@@ -2384,9 +2307,8 @@ ${comments.map((c, i) => {
         if (!isOnTweetDetailPage()) return;
         if (!config.get('aiFilterEnabled')) return;
 
-        const apiKey = config.get('aiApiKey');
-        if (!apiKey) {
-            console.log('AI过滤已启用但未配置API Key，跳过');
+        if (!config.isLLMReady()) {
+            console.log('AI过滤已启用但 LLM 未配置，跳过');
             return;
         }
 
@@ -2565,8 +2487,7 @@ ${comments.map((c, i) => {
             return;
         }
 
-        const apiKey = config.get('aiApiKey');
-        if (!apiKey) {
+        if (!config.isLLMReady()) {
             alert(t('alertNoApiKey'));
             return;
         }

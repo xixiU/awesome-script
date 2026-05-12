@@ -2,9 +2,9 @@
 // @name        Common Configuration Manager
 // @name:zh-CN  通用配置管理模块
 // @namespace    http://tampermonkey.net/
-// @version      1.1.1
-// @description  Provides common configuration management with i18n support, dynamic config items and visual config panel
-// @description:zh-CN  提供通用的配置管理功能，支持国际化、动态配置项和可视化配置界面
+// @version      1.2.0
+// @description  Provides common configuration management with i18n support, dynamic config items, visual config panel, and built-in LLM integration (OpenAI/Anthropic/Ollama)
+// @description:zh-CN  提供通用的配置管理功能，支持国际化、动态配置项、可视化配置界面，以及内置的 LLM 集成（OpenAI/Anthropic/Ollama）
 // @author       xixiu
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -108,6 +108,134 @@
             };
         }
 
+        // ==================== LLM 配置工具 ====================
+
+        /**
+         * 内置 LLM 配置项的国际化文案
+         */
+        static DEFAULT_LLM_I18N = {
+            en: {
+                llmApiFormatLabel: 'API Format',
+                llmApiFormatHelp: 'Choose API protocol: OpenAI, Anthropic, or Ollama',
+                llmBaseUrlLabel: 'LLM API Base URL',
+                llmBaseUrlHelp: 'LLM API base URL. OpenAI: https://api.openai.com/v1, Anthropic: https://api.anthropic.com, Ollama: http://localhost:11434',
+                llmApiKeyLabel: 'API Key',
+                llmApiKeyHelp: 'Your LLM API Key (not required for Ollama)',
+                llmModelLabel: 'AI Model',
+                llmModelHelp: 'Model name (e.g., gpt-4, claude-sonnet-4-5, llama3)',
+                llmSystemPromptLabel: 'System Prompt',
+                llmSystemPromptHelp: 'Default system prompt sent to the model (can be overridden per call). Leave empty to disable.'
+            },
+            zh: {
+                llmApiFormatLabel: '消息API格式',
+                llmApiFormatHelp: '选择API协议格式：OpenAI、Anthropic 或 Ollama',
+                llmBaseUrlLabel: 'LLM API地址',
+                llmBaseUrlHelp: 'LLM API基础地址。OpenAI：https://api.openai.com/v1，Anthropic：https://api.anthropic.com，Ollama：http://localhost:11434',
+                llmApiKeyLabel: 'API密钥',
+                llmApiKeyHelp: '你的LLM API Key（Ollama 不需要）',
+                llmModelLabel: 'AI模型',
+                llmModelHelp: '模型名称（如：gpt-4, claude-sonnet-4-5, llama3）',
+                llmSystemPromptLabel: '系统提示词',
+                llmSystemPromptHelp: '默认发送给模型的系统提示词（可在调用时覆盖）。留空则不使用。'
+            }
+        };
+
+        /**
+         * 返回 LLM 配置项的默认值
+         * @param {Object} [options]
+         * @param {boolean} [options.enablePrompt=false] - 是否包含系统提示词字段
+         * @param {string} [options.defaultPrompt=''] - 系统提示词的默认值（仅在 enablePrompt 为 true 时生效）
+         * @returns {Object} 默认配置对象
+         */
+        static llmDefaults(options = {}) {
+            const { enablePrompt = false, defaultPrompt = '' } = options;
+            const defaults = {
+                aiApiFormat: 'openai',
+                aiBaseUrl: 'https://api.openai.com/v1',
+                aiApiKey: '',
+                aiModel: 'gpt-3.5-turbo'
+            };
+            if (enablePrompt) {
+                defaults.aiSystemPrompt = defaultPrompt;
+            }
+            return defaults;
+        }
+
+        /**
+         * 返回 LLM 配置项数组，供 init() 使用
+         * @param {Object} options
+         * @param {Object} [options.i18n] - 脚本的 i18n 字典（可选，用于覆盖内置文案）
+         * @param {string} [options.lang] - 语言代码（默认自动检测）
+         * @param {Object} [options.labels] - 单独覆盖某些文本（可选）
+         * @param {boolean} [options.enablePrompt=false] - 是否包含系统提示词字段
+         * @param {string} [options.promptPlaceholder] - 系统提示词输入框的 placeholder
+         * @returns {Array} 配置项数组
+         */
+        static llmConfigItems(options = {}) {
+            const { i18n = {}, lang = null, labels = {}, enablePrompt = false, promptPlaceholder = '' } = options;
+            const currentLang = lang || ConfigManager.detectLanguage();
+
+            // 合并文案：自定义 labels > 脚本 i18n > 内置 DEFAULT_LLM_I18N
+            const getText = (key) => {
+                if (labels[key]) return labels[key];
+                if (i18n[currentLang] && i18n[currentLang][key]) return i18n[currentLang][key];
+                if (ConfigManager.DEFAULT_LLM_I18N[currentLang] && ConfigManager.DEFAULT_LLM_I18N[currentLang][key]) {
+                    return ConfigManager.DEFAULT_LLM_I18N[currentLang][key];
+                }
+                if (ConfigManager.DEFAULT_LLM_I18N['en'] && ConfigManager.DEFAULT_LLM_I18N['en'][key]) {
+                    return ConfigManager.DEFAULT_LLM_I18N['en'][key];
+                }
+                return key;
+            };
+
+            const items = [
+                {
+                    key: 'aiApiFormat',
+                    label: getText('llmApiFormatLabel'),
+                    type: 'select',
+                    options: [
+                        { value: 'openai', label: 'OpenAI' },
+                        { value: 'anthropic', label: 'Anthropic' },
+                        { value: 'ollama', label: 'Ollama' }
+                    ],
+                    help: getText('llmApiFormatHelp')
+                },
+                {
+                    key: 'aiBaseUrl',
+                    label: getText('llmBaseUrlLabel'),
+                    type: 'text',
+                    placeholder: 'https://api.openai.com/v1',
+                    help: getText('llmBaseUrlHelp')
+                },
+                {
+                    key: 'aiApiKey',
+                    label: getText('llmApiKeyLabel'),
+                    type: 'password',
+                    placeholder: 'sk-...',
+                    help: getText('llmApiKeyHelp')
+                },
+                {
+                    key: 'aiModel',
+                    label: getText('llmModelLabel'),
+                    type: 'text',
+                    placeholder: 'gpt-3.5-turbo',
+                    help: getText('llmModelHelp')
+                }
+            ];
+
+            if (enablePrompt) {
+                items.push({
+                    key: 'aiSystemPrompt',
+                    label: getText('llmSystemPromptLabel'),
+                    type: 'textarea',
+                    placeholder: promptPlaceholder,
+                    help: getText('llmSystemPromptHelp')
+                });
+            }
+
+            return items;
+        }
+
         // 加载配置
         loadConfig() {
             const savedConfig = GM_getValue(this.configName, '{}');
@@ -145,6 +273,153 @@
         reset() {
             this.config = { ...this.defaultConfig };
             this.saveConfig();
+        }
+
+        // ==================== LLM 调用方法 ====================
+
+        /**
+         * 检查 LLM 配置是否就绪（API Key 已配置）
+         * @returns {boolean}
+         */
+        isLLMReady() {
+            const apiFormat = (this.get('aiApiFormat') || 'openai').toLowerCase();
+            const apiKey = this.get('aiApiKey');
+            // Ollama 不需要 API Key
+            if (apiFormat === 'ollama') return true;
+            return !!apiKey;
+        }
+
+        /**
+         * 统一的 LLM 聊天请求方法，支持 OpenAI、Anthropic、Ollama 三种格式
+         * @param {Object} opts
+         * @param {string} opts.prompt - 用户消息内容
+         * @param {string} [opts.system] - 系统提示词（可选，覆盖 aiSystemPrompt 配置）
+         * @param {number} [opts.temperature=0.7] - 采样温度
+         * @param {number} [opts.maxTokens=4096] - 最大 token（Anthropic 必填，OpenAI/Ollama 可选）
+         * @returns {Promise<string>} - 返回模型生成的文本内容
+         */
+        callLLM(opts) {
+            return new Promise((resolve, reject) => {
+                const apiFormat = (this.get('aiApiFormat') || 'openai').toLowerCase();
+                const baseUrl = (this.get('aiBaseUrl') || '').replace(/\/+$/, '');
+                const apiKey = this.get('aiApiKey');
+                const model = this.get('aiModel') || (apiFormat === 'anthropic' ? 'claude-sonnet-4-5' : apiFormat === 'ollama' ? 'llama3' : 'gpt-3.5-turbo');
+
+                if (!baseUrl) {
+                    reject(new Error('LLM API base URL is not configured'));
+                    return;
+                }
+                if (apiFormat !== 'ollama' && !apiKey) {
+                    reject(new Error('LLM API Key is not configured'));
+                    return;
+                }
+
+                const { prompt, temperature = 0.7, maxTokens = 4096 } = opts;
+                // system 优先级：调用时传入 > 配置中的 aiSystemPrompt
+                let system = opts.system;
+                if (system === undefined) {
+                    const configuredPrompt = this.get('aiSystemPrompt');
+                    if (configuredPrompt && typeof configuredPrompt === 'string' && configuredPrompt.trim()) {
+                        system = configuredPrompt;
+                    }
+                }
+
+                let url, headers, requestData, parseResponse;
+
+                if (apiFormat === 'anthropic') {
+                    url = `${baseUrl}/v1/messages`;
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey,
+                        'anthropic-version': '2023-06-01'
+                    };
+                    requestData = {
+                        model: model,
+                        max_tokens: maxTokens,
+                        temperature: temperature,
+                        messages: [{ role: 'user', content: prompt }]
+                    };
+                    if (system) requestData.system = system;
+                    parseResponse = (data) => {
+                        if (Array.isArray(data.content)) {
+                            return data.content
+                                .filter(b => b && b.type === 'text')
+                                .map(b => b.text || '')
+                                .join('');
+                        }
+                        return '';
+                    };
+                } else if (apiFormat === 'ollama') {
+                    url = `${baseUrl}/api/chat`;
+                    headers = {
+                        'Content-Type': 'application/json'
+                    };
+                    const messages = [];
+                    if (system) messages.push({ role: 'system', content: system });
+                    messages.push({ role: 'user', content: prompt });
+                    requestData = {
+                        model: model,
+                        messages: messages,
+                        stream: false,
+                        options: {
+                            temperature: temperature
+                        }
+                    };
+                    parseResponse = (data) => data.message?.content || '';
+                } else {
+                    // OpenAI 兼容格式
+                    url = `${baseUrl}/chat/completions`;
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    };
+                    const messages = [];
+                    if (system) messages.push({ role: 'system', content: system });
+                    messages.push({ role: 'user', content: prompt });
+                    requestData = {
+                        model: model,
+                        messages: messages,
+                        temperature: temperature
+                    };
+                    parseResponse = (data) => data.choices?.[0]?.message?.content || '';
+                }
+
+                // 使用 GM_xmlhttpRequest 发起请求（需要脚本声明 @grant GM_xmlhttpRequest）
+                if (typeof GM_xmlhttpRequest === 'undefined') {
+                    reject(new Error('GM_xmlhttpRequest is not available. Please add @grant GM_xmlhttpRequest to your script header.'));
+                    return;
+                }
+
+                GM_xmlhttpRequest({
+                    method: 'POST',
+                    url: url,
+                    headers: headers,
+                    data: JSON.stringify(requestData),
+                    timeout: 60000,
+                    onload: function (response) {
+                        try {
+                            console.log(`[ConfigManager] LLM Request (${apiFormat}) → ${url}`);
+                            console.log(`[ConfigManager] Request: ${JSON.stringify(requestData)}`);
+                            console.log(`[ConfigManager] Response: ${response.responseText}`);
+
+                            if (response.status === 200) {
+                                const data = JSON.parse(response.responseText);
+                                resolve(parseResponse(data) || '');
+                            } else {
+                                reject(new Error(`LLM API request failed: ${response.status} ${response.statusText}\n${response.responseText}`));
+                            }
+                        } catch (e) {
+                            reject(new Error(`Parse LLM response failed: ${e.message}\n${response.responseText}`));
+                        }
+                    },
+                    onerror: function (error) {
+                        reject(new Error(`LLM network request failed: ${error.message || 'Unknown error'}`));
+                    },
+                    ontimeout: function () {
+                        reject(new Error('LLM request timeout, please try again later'));
+                    }
+                });
+            });
         }
 
         // 初始化配置界面
@@ -288,6 +563,19 @@
                 .config-textarea {
                     min-height: 80px;
                     resize: vertical;
+                }
+
+                .config-select {
+                    appearance: none;
+                    -webkit-appearance: none;
+                    -moz-appearance: none;
+                    background-color: #fff;
+                    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7280' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+                    background-repeat: no-repeat;
+                    background-position: right 12px center;
+                    background-size: 12px 8px;
+                    padding-right: 36px;
+                    cursor: pointer;
                 }
 
                 .config-help {
@@ -645,6 +933,21 @@
             if (item.type === 'textarea') {
                 input = document.createElement('textarea');
                 input.className = 'config-input config-textarea';
+            } else if (item.type === 'select') {
+                input = document.createElement('select');
+                input.className = 'config-input config-select';
+                const options = Array.isArray(item.options) ? item.options : [];
+                options.forEach(opt => {
+                    const optionEl = document.createElement('option');
+                    if (typeof opt === 'object' && opt !== null) {
+                        optionEl.value = opt.value;
+                        optionEl.textContent = opt.label != null ? opt.label : opt.value;
+                    } else {
+                        optionEl.value = opt;
+                        optionEl.textContent = opt;
+                    }
+                    input.appendChild(optionEl);
+                });
             } else {
                 input = document.createElement('input');
                 input.className = 'config-input';
@@ -652,15 +955,17 @@
             }
 
             input.id = `${this.configName}-${item.key}`;
-            input.placeholder = item.placeholder || '';
-            input.autocomplete = 'off';
+            if (input.tagName !== 'SELECT') {
+                input.placeholder = item.placeholder || '';
+                input.autocomplete = 'off';
+            }
 
             // 设置当前值
             const currentValue = this.get(item.key);
             if (item.type === 'checkbox') {
                 input.checked = currentValue;
             } else {
-                input.value = currentValue || '';
+                input.value = currentValue != null ? currentValue : '';
             }
 
             // 添加验证

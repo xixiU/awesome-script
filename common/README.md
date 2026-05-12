@@ -6,8 +6,9 @@
 
 - 📦 **配置管理**: 自动保存和加载配置，支持默认值
 - 🌐 **国际化支持**: 自动检测语言，支持参数替换
-- 🎨 **可视化配置面板**: 美观的配置界面，支持多种输入类型
+- 🎨 **可视化配置面板**: 美观的配置界面，支持多种输入类型（text / password / number / textarea / checkbox / **select**）
 - 📖 **帮助文档**: 支持在脚本中显示帮助文档对话框
+- 🤖 **LLM 开箱即用**: 内置 OpenAI / Anthropic / Ollama 三种 API 格式，一行代码完成 LLM 配置项与调用
 - 🔧 **灵活易用**: 可作为独立工具使用，也可完整实例化
 
 ## 快速开始
@@ -138,6 +139,64 @@ config.registerHelpDocument({
 });
 ```
 
+### 5. LLM 集成（OpenAI / Anthropic / Ollama）
+
+一行代码引入 LLM 所需的全部配置项（API 格式 / 地址 / 密钥 / 模型），并使用统一的 `callLLM()` 发起请求，无需手写 `GM_xmlhttpRequest` 样板。
+
+```javascript
+// 1. 在默认配置中注入 LLM 字段
+const config = new ConfigManager('MyScript', {
+    ...ConfigManager.llmDefaults(),      // aiApiFormat/aiBaseUrl/aiApiKey/aiModel
+    // ...其他字段
+});
+
+// 2. 在配置面板中追加 LLM 配置项
+config.init([
+    ...ConfigManager.llmConfigItems({ lang: 'zh' }),
+    // ...其他字段
+]);
+
+// 3. 调用 LLM（自动根据 apiFormat 切换端点和鉴权方式）
+const answer = await config.callLLM({
+    prompt: '用一句话解释相对论',
+    system: 'You are a physics teacher.',  // 可选
+    temperature: 0.7,
+    maxTokens: 4096
+});
+```
+
+**支持的 API 格式**：
+
+| 格式        | 端点                          | 鉴权             | 默认模型                 |
+| ----------- | ----------------------------- | ---------------- | ------------------------ |
+| `openai`    | `{baseUrl}/chat/completions`  | `Bearer` token   | `gpt-3.5-turbo`          |
+| `anthropic` | `{baseUrl}/v1/messages`       | `x-api-key` 头   | `claude-sonnet-4-5`      |
+| `ollama`    | `{baseUrl}/api/chat`          | 无               | `llama3`                 |
+
+**启用系统提示词（预设 prompt）**：
+
+```javascript
+const config = new ConfigManager('MyScript', {
+    ...ConfigManager.llmDefaults({
+        enablePrompt: true,                    // 启用 aiSystemPrompt 字段
+        defaultPrompt: '你是一个内容审核助手'  // 初始默认值
+    })
+});
+
+config.init([
+    ...ConfigManager.llmConfigItems({
+        lang: 'zh',
+        enablePrompt: true,
+        promptPlaceholder: '输入默认的系统提示词...'
+    })
+]);
+
+// system prompt 优先级：调用时传入 > aiSystemPrompt 配置 > 无
+await config.callLLM({ prompt: 'hi' });                // 用配置中的 aiSystemPrompt
+await config.callLLM({ prompt: 'hi', system: '诗人' }); // 强制覆盖
+await config.callLLM({ prompt: 'hi', system: '' });    // 显式不用
+```
+
 ## API 文档
 
 ### 静态方法
@@ -178,6 +237,33 @@ const i18n = {
 const t = ConfigManager.createTranslator(i18n);
 console.log(t('greeting', { name: 'World' }));
 ```
+
+#### `ConfigManager.llmDefaults(options)`
+
+返回 LLM 配置的默认值对象，用于 `new ConfigManager()` 的 `defaultConfig` 展开。
+
+**参数:**
+
+- `options` (Object, 可选):
+  - `enablePrompt` (Boolean): 是否包含 `aiSystemPrompt` 字段（默认 `false`）
+  - `defaultPrompt` (String): 系统提示词初始值（仅在 `enablePrompt=true` 时生效）
+
+**返回:** Object — `{ aiApiFormat, aiBaseUrl, aiApiKey, aiModel }`（启用 prompt 时额外包含 `aiSystemPrompt`）
+
+#### `ConfigManager.llmConfigItems(options)`
+
+返回 LLM 配置项数组，用于 `config.init()` 的展开。
+
+**参数:**
+
+- `options` (Object, 可选):
+  - `i18n` (Object): 脚本的 i18n 字典（可选，覆盖内置文案）
+  - `lang` (String): 语言代码（默认自动检测）
+  - `labels` (Object): 单独覆盖某些 key 的文本，如 `{ llmBaseUrlLabel: '自定义标签' }`
+  - `enablePrompt` (Boolean): 是否追加 `aiSystemPrompt` textarea（默认 `false`）
+  - `promptPlaceholder` (String): 系统提示词输入框的占位提示
+
+**返回:** Array — 配置项数组，包含 API 格式（select：OpenAI / Anthropic / Ollama）、地址、密钥、模型
 
 ### 实例方法
 
@@ -282,6 +368,40 @@ config.registerHelpDocument({
 });
 ```
 
+#### `isLLMReady()`
+
+检查 LLM 配置是否就绪（API Key 是否已填）。Ollama 格式无需 Key，永远返回 `true`。
+
+```javascript
+if (!config.isLLMReady()) {
+    alert('请先配置 LLM API Key');
+    return;
+}
+```
+
+#### `callLLM(opts)`
+
+统一的 LLM 请求方法，根据 `aiApiFormat` 自动选择端点、鉴权方式和响应解析逻辑。
+
+**参数:**
+
+- `opts` (Object):
+  - `prompt` (String): 用户消息内容
+  - `system` (String, 可选): 系统提示词。优先级 `opts.system > config.aiSystemPrompt > 无`；显式传空串 `''` 表示强制不使用
+  - `temperature` (Number, 默认 `0.7`): 采样温度
+  - `maxTokens` (Number, 默认 `4096`): 最大 token 数
+
+**返回:** `Promise<string>` — 模型生成的文本内容
+
+**依赖:** 调用脚本需在 header 声明 `@grant GM_xmlhttpRequest`
+
+```javascript
+const text = await config.callLLM({
+    prompt: '总结一下这段话：...',
+    temperature: 0.3
+});
+```
+
 ## 代码示例
 
 ### 示例 1: 创建简单的国际化翻译器
@@ -350,6 +470,18 @@ config.registerHelpDocument({
 - [Twitter Block All Commenters](../twitter/twitter_block_commenters.user.js) - 实际项目中使用 i18n 翻译器
 
 ## 版本历史
+
+### v1.2.0 (2026-05-12)
+
+- ✨ **LLM 集成**: 内置 OpenAI / Anthropic / Ollama 三种 API 格式支持
+- ✨ 新增静态方法 `ConfigManager.llmDefaults(options)` 返回标准 LLM 默认值对象
+- ✨ 新增静态方法 `ConfigManager.llmConfigItems(options)` 返回标准 LLM 配置项数组（含下拉选择的 API 格式）
+- ✨ 新增实例方法 `config.callLLM({ prompt, system, temperature, maxTokens })` 统一发起 LLM 请求
+- ✨ 新增实例方法 `config.isLLMReady()` 检查 LLM 配置是否可用
+- ✨ 可选 `enablePrompt` 参数支持用户可见的系统提示词（预设 prompt）配置项
+- ✨ 内置 LLM 配置的中英文文案（`DEFAULT_LLM_I18N`），脚本可通过 `labels` / `i18n` 参数覆盖
+- ✨ 配置面板新增 `select` 下拉选择类型支持，含自定义箭头样式
+- 🔧 LLM 字段沿用 `aiApiFormat` / `aiBaseUrl` / `aiApiKey` / `aiModel` / `aiSystemPrompt` 命名
 
 ### v1.1.1 (2026-02-01)
 
