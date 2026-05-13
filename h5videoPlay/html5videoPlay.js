@@ -6,7 +6,7 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.1.1
+// @version    2.1.2
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -103,6 +103,96 @@
     } catch (e) {
         // 静默失败，避免影响脚本正常执行
     }
+})();
+
+// ===== 强制开启原生 controls + 允许拖动进度条（早期注入）=====
+// 部分网站通过 controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
+// 或反复设置 controls=false 来禁止用户操作原生进度条。此保护层统一放开：
+// 1. 原生 controls 始终可显示，用户可单击/拖动进度条
+// 2. controlsList 的所有限制项被移除
+// 3. 站点脚本再次设置 controls=false 时恢复为 true
+(function () {
+    'use strict';
+    if (typeof window === 'undefined' || window.__html5VideoDraggableProtected) return;
+    window.__html5VideoDraggableProtected = true;
+
+    const FLAG = '__gmH5ForceControls';
+
+    const enforce = (video) => {
+        if (!video || !(video instanceof HTMLMediaElement) || video[FLAG]) return;
+        try {
+            Object.defineProperty(video, FLAG, { value: true, configurable: false, enumerable: false, writable: false });
+        } catch (e) { video[FLAG] = true; }
+
+        const apply = () => {
+            try {
+                if (!video.controls) video.controls = true;
+                if (video.hasAttribute('controlslist')) video.removeAttribute('controlslist');
+                // 清掉常见禁用属性，便于单击/拖动
+                ['disableRemotePlayback', 'disablePictureInPicture'].forEach(attr => {
+                    if (video.hasAttribute(attr)) video.removeAttribute(attr);
+                });
+            } catch (e) { /* ignore */ }
+        };
+
+        apply();
+        try {
+            new MutationObserver(apply).observe(video, {
+                attributes: true,
+                attributeFilter: ['controls', 'controlslist', 'disableremoteplayback', 'disablepictureinpicture']
+            });
+        } catch (e) { /* ignore */ }
+    };
+
+    const scan = (root) => {
+        if (!root || !root.querySelectorAll) return;
+        if (root.tagName === 'VIDEO') enforce(root);
+        root.querySelectorAll && root.querySelectorAll('video').forEach(enforce);
+    };
+
+    // 拦截 HTMLMediaElement.prototype.controls 的 setter，防止站点再次关闭
+    try {
+        const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'controls');
+        if (desc && desc.set) {
+            const rawSet = desc.set;
+            Object.defineProperty(HTMLMediaElement.prototype, 'controls', {
+                configurable: true,
+                enumerable: desc.enumerable,
+                get: desc.get,
+                set: function (val) { rawSet.call(this, true); }
+            });
+        }
+    } catch (e) { /* ignore */ }
+
+    // 拦截 setAttribute，过滤 controlslist 类属性
+    try {
+        const rawSetAttr = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function (name, value) {
+            if (this instanceof HTMLMediaElement && typeof name === 'string') {
+                const lower = name.toLowerCase();
+                if (lower === 'controlslist' || lower === 'disableremoteplayback' || lower === 'disablepictureinpicture') return;
+                if (lower === 'controls') return rawSetAttr.call(this, name, '');
+            }
+            return rawSetAttr.call(this, name, value);
+        };
+    } catch (e) { /* ignore */ }
+
+    // 立即扫描并持续监听 DOM
+    const startObserve = () => {
+        scan(document);
+        try {
+            new MutationObserver(muts => {
+                for (const m of muts) {
+                    for (const n of m.addedNodes) {
+                        if (n.nodeType === 1) scan(n);
+                    }
+                    if (m.type === 'attributes' && m.target && m.target.tagName === 'VIDEO') scan(m.target);
+                }
+            }).observe(document.documentElement || document, { childList: true, subtree: true });
+        } catch (e) { /* ignore */ }
+    };
+    if (document.documentElement) startObserve();
+    else document.addEventListener('DOMContentLoaded', startObserve, { once: true });
 })();
 
 // ===== Trusted Types 辅助函数 =====
@@ -264,9 +354,11 @@ chrome类浏览器加启动参数设置媒体缓存为840MB： --media-cache-siz
 ← →方向键：快退、快进5秒;   方向键 + shift: 20秒
 ↑ ↓方向键：音量调节   ESC：退出（网页）全屏
 空格键：暂停/播放      N：播放下一集
-回车键：切换全屏;      回车键 + shift: 切换网页全屏
+回车键 / F键：切换全屏    回车键 + shift：切换网页全屏
 C(抖音、youtube用V键)：加速0.1倍  X(抖音S)：减速0.1倍  Z(抖音A)：切换加速状态
-D：上一帧     F：下一帧(youtube.com用E键)`
+D：上一帧     G：下一帧(youtube.com用E键)
+
+原生进度条已强制开启，所有 H5 视频均支持单击/拖动进度条跳转。`
     },
     'en': {
         'console': '%cScript[%s] Feedback：%s\n%s',
@@ -296,7 +388,7 @@ Arrow keys ↑ and ↓： Raise or lower the volume
 
 ESC： Exit full screen (or exit video enlarged to window size)
 Spacebar： Stop/Play
-Enter： Enable/disable full screen video
+Enter / F key： Toggle full screen
 Shift + Enter: Set/unset video enlarged to window size
 
 N key： Play the next video (if any)
@@ -304,46 +396,10 @@ C key(YouTube:V key)： Speed up video playback by 0.1
 X key: Slow down video playback by 0.1
 Z key, Set video playback speed: 1.0 ←→ X
 D key: Previous frame
-F key: Next frame (except on YouTube)
-E key: Next frame (YouTube only)`
-    },
-    'it': {
-        'console': '%cScript[%s] Feedback：%s\n%s',
-        'cacheStoringError': 'Cercare di memorizzazione nella cache tipi di media diretti (come ad esempio il formato MP4) non ha alcuna efficacia!',
-        'cacheStoringConfirm': 'Vuoi che tutti i segmenti del video siano memorizzati nella cache? Il metodo di rilevamento utilizzato è il seguente: all\'aggiornamento della pagina, i video clip guardati saranno memorizzati nella cache in modo da non generare ulteriore traffico di rete. Se vuoi che tutti i segmenti dei video siano memorizzati nella cache, seleziona OK; seleziona invece Annulla per bufferizzare una parte del video in base alla dimensione predefinita del buffer (come da comportamento predefinito del browser).Durante il buffering, premere nuovamente il tasto M per annullare il buffering.',
-        'cantOpenPIP': 'Impossibile accedere alla modalità picture-in-picture! Errore：\n',
-        'cantExitPIP': 'Impossibile uscire dalla modalità picture-in-picture! Errore：\n',
-        'rememberRateMenuOption': 'Memorizza la velocità di riproduzione dei video',
-        'speedRate': 'Velocità di riproduzione ',
-        'ready': "Pronto！ In attesa dei comandi dell'utente.",
-        'mainPageOnly': 'Elaborazione della sola pagina principale',
-        'download': 'Scarica: ',
-        'videoLag': 'Ritardo del video',
-        'fullScreen': 'Schermo intero',
-        'helpMenuOption': 'Elenco dei tasti di scelta rapida',
-        'helpBody': `Doppio clic: attiva lo schermo intero
-Pulsante centrale del mouse: avanzamento rapido di 5 secondi
+G key: Next frame (except on YouTube)
+E key: Next frame (YouTube only)
 
-Tasto P: Esegui uno screenshot
-Tasto I： Attiva modalità picture-in-picture
-Tasto M： Attiva/disattiva memorizzazione del video nella cache
-I browser Chrome aggiungono parametri di avvio per impostare la cache multimediale a 840MB： --media-cache-size=880008000
-
-Tasti freccia ← e →： Avanza o riavvolgi di 5 secondi
-Shift + Tasti freccia ← e →: Avanza o riavvolgi di 20 secondi
-Tasti freccia ↑ e ↓： Alza o abbassa il volume
-ESC： Esci da schermo intero
-Barra spaziatrice: Ferma/Riproduci
-Invio： Attiva/disattiva ingrandimento del video a schermo intero
-Shift + Invio: Attiva/disattiva ingrandimento del video a dimensione della finestra
-
-Tasto N： Riproduzione del video successivo (se presente)
-Tasto C(YouTube: Tasto V): Velocizza riproduzione video di 0,1
-Tasto X: Rallenta riproduzione video di 0,1
-Tasto Z, Impostare la velocità di riproduzione video: 1,0 ←→ X
-Tasto D: Vai al frame precedente
-Tasto F: Vai al frame successivo (escluso YouTube)
-Tasto E: Vai al frame successivo (solo su YouTube)`
+Native controls are forced on for all H5 videos so the timeline can be clicked or dragged to seek.`
     }
 };
 const MSG = i18n[curLang] || i18n.en;
@@ -742,7 +798,10 @@ actList.set(90, _ => { //按键Z: 切换加速状态
     .set(39, _ => { v.currentTime += 5 }) //按键→
     .set(39 + 1024, _ => { v.currentTime += 20 }) //按键shift+→
     .set(68, _ => { v.currentTime -= 0.03; v.pause() }) //按键D：上一帧
-    .set(70, _ => { v.currentTime += 0.03; v.pause() }) //按键F：下一帧
+    .set(71, _ => { v.currentTime += 0.03; v.pause() }) //按键G：下一帧
+    .set(70, _ => { //按键F：切换全屏
+        _fs ? _fs.toggle() : clickDualButton(cfg.btnFS);
+    })
     .set(32, _ => { //按键space
         if (cfg.btnPlay) clickDualButton(cfg.btnPlay);
         else v.paused ? v.play() : v.pause();
@@ -1052,11 +1111,12 @@ const router = {
 
         // YouTube 特定快捷键映射
         actList.delete(32); // 删除空格键（YouTube 自己处理）
+        actList.delete(70); // 删除 F 键全屏（YouTube 自身已有 F 键全屏）
 
-        // 将 F 键功能移到 E 键（下一帧）
-        const nextFrameAction = actList.get(70);
+        // 将下一帧（G 键）迁移到 E 键，避免与 YouTube 内置冲突
+        const nextFrameAction = actList.get(71);
         if (nextFrameAction) {
-            actList.set(69, nextFrameAction).delete(70); // F键(70) >> E键(69)
+            actList.set(69, nextFrameAction).delete(71); // G键(71) >> E键(69)
         }
 
         // 将 C 键功能移到 V 键（加速）
@@ -1298,9 +1358,11 @@ chrome类浏览器加启动参数设置媒体缓存为840MB： --media-cache-siz
 ← →方向键：快退、快进5秒;   方向键 + shift: 20秒
 ↑ ↓方向键：音量调节   ESC：退出（网页）全屏
 空格键：暂停/播放      N：播放下一集
-回车键：切换全屏;      回车键 + shift: 切换网页全屏
+回车键 / F键：切换全屏    回车键 + shift：切换网页全屏
 C(抖音、youtube用V键)：加速0.1倍  X(抖音S)：减速0.1倍  Z(抖音A)：切换加速状态
-D：上一帧     F：下一帧(youtube.com用E键)
+D：上一帧     G：下一帧(youtube.com用E键)
+
+原生进度条已强制开启，所有 H5 视频均支持单击/拖动进度条跳转。
 
 【系统音频字幕功能使用说明】
 1. 启动控制器服务: cd subtitle_backend && python subtitle_controller.py
@@ -1340,7 +1402,7 @@ Arrow keys ↑ and ↓： Raise or lower the volume
 
 ESC： Exit full screen (or exit video enlarged to window size)
 Spacebar： Stop/Play
-Enter： Enable/disable full screen video
+Enter / F key： Toggle full screen
 Shift + Enter: Set/unset video enlarged to window size
 
 N key： Play the next video (if any)
@@ -1348,8 +1410,10 @@ C key(YouTube:V key)： Speed up video playback by 0.1
 X key: Slow down video playback by 0.1
 Z key, Set video playback speed: 1.0 ←→ X
 D key: Previous frame
-F key: Next frame (except on YouTube)
+G key: Next frame (except on YouTube)
 E key: Next frame (YouTube only)
+
+Native controls are forced on for all H5 videos so the timeline can be clicked or dragged to seek.
 
 【System Audio Subtitle Feature】
 1. Start controller: cd subtitle_backend && python subtitle_controller.py
@@ -1371,55 +1435,6 @@ E key: Next frame (YouTube only)
             'autoTranslateDisabled': 'Auto translate disabled',
             'subtitleNotStarted': 'Subtitle service not started',
             'clickOkToEnable': 'Click OK to enable, Cancel to disable'
-        },
-        'it': {
-            'helpMenuOption': 'Elenco dei tasti di scelta rapida',
-            'helpBody': `Doppio clic: attiva lo schermo intero
-Pulsante centrale del mouse: avanzamento rapido di 5 secondi
-
-Tasto P: Esegui uno screenshot
-Tasto I： Attiva modalità picture-in-picture
-Tasto M： Attiva/disattiva memorizzazione del video nella cache
-Tasto S： Attiva/disattiva traduzione sottotitoli audio di sistema in tempo reale 🆕
-I browser Chrome aggiungono parametri di avvio per impostare la cache multimediale a 840MB: --media-cache-size=880008000
-
-Frecce ← e →： Avanzamento rapido o riavvolgimento di 5 secondi
-Shift + Frecce ← e →： Avanzamento rapido o riavvolgimento di 20 secondi
-Frecce ↑ e ↓： Aumenta o diminuisci il volume
-
-ESC： Esci dalla modalità schermo intero
-Barra spaziatrice： Stop/Riproduci
-Invio： Attiva/disattiva video a schermo intero
-Shift + Invio: Imposta/rimuovi video ingrandito alla dimensione della finestra
-
-Tasto N： Riproduci il video successivo (se presente)
-Tasto C (YouTube: V)： Accelera la riproduzione video di 0,1
-Tasto X: Rallenta la riproduzione video di 0,1
-Tasto Z: Imposta velocità di riproduzione video: 1,0 ←→ X
-Tasto D: Frame precedente
-Tasto F: Frame successivo (eccetto su YouTube)
-Tasto E: Frame successivo (solo su YouTube)
-
-【Funzionalità Sottotitoli Audio di Sistema】
-1. Avvia controller: cd subtitle_backend && python subtitle_controller.py
-2. Premi S per avviare/fermare il servizio (apparirà finestra fluttuante)
-3. Seleziona lingua target nella finestra fluttuante
-4. Funziona con tutti i siti video ascoltando l'audio di sistema`,
-            'rememberRate': 'Memorizza la velocità di riproduzione dei video',
-            'subtitleConfig': 'Configurazione traduzione sottotitoli',
-            'restartSubtitle': 'Riavvia servizio sottotitoli',
-            'serverUrl': 'URL server backend',
-            'targetLang': 'Lingua di traduzione target',
-            'autoTranslate': 'Traduzione automatica',
-            'serverUrlHelp': '(Assicurati che il servizio sia in esecuzione)',
-            'targetLangHelp': 'Supportati: zh-CN, en, ja, ko, fr, de, es, ru, ecc',
-            'autoTranslateConfirm': 'Tradurre automaticamente i sottotitoli?',
-            'serverUpdated': 'URL server aggiornato',
-            'langUpdated': 'Lingua di destinazione aggiornata a',
-            'autoTranslateEnabled': 'Traduzione automatica abilitata',
-            'autoTranslateDisabled': 'Traduzione automatica disabilitata',
-            'subtitleNotStarted': 'Servizio sottotitoli non avviato',
-            'clickOkToEnable': 'Clicca OK per abilitare, Annulla per disabilitare'
         }
     }
 });
