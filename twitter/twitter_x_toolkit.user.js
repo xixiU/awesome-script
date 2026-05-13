@@ -31,6 +31,10 @@
     let failedUsers = [];
     let isSummarizing = false;
 
+    // AI 过滤相关状态
+    let blockedUsersSet = new Set(); // 已拉黑的用户名集合（用于自动隐藏新加载的评论）
+    let commentObserver = null; // MutationObserver 实例
+
     // Internationalization (i18n) text dictionary
     const i18n = {
         en: {
@@ -831,14 +835,17 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
     // 通过 Twitter 内部 GraphQL 接口后台拉取用户简介
     // 复用 blockUserByAPI 已有的鉴权（bearer + ct0 cookie）
+    // 存储最新的 rate limit 信息
+    let lastRateLimit = { remaining: 150, reset: 0 };
+
     async function fetchUserBio(username) {
-        if (userBioCache.has(username)) return userBioCache.get(username);
+        if (userBioCache.has(username)) return { bio: userBioCache.get(username), rateLimit: lastRateLimit };
 
         try {
             const csrfToken = document.cookie.match(/ct0=([^;]+)/)?.[1];
             if (!csrfToken) {
                 userBioCache.set(username, null);
-                return null;
+                return { bio: null, rateLimit: lastRateLimit };
             }
 
             const variables = encodeURIComponent(JSON.stringify({
@@ -875,19 +882,33 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 }
             );
 
+            // 更新 rate limit 信息
+            const remaining = parseInt(response.headers.get('x-rate-limit-remaining') || '150');
+            const reset = parseInt(response.headers.get('x-rate-limit-reset') || '0');
+            lastRateLimit = { remaining, reset };
+
+            // 处理 429
+            if (response.status === 429) {
+                const retryAfter = parseInt(response.headers.get('retry-after') || '0');
+                const waitUntil = retryAfter > 0 ? Date.now() + retryAfter * 1000 : reset * 1000;
+                console.warn(`⚠️ 触发限流 (429)，等待到 ${new Date(waitUntil).toLocaleTimeString()}`);
+                userBioCache.set(username, null);
+                return { bio: null, rateLimit: lastRateLimit, waitUntil };
+            }
+
             if (!response.ok) {
                 userBioCache.set(username, null);
-                return null;
+                return { bio: null, rateLimit: lastRateLimit };
             }
 
             const data = await response.json();
             const bio = data?.data?.user?.result?.legacy?.description || '';
             userBioCache.set(username, bio);
-            return bio;
+            return { bio, rateLimit: lastRateLimit };
         } catch (error) {
             console.warn(`拉取 @${username} 简介失败:`, error.message);
             userBioCache.set(username, null);
-            return null;
+            return { bio: null, rateLimit: lastRateLimit };
         }
     }
 
@@ -902,26 +923,57 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     }
 
     // 批量检查一组 username 的简介，返回命中用户的 Set 和命中的前缀 Map
-    // 控制并发（每批 5 个）和批次间延迟（300ms），避免触发 Twitter rate limit
+    // 控制并发（每批 2 个）和批次间延迟（800ms + jitter），避免触发 Twitter rate limit
+    // 限流感知：剩余配额 < RATE_LIMIT_THRESHOLD 时主动暂停到窗口重置
     async function checkBiosInBackground(usernames, prefixes) {
         const hits = new Map(); // username -> matched prefix
         if (!prefixes || prefixes.length === 0 || usernames.length === 0) {
             return hits;
         }
 
-        const BATCH_SIZE = 5;
-        const BATCH_DELAY_MS = 300;
+        const BATCH_SIZE = 2;
+        const BATCH_DELAY_MS = 800;
+        const RATE_LIMIT_THRESHOLD = 10; // 剩余配额低于此值时暂停
 
         for (let i = 0; i < usernames.length; i += BATCH_SIZE) {
             const batch = usernames.slice(i, i + BATCH_SIZE);
-            const bios = await Promise.all(batch.map(u => fetchUserBio(u)));
+            const results = await Promise.all(batch.map(u => fetchUserBio(u)));
+
             batch.forEach((username, idx) => {
-                const bio = bios[idx];
+                const result = results[idx];
+                const bio = result.bio;
                 const matched = matchBioPrefix(bio, prefixes);
                 if (matched) hits.set(username, matched);
             });
+
+            // 检查 rate limit
+            const lastResult = results[results.length - 1];
+            if (lastResult.rateLimit) {
+                const { remaining, reset } = lastResult.rateLimit;
+
+                // 如果遇到 429，等待到重置时间
+                if (lastResult.waitUntil) {
+                    const waitMs = lastResult.waitUntil - Date.now();
+                    if (waitMs > 0) {
+                        console.log(`⏸️ 等待限流窗口重置（${Math.ceil(waitMs / 1000)}秒）...`);
+                        await sleep(waitMs);
+                    }
+                }
+                // 如果剩余配额不足，主动暂停
+                else if (remaining < RATE_LIMIT_THRESHOLD && reset > 0) {
+                    const now = Math.floor(Date.now() / 1000);
+                    const waitSeconds = reset - now;
+                    if (waitSeconds > 0 && waitSeconds < 900) { // 最多等 15 分钟
+                        console.log(`⏸️ 配额不足（剩余 ${remaining}），等待窗口重置（${waitSeconds}秒）...`);
+                        await sleep(waitSeconds * 1000);
+                    }
+                }
+            }
+
+            // 批次间延迟 + 随机 jitter
             if (i + BATCH_SIZE < usernames.length) {
-                await sleep(BATCH_DELAY_MS);
+                const jitter = Math.floor(Math.random() * 400) - 200; // ±200ms
+                await sleep(BATCH_DELAY_MS + jitter);
             }
         }
 
@@ -1159,6 +1211,7 @@ ${comments.map((c, i) => {
                 text: previewText(username)
             }));
             markCommentByCategory(username, 'blacklist', '');
+            blockedUsersSet.add(username); // 添加到已拉黑用户集合
             await blockUserByAPI(username);
             await sleep(500);
         }
@@ -2357,10 +2410,19 @@ ${comments.map((c, i) => {
 
             // 规则 3 bio-prefix：后台查询用户简介，命中配置前缀的直接判黑名单
             // 只对"未被文本规则命中"的用户查询，避免浪费请求
+            // 优化：评论长度 > 50 字的用户跳过简介检查（色情账号评论通常很短）
             const bioPrefixesRaw = config.get('bioBlacklistPrefixes') || '';
             const bioPrefixes = bioPrefixesRaw.split('\n').map(p => p.trim()).filter(p => p.length > 0);
             if (bioPrefixes.length > 0 && comments.length > 0) {
-                const candidateNames = comments.map(c => c.username);
+                const COMMENT_LENGTH_THRESHOLD = 50;
+                const candidateNames = comments
+                    .filter(c => c.text.length <= COMMENT_LENGTH_THRESHOLD)
+                    .map(c => c.username);
+
+                if (candidateNames.length > 0) {
+                    console.log(`🔍 简介检查：${candidateNames.length} 个用户（已跳过 ${comments.length - candidateNames.length} 个长评论用户）`);
+                }
+
                 const bioHits = await checkBiosInBackground(candidateNames, bioPrefixes);
                 if (bioHits.size > 0) {
                     const remainingComments = [];
@@ -2442,6 +2504,9 @@ ${comments.map((c, i) => {
             // 完成
             updateAIFilterStatus(t('aiFilterStatusComplete'), true);
 
+            // 启动监听器，持续监听新评论
+            watchForNewComments();
+
         } catch (error) {
             console.error(t('consoleAiFilterError', { error: error.message }));
         } finally {
@@ -2451,25 +2516,68 @@ ${comments.map((c, i) => {
 
     /**
      * 监听新评论并自动过滤
+     * 解决两个问题：
+     * 1. 新加载的评论如果是已拉黑用户，立即隐藏
+     * 2. 对新评论进行增量 AI 过滤，不遗漏任何评论
      */
     function watchForNewComments() {
         if (!config.get('aiFilterEnabled')) return;
         if (!isOnTweetDetailPage()) return;
 
-        const observer = new MutationObserver(() => {
-            if (!aiFilterInProgress && isOnTweetDetailPage()) {
-                // 延迟执行，避免频繁触发
-                setTimeout(autoAIFilterComments, 1000);
-            }
+        // 停止旧的监听器
+        if (commentObserver) {
+            commentObserver.disconnect();
+        }
+
+        let processingTimer = null;
+
+        commentObserver = new MutationObserver(() => {
+            // 立即检查新评论是否是已拉黑用户，如果是则立即隐藏
+            const articles = document.querySelectorAll('article[data-testid="tweet"]');
+            articles.forEach(article => {
+                // 跳过已处理的评论
+                if (article.hasAttribute('data-ai-filtered')) return;
+
+                // 提取用户名
+                const userLinks = article.querySelectorAll('a[href^="/"][role="link"]');
+                let username = null;
+                userLinks.forEach(link => {
+                    const href = link.getAttribute('href');
+                    if (href && href.match(/^\/[^\/]+$/)) {
+                        const user = href.substring(1);
+                        if (user &&
+                            user !== 'home' &&
+                            user !== 'explore' &&
+                            user !== 'notifications' &&
+                            user !== 'messages') {
+                            username = user;
+                        }
+                    }
+                });
+
+                // 如果是已拉黑用户，立即隐藏
+                if (username && blockedUsersSet.has(username)) {
+                    article.style.display = 'none';
+                    article.setAttribute('data-ai-filtered', 'blacklist');
+                    console.log(`🚫 自动隐藏已拉黑用户的新评论: @${username}`);
+                }
+            });
+
+            // 延迟执行 AI 过滤，避免频繁触发
+            if (processingTimer) clearTimeout(processingTimer);
+            processingTimer = setTimeout(() => {
+                if (!aiFilterInProgress && isOnTweetDetailPage()) {
+                    autoAIFilterComments();
+                }
+            }, 2000);
         });
 
-        observer.observe(document.body, {
+        commentObserver.observe(document.body, {
             childList: true,
             subtree: true
         });
 
-        // 60秒后停止监听，避免内存泄漏
-        setTimeout(() => observer.disconnect(), 60000);
+        console.log('👁️ 已启动评论监听器，新评论将自动过滤');
     }
 
     /**
