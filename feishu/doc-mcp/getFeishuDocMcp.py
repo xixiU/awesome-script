@@ -215,32 +215,33 @@ async def list_children(token: str, type: str = "auto", recursive: bool = False)
                     return json.dumps(results, ensure_ascii=False, indent=2)
                 else:
                     # 递归：并发遍历整个目录树
+                    # 注意：信号量只包裹 HTTP 请求，不能包裹 gather 子任务，
+                    # 否则父任务持有槽位等子任务、子任务又抢槽位 → 死锁
                     all_results = []
-                    sem = asyncio.Semaphore(10)  # 控制并发数
+                    sem = asyncio.Semaphore(10)
 
                     async def _collect_recursive(parent_token, depth=0):
                         async with sem:
                             children = await _list_wiki_child_nodes(auth_token, space_id, parent_token)
-                            for n in children:
-                                all_results.append({
-                                    "token": n.get("node_token"),
-                                    "name": n.get("title"),
-                                    "type": n.get("obj_type"),
-                                    "has_child": n.get("has_child"),
-                                    "obj_token": n.get("obj_token"),
-                                    "created_time": n.get("obj_create_time"),
-                                    "modified_time": n.get("obj_edit_time"),
-                                    "parent_token": parent_token,
-                                    "depth": depth,
-                                    "source": "wiki",
-                                })
-                            # 并发递归子节点
-                            tasks = [
-                                _collect_recursive(n.get("node_token"), depth + 1)
-                                for n in children if n.get("has_child")
-                            ]
-                            if tasks:
-                                await asyncio.gather(*tasks)
+                        for n in children:
+                            all_results.append({
+                                "token": n.get("node_token"),
+                                "name": n.get("title"),
+                                "type": n.get("obj_type"),
+                                "has_child": n.get("has_child"),
+                                "obj_token": n.get("obj_token"),
+                                "created_time": n.get("obj_create_time"),
+                                "modified_time": n.get("obj_edit_time"),
+                                "parent_token": parent_token,
+                                "depth": depth,
+                                "source": "wiki",
+                            })
+                        tasks = [
+                            _collect_recursive(n.get("node_token"), depth + 1)
+                            for n in children if n.get("has_child")
+                        ]
+                        if tasks:
+                            await asyncio.gather(*tasks)
 
                     await _collect_recursive(token, 0)
                     return json.dumps(all_results, ensure_ascii=False, indent=2)
@@ -268,32 +269,33 @@ async def list_children(token: str, type: str = "auto", recursive: bool = False)
             return json.dumps(results, ensure_ascii=False, indent=2)
         else:
             # 递归：并发遍历整个目录树
+            # 注意：信号量只包裹 HTTP 请求，不能包裹 gather 子任务，
+            # 否则父任务持有槽位等子任务、子任务又抢槽位 → 死锁
             all_results = []
             sem = asyncio.Semaphore(10)
 
             async def _collect_recursive(folder_token, depth=0):
                 async with sem:
                     files = await _list_drive_files(auth_token, folder_token)
-                    for f in files:
-                        all_results.append({
-                            "token": f.get("token"),
-                            "name": f.get("name"),
-                            "type": f.get("type"),
-                            "has_child": f.get("type") == "folder",
-                            "obj_token": f.get("token"),
-                            "created_time": f.get("created_time"),
-                            "modified_time": f.get("modified_time"),
-                            "parent_token": folder_token,
-                            "depth": depth,
-                            "source": "drive",
-                        })
-                    # 并发递归子文件夹
-                    tasks = [
-                        _collect_recursive(f.get("token"), depth + 1)
-                        for f in files if f.get("type") == "folder"
-                    ]
-                    if tasks:
-                        await asyncio.gather(*tasks)
+                for f in files:
+                    all_results.append({
+                        "token": f.get("token"),
+                        "name": f.get("name"),
+                        "type": f.get("type"),
+                        "has_child": f.get("type") == "folder",
+                        "obj_token": f.get("token"),
+                        "created_time": f.get("created_time"),
+                        "modified_time": f.get("modified_time"),
+                        "parent_token": folder_token,
+                        "depth": depth,
+                        "source": "drive",
+                    })
+                tasks = [
+                    _collect_recursive(f.get("token"), depth + 1)
+                    for f in files if f.get("type") == "folder"
+                ]
+                if tasks:
+                    await asyncio.gather(*tasks)
 
             await _collect_recursive(token, 0)
             return json.dumps(all_results, ensure_ascii=False, indent=2)
@@ -368,30 +370,31 @@ async def drive_list_folder(folder_token: str = None, recursive: bool = False) -
         return json.dumps(results, ensure_ascii=False, indent=2)
     else:
         # 递归：并发遍历整个目录树
+        # 注意：信号量只包裹 HTTP 请求，不能包裹 gather 子任务，
+        # 否则父任务持有槽位等子任务、子任务又抢槽位 → 死锁
         all_results = []
         sem = asyncio.Semaphore(10)
 
         async def _collect_recursive(parent_folder_token, depth=0):
             async with sem:
                 files = await _list_drive_files(token, parent_folder_token)
-                for f in files:
-                    all_results.append({
-                        "token": f.get("token"),
-                        "name": f.get("name"),
-                        "type": f.get("type"),
-                        "parent_token": parent_folder_token,
-                        "owner_id": f.get("owner_id"),
-                        "created_time": f.get("created_time"),
-                        "modified_time": f.get("modified_time"),
-                        "depth": depth,
-                    })
-                # 并发递归子文件夹
-                tasks = [
-                    _collect_recursive(f.get("token"), depth + 1)
-                    for f in files if f.get("type") == "folder"
-                ]
-                if tasks:
-                    await asyncio.gather(*tasks)
+            for f in files:
+                all_results.append({
+                    "token": f.get("token"),
+                    "name": f.get("name"),
+                    "type": f.get("type"),
+                    "parent_token": parent_folder_token,
+                    "owner_id": f.get("owner_id"),
+                    "created_time": f.get("created_time"),
+                    "modified_time": f.get("modified_time"),
+                    "depth": depth,
+                })
+            tasks = [
+                _collect_recursive(f.get("token"), depth + 1)
+                for f in files if f.get("type") == "folder"
+            ]
+            if tasks:
+                await asyncio.gather(*tasks)
 
         await _collect_recursive(folder_token, 0)
         return json.dumps(all_results, ensure_ascii=False, indent=2)
@@ -506,31 +509,32 @@ async def wiki_list_nodes(wiki_token: str, recursive: bool = False) -> str:
         return json.dumps(results, ensure_ascii=False, indent=2)
     else:
         # 递归：并发遍历整个节点树
+        # 注意：信号量只包裹 HTTP 请求，不能包裹 gather 子任务，
+        # 否则父任务持有槽位等子任务、子任务又抢槽位 → 死锁
         all_results = []
         sem = asyncio.Semaphore(10)
 
         async def _collect_recursive(parent_token, depth=0):
             async with sem:
                 children = await _list_wiki_child_nodes(token, space_id, parent_token)
-                for n in children:
-                    all_results.append({
-                        "node_token": n.get("node_token"),
-                        "obj_token": n.get("obj_token"),
-                        "obj_type": n.get("obj_type"),
-                        "title": n.get("title"),
-                        "has_child": n.get("has_child"),
-                        "parent_node_token": parent_token,
-                        "created_time": n.get("obj_create_time"),
-                        "modified_time": n.get("obj_edit_time"),
-                        "depth": depth,
-                    })
-                # 并发递归子节点
-                tasks = [
-                    _collect_recursive(n.get("node_token"), depth + 1)
-                    for n in children if n.get("has_child")
-                ]
-                if tasks:
-                    await asyncio.gather(*tasks)
+            for n in children:
+                all_results.append({
+                    "node_token": n.get("node_token"),
+                    "obj_token": n.get("obj_token"),
+                    "obj_type": n.get("obj_type"),
+                    "title": n.get("title"),
+                    "has_child": n.get("has_child"),
+                    "parent_node_token": parent_token,
+                    "created_time": n.get("obj_create_time"),
+                    "modified_time": n.get("obj_edit_time"),
+                    "depth": depth,
+                })
+            tasks = [
+                _collect_recursive(n.get("node_token"), depth + 1)
+                for n in children if n.get("has_child")
+            ]
+            if tasks:
+                await asyncio.gather(*tasks)
 
         await _collect_recursive(wiki_token, 0)
         return json.dumps(all_results, ensure_ascii=False, indent=2)
@@ -610,15 +614,15 @@ async def wiki_search(keyword: str, wiki_token: str = None, count: int = 10) -> 
                 url = f"{URL_PREFIX}/open-apis/wiki/v2/spaces/{space_id}/nodes"
                 params = {"page_size": 50, "parent_node_token": parent_token}
                 children = await _get_all_pages(client, url, headers, params)
-                for n in children:
-                    if n.get("obj_type") == "docx":
-                        all_nodes.append(n)
-                tasks = [
-                    _collect_nodes(n.get("node_token"))
-                    for n in children if n.get("has_child")
-                ]
-                if tasks:
-                    await asyncio.gather(*tasks)
+            for n in children:
+                if n.get("obj_type") == "docx":
+                    all_nodes.append(n)
+            tasks = [
+                _collect_nodes(n.get("node_token"))
+                for n in children if n.get("has_child")
+            ]
+            if tasks:
+                await asyncio.gather(*tasks)
 
         await _collect_nodes(wiki_token)
 
