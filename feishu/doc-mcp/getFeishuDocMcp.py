@@ -218,7 +218,7 @@ async def list_children(token: str, type: str = "auto", recursive: bool = False)
                     # 注意：信号量只包裹 HTTP 请求，不能包裹 gather 子任务，
                     # 否则父任务持有槽位等子任务、子任务又抢槽位 → 死锁
                     all_results = []
-                    sem = asyncio.Semaphore(10)
+                    sem = asyncio.Semaphore(5)
 
                     async def _collect_recursive(parent_token, depth=0):
                         async with sem:
@@ -272,7 +272,7 @@ async def list_children(token: str, type: str = "auto", recursive: bool = False)
             # 注意：信号量只包裹 HTTP 请求，不能包裹 gather 子任务，
             # 否则父任务持有槽位等子任务、子任务又抢槽位 → 死锁
             all_results = []
-            sem = asyncio.Semaphore(10)
+            sem = asyncio.Semaphore(5)
 
             async def _collect_recursive(folder_token, depth=0):
                 async with sem:
@@ -373,7 +373,7 @@ async def drive_list_folder(folder_token: str = None, recursive: bool = False) -
         # 注意：信号量只包裹 HTTP 请求，不能包裹 gather 子任务，
         # 否则父任务持有槽位等子任务、子任务又抢槽位 → 死锁
         all_results = []
-        sem = asyncio.Semaphore(10)
+        sem = asyncio.Semaphore(5)
 
         async def _collect_recursive(parent_folder_token, depth=0):
             async with sem:
@@ -512,7 +512,7 @@ async def wiki_list_nodes(wiki_token: str, recursive: bool = False) -> str:
         # 注意：信号量只包裹 HTTP 请求，不能包裹 gather 子任务，
         # 否则父任务持有槽位等子任务、子任务又抢槽位 → 死锁
         all_results = []
-        sem = asyncio.Semaphore(3)
+        sem = asyncio.Semaphore(5)
 
         async def _collect_recursive(parent_token, depth=0):
             async with sem:
@@ -607,7 +607,7 @@ async def wiki_search(keyword: str, wiki_token: str = None, count: int = 10) -> 
         all_nodes.append(root_info)
 
     async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
-        sem_collect = asyncio.Semaphore(10)
+        sem_collect = asyncio.Semaphore(5)
 
         async def _collect_nodes(parent_token):
             async with sem_collect:
@@ -631,7 +631,7 @@ async def wiki_search(keyword: str, wiki_token: str = None, count: int = 10) -> 
     keyword_lower = keyword.lower()
 
     async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
-        sem_read = asyncio.Semaphore(15)
+        sem_read = asyncio.Semaphore(5)
 
         async def _check_content(node):
             if len(results) >= count:
