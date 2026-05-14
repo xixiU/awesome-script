@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.4.3
+// @version      2.4.4
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -1311,21 +1311,93 @@ ${comments.map((c, i) => {
 
     // Create block button
     // Create floating toolbar with draggable functionality
+    // 工具栏位置：按"距离最近边缘"锚定保存
+    // 这样用户调整窗口大小、切换屏幕都不会让工具栏跑到中间
+    const TOOLBAR_BTN_SIZE = 40;
+    const TOOLBAR_DEFAULT_MARGIN = 20;
+
+    // 一次性清理旧版（v2.4.3 及之前）的绝对像素位置 key，避免遗留坐标污染新逻辑
+    if (GM_getValue('toolbar_position_x', null) !== null || GM_getValue('toolbar_position_y', null) !== null) {
+        try { GM_setValue('toolbar_position_x', undefined); } catch (_) {}
+        try { GM_setValue('toolbar_position_y', undefined); } catch (_) {}
+    }
+
+    function loadToolbarPosition() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const btn = TOOLBAR_BTN_SIZE;
+        // 默认贴左侧、垂直居中
+        const anchorX = GM_getValue('toolbar_anchor_x', 'left');
+        const anchorY = GM_getValue('toolbar_anchor_y', 'center');
+        const dx = GM_getValue('toolbar_dx', TOOLBAR_DEFAULT_MARGIN);
+        // center 模式存的是"工具栏中心相对视口中心的偏移"
+        const dy = GM_getValue('toolbar_dy', 0);
+        let x;
+        if (anchorX === 'right') x = w - btn - dx;
+        else if (anchorX === 'center') x = (w - btn) / 2 + dx;
+        else x = dx;
+        let y;
+        if (anchorY === 'bottom') y = h - btn - dy;
+        else if (anchorY === 'center') y = (h - btn) / 2 + dy;
+        else y = dy;
+        // 视口边界保护
+        x = Math.max(0, Math.min(x, Math.max(0, w - btn)));
+        y = Math.max(0, Math.min(y, Math.max(0, h - btn)));
+        return { x, y };
+    }
+
+    function saveToolbarPosition(x, y) {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const btn = TOOLBAR_BTN_SIZE;
+        // 用户拖动后，按到三条参考线（左/右/中）的距离选锚点：哪个最近选哪个
+        const distLeft = x;
+        const distRight = w - btn - x;
+        const distCenterX = Math.abs(x - (w - btn) / 2);
+        let anchorX, dx;
+        if (distCenterX < distLeft && distCenterX < distRight) {
+            anchorX = 'center';
+            dx = x - (w - btn) / 2;
+        } else if (distRight < distLeft) {
+            anchorX = 'right';
+            dx = Math.max(0, distRight);
+        } else {
+            anchorX = 'left';
+            dx = Math.max(0, distLeft);
+        }
+
+        const distTop = y;
+        const distBottom = h - btn - y;
+        const distCenterY = Math.abs(y - (h - btn) / 2);
+        let anchorY, dy;
+        if (distCenterY < distTop && distCenterY < distBottom) {
+            anchorY = 'center';
+            dy = y - (h - btn) / 2;
+        } else if (distBottom < distTop) {
+            anchorY = 'bottom';
+            dy = Math.max(0, distBottom);
+        } else {
+            anchorY = 'top';
+            dy = Math.max(0, distTop);
+        }
+
+        GM_setValue('toolbar_anchor_x', anchorX);
+        GM_setValue('toolbar_anchor_y', anchorY);
+        GM_setValue('toolbar_dx', dx);
+        GM_setValue('toolbar_dy', dy);
+    }
+
+    // 窗口缩放时按锚点重新计算位置，工具栏永远贴在用户选定的边
+    window.addEventListener('resize', () => {
+        const toolbar = document.getElementById('x-toolkit-toolbar');
+        if (!toolbar) return;
+        const pos = loadToolbarPosition();
+        toolbar.style.left = pos.x + 'px';
+        toolbar.style.top = pos.y + 'px';
+    });
+
     function createFloatingToolbar() {
-        // Load saved position, clamp to current viewport in case the window shrank
-        // (previously persisted coords may now fall outside the visible area).
-        const BTN_SIZE = 40;
-        const MARGIN = 20;
-        const defaultX = Math.max(MARGIN, window.innerWidth - BTN_SIZE - MARGIN);
-        const defaultY = Math.max(MARGIN, window.innerHeight - BTN_SIZE - MARGIN);
-        const rawX = GM_getValue('toolbar_position_x', defaultX);
-        const rawY = GM_getValue('toolbar_position_y', defaultY);
-        const maxX = Math.max(0, window.innerWidth - BTN_SIZE);
-        const maxY = Math.max(0, window.innerHeight - BTN_SIZE);
-        const savedPosition = {
-            x: Math.max(0, Math.min(rawX, maxX)),
-            y: Math.max(0, Math.min(rawY, maxY))
-        };
+        const savedPosition = loadToolbarPosition();
 
         // Create container
         const container = document.createElement('div');
@@ -1533,9 +1605,8 @@ ${comments.map((c, i) => {
                 mainButton.style.cursor = 'move';
                 container.style.transition = '';
 
-                // Save position
-                GM_setValue('toolbar_position_x', parseInt(container.style.left));
-                GM_setValue('toolbar_position_y', parseInt(container.style.top));
+                // Save position with edge anchoring (resize-friendly)
+                saveToolbarPosition(parseInt(container.style.left), parseInt(container.style.top));
             }
         });
 
@@ -2721,9 +2792,8 @@ ${comments.map((c, i) => {
             if (oldToolbar) {
                 const currentLeft = parseInt(oldToolbar.style.left) || 0;
                 const currentTop = parseInt(oldToolbar.style.top) || 0;
-                // Save current actual position so createFloatingToolbar uses it instead of stale saved position
-                GM_setValue('toolbar_position_x', currentLeft);
-                GM_setValue('toolbar_position_y', currentTop);
+                // Save with edge anchoring so it stays put across viewport changes
+                saveToolbarPosition(currentLeft, currentTop);
                 oldToolbar.remove();
             }
             // Remove old AI filter status indicator
