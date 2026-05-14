@@ -512,7 +512,7 @@ async def wiki_list_nodes(wiki_token: str, recursive: bool = False) -> str:
         # 注意：信号量只包裹 HTTP 请求，不能包裹 gather 子任务，
         # 否则父任务持有槽位等子任务、子任务又抢槽位 → 死锁
         all_results = []
-        sem = asyncio.Semaphore(10)
+        sem = asyncio.Semaphore(5)
 
         async def _collect_recursive(parent_token, depth=0):
             async with sem:
