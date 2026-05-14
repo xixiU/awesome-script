@@ -1093,26 +1093,26 @@ ${comments.map((c, i) => {
                     right: 0;
                     bottom: 0;
                     background: rgba(0, 0, 0, 0.7);
-                    backdrop-filter: blur(8px);
+                    backdrop-filter: blur(6px);
                     z-index: 10;
                     display: flex;
                     flex-direction: column;
                     align-items: center;
                     justify-content: center;
-                    gap: 8px;
+                    gap: 4px;
                     cursor: pointer;
-                    transition: all 0.3s ease;
+                    transition: all 0.25s ease;
                 `;
 
                 // 创建标签
                 const label = document.createElement('div');
                 label.style.cssText = `
                     color: #ff9800;
-                    font-size: 16px;
+                    font-size: 13px;
                     font-weight: bold;
                     display: flex;
                     align-items: center;
-                    gap: 6px;
+                    gap: 4px;
                 `;
                 label.textContent = t('spamCommentLabel');
 
@@ -1120,21 +1120,21 @@ ${comments.map((c, i) => {
                 const reasonText = document.createElement('div');
                 reasonText.style.cssText = `
                     color: #ccc;
-                    font-size: 12px;
+                    font-size: 11px;
                 `;
                 reasonText.textContent = reason;
 
                 // 创建显示按钮
                 const showButton = document.createElement('button');
                 showButton.style.cssText = `
-                    padding: 6px 16px;
+                    padding: 4px 12px;
                     background: #1DA1F2;
                     color: white;
                     border: none;
-                    border-radius: 20px;
+                    border-radius: 14px;
                     cursor: pointer;
-                    font-size: 14px;
-                    margin-top: 8px;
+                    font-size: 12px;
+                    margin-top: 4px;
                     transition: all 0.2s ease;
                 `;
                 showButton.textContent = t('spamCommentShow');
@@ -1248,20 +1248,20 @@ ${comments.map((c, i) => {
         indicator.id = 'ai-filter-status';
         indicator.style.cssText = `
             position: fixed;
-            top: 80px;
-            right: 20px;
+            top: 70px;
+            right: 16px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 12px 20px;
-            border-radius: 25px;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            padding: 6px 12px;
+            border-radius: 16px;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.35);
             z-index: 99998;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 500;
             display: flex;
             align-items: center;
-            gap: 8px;
-            transition: all 0.3s ease;
+            gap: 6px;
+            transition: all 0.25s ease;
             opacity: 0;
             transform: translateX(100px);
         `;
@@ -1314,7 +1314,7 @@ ${comments.map((c, i) => {
     function createFloatingToolbar() {
         // Load saved position, clamp to current viewport in case the window shrank
         // (previously persisted coords may now fall outside the visible area).
-        const BTN_SIZE = 56;
+        const BTN_SIZE = 40;
         const MARGIN = 20;
         const defaultX = Math.max(MARGIN, window.innerWidth - BTN_SIZE - MARGIN);
         const defaultY = Math.max(MARGIN, window.innerHeight - BTN_SIZE - MARGIN);
@@ -1338,7 +1338,7 @@ ${comments.map((c, i) => {
             display: flex;
             flex-direction: column-reverse;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         `;
 
         // Create main button (always visible)
@@ -1347,16 +1347,16 @@ ${comments.map((c, i) => {
         mainButton.innerHTML = '🛠️';
         mainButton.title = t('toolbarMainButton') || 'Twitter X Toolkit';
         mainButton.style.cssText = `
-            width: 56px;
-            height: 56px;
+            width: 40px;
+            height: 40px;
             background: linear-gradient(135deg, #1DA1F2 0%, #0d8bd9 100%);
             color: white;
             border: none;
             border-radius: 50%;
             cursor: move;
-            font-size: 24px;
-            box-shadow: 0 4px 12px rgba(29, 161, 242, 0.4);
-            transition: all 0.3s ease;
+            font-size: 18px;
+            box-shadow: 0 2px 8px rgba(29, 161, 242, 0.35);
+            transition: all 0.25s ease;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1369,10 +1369,10 @@ ${comments.map((c, i) => {
             display: flex;
             flex-direction: column-reverse;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             opacity: 0;
-            transform: translateY(10px);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(8px);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
             pointer-events: none;
         `;
 
@@ -1390,13 +1390,13 @@ ${comments.map((c, i) => {
             blockButton.addEventListener('click', handleBlockAllCommenters);
             blockButton.addEventListener('mouseenter', function () {
                 if (!isBlocking) {
-                    this.style.transform = 'scale(1.1)';
-                    this.style.boxShadow = '0 6px 16px rgba(102, 126, 234, 0.5)';
+                    this.style.transform = 'scale(1.12)';
+                    this.style.boxShadow = '0 3px 10px rgba(102, 126, 234, 0.5)';
                 }
             });
             blockButton.addEventListener('mouseleave', function () {
                 this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
+                this.style.boxShadow = '0 2px 6px rgba(102, 126, 234, 0.35)';
             });
             actionsContainer.appendChild(blockButton);
         }
@@ -1411,13 +1411,13 @@ ${comments.map((c, i) => {
             summarizeButton.addEventListener('click', handleAISummarize);
             summarizeButton.addEventListener('mouseenter', function () {
                 if (!isSummarizing) {
-                    this.style.transform = 'scale(1.1)';
-                    this.style.boxShadow = '0 6px 16px rgba(240, 147, 251, 0.5)';
+                    this.style.transform = 'scale(1.12)';
+                    this.style.boxShadow = '0 3px 10px rgba(240, 147, 251, 0.5)';
                 }
             });
             summarizeButton.addEventListener('mouseleave', function () {
                 this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 4px 12px rgba(240, 147, 251, 0.4)';
+                this.style.boxShadow = '0 2px 6px rgba(240, 147, 251, 0.35)';
             });
             actionsContainer.appendChild(summarizeButton);
         }
@@ -1432,13 +1432,13 @@ ${comments.map((c, i) => {
             aiFilterButton.addEventListener('click', handleManualAIFilter);
             aiFilterButton.addEventListener('mouseenter', function () {
                 if (!aiFilterInProgress) {
-                    this.style.transform = 'scale(1.1)';
-                    this.style.boxShadow = '0 6px 16px rgba(17, 153, 142, 0.5)';
+                    this.style.transform = 'scale(1.12)';
+                    this.style.boxShadow = '0 3px 10px rgba(17, 153, 142, 0.5)';
                 }
             });
             aiFilterButton.addEventListener('mouseleave', function () {
                 this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 4px 12px rgba(17, 153, 142, 0.4)';
+                this.style.boxShadow = '0 2px 6px rgba(17, 153, 142, 0.35)';
             });
             actionsContainer.appendChild(aiFilterButton);
 
@@ -1450,12 +1450,12 @@ ${comments.map((c, i) => {
             showSpamButton.style.cssText = getActionButtonStyle('#fa709a', '#fee140');
             showSpamButton.addEventListener('click', handleShowAllSpam);
             showSpamButton.addEventListener('mouseenter', function () {
-                this.style.transform = 'scale(1.1)';
-                this.style.boxShadow = '0 6px 16px rgba(250, 112, 154, 0.5)';
+                this.style.transform = 'scale(1.12)';
+                this.style.boxShadow = '0 3px 10px rgba(250, 112, 154, 0.5)';
             });
             showSpamButton.addEventListener('mouseleave', function () {
                 this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 4px 12px rgba(250, 112, 154, 0.4)';
+                this.style.boxShadow = '0 2px 6px rgba(250, 112, 154, 0.35)';
             });
             actionsContainer.appendChild(showSpamButton);
         }
@@ -1468,12 +1468,12 @@ ${comments.map((c, i) => {
         settingsButton.style.cssText = getActionButtonStyle('#536471', '#657786');
         settingsButton.addEventListener('click', () => config.show());
         settingsButton.addEventListener('mouseenter', function () {
-            this.style.transform = 'scale(1.1)';
-            this.style.boxShadow = '0 6px 16px rgba(83, 100, 113, 0.5)';
+            this.style.transform = 'scale(1.12)';
+            this.style.boxShadow = '0 3px 10px rgba(83, 100, 113, 0.5)';
         });
         settingsButton.addEventListener('mouseleave', function () {
             this.style.transform = 'scale(1)';
-            this.style.boxShadow = '0 4px 12px rgba(83, 100, 113, 0.4)';
+            this.style.boxShadow = '0 2px 6px rgba(83, 100, 113, 0.35)';
         });
         actionsContainer.appendChild(settingsButton);
 
@@ -1518,8 +1518,8 @@ ${comments.map((c, i) => {
             let newY = e.clientY - dragOffset.y;
 
             // Constrain within viewport
-            const maxX = window.innerWidth - 56;
-            const maxY = window.innerHeight - 56;
+            const maxX = window.innerWidth - 40;
+            const maxY = window.innerHeight - 40;
             newX = Math.max(0, Math.min(newX, maxX));
             newY = Math.max(0, Math.min(newY, maxY));
 
@@ -1543,14 +1543,14 @@ ${comments.map((c, i) => {
         mainButton.addEventListener('mouseenter', function () {
             if (!isDragging) {
                 this.style.transform = 'scale(1.1)';
-                this.style.boxShadow = '0 6px 16px rgba(29, 161, 242, 0.6)';
+                this.style.boxShadow = '0 3px 12px rgba(29, 161, 242, 0.55)';
             }
         });
 
         mainButton.addEventListener('mouseleave', function () {
             if (!isDragging) {
                 this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 4px 12px rgba(29, 161, 242, 0.4)';
+                this.style.boxShadow = '0 2px 8px rgba(29, 161, 242, 0.35)';
             }
         });
 
@@ -1561,16 +1561,16 @@ ${comments.map((c, i) => {
     // Helper function to get action button style
     function getActionButtonStyle(colorStart, colorEnd) {
         return `
-            width: 48px;
-            height: 48px;
+            width: 32px;
+            height: 32px;
             background: linear-gradient(135deg, ${colorStart} 0%, ${colorEnd} 100%);
             color: white;
             border: none;
             border-radius: 50%;
             cursor: pointer;
-            font-size: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            transition: all 0.3s ease;
+            font-size: 14px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+            transition: all 0.25s ease;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1586,12 +1586,12 @@ ${comments.map((c, i) => {
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 90%;
-            max-width: 800px;
-            max-height: 80vh;
+            width: 86%;
+            max-width: 640px;
+            max-height: 75vh;
             background: rgb(21, 32, 43);
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
             z-index: 10000;
             display: none;
             overflow: hidden;
@@ -1600,15 +1600,15 @@ ${comments.map((c, i) => {
         `;
 
         panel.innerHTML = `
-            <div id="panel-header" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="margin: 0; font-size: 18px; font-weight: 600;">${t('panelTitle')}</h3>
-                <div id="panel-actions" style="display: flex; gap: 10px; align-items: center;">
-                    <button id="panel-fullscreen-btn" title="${t('panelFullscreen')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">⛶</button>
-                    <button id="panel-copy-btn" title="${t('panelCopy')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">📋</button>
-                    <button id="panel-close-btn" title="${t('panelClose')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">×</button>
+            <div id="panel-header" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; font-size: 15px; font-weight: 600;">${t('panelTitle')}</h3>
+                <div id="panel-actions" style="display: flex; gap: 6px; align-items: center;">
+                    <button id="panel-fullscreen-btn" title="${t('panelFullscreen')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 13px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">⛶</button>
+                    <button id="panel-copy-btn" title="${t('panelCopy')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 13px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">📋</button>
+                    <button id="panel-close-btn" title="${t('panelClose')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 15px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">×</button>
                 </div>
             </div>
-            <div id="panel-content" style="padding: 16px 20px; overflow-y: auto; overflow-x: hidden; max-height: calc(80vh - 60px); line-height: 1.5; color: rgb(231, 233, 234); user-select: text; -webkit-user-select: text; cursor: text; box-sizing: border-box;"></div>
+            <div id="panel-content" style="padding: 12px 16px; overflow-y: auto; overflow-x: hidden; max-height: calc(75vh - 50px); line-height: 1.5; font-size: 13px; color: rgb(231, 233, 234); user-select: text; -webkit-user-select: text; cursor: text; box-sizing: border-box;"></div>
         `;
 
         document.body.appendChild(panel);
@@ -1663,9 +1663,9 @@ ${comments.map((c, i) => {
                 panel.style.borderRadius = '0';
 
                 // 内容区域全屏样式
-                content.style.maxHeight = 'calc(100vh - 60px)';
-                content.style.fontSize = '18px';
-                content.style.padding = '20px 24px 32px 24px';
+                content.style.maxHeight = 'calc(100vh - 50px)';
+                content.style.fontSize = '15px';
+                content.style.padding = '16px 20px 24px 20px';
                 content.style.lineHeight = '1.5';
 
                 btn.innerHTML = '⛶';
@@ -1676,16 +1676,16 @@ ${comments.map((c, i) => {
                 panel.style.top = '50%';
                 panel.style.left = '50%';
                 panel.style.transform = 'translate(-50%, -50%)';
-                panel.style.width = '90%';
+                panel.style.width = '86%';
                 panel.style.height = 'auto';
-                panel.style.maxWidth = '800px';
-                panel.style.maxHeight = '80vh';
-                panel.style.borderRadius = '12px';
+                panel.style.maxWidth = '640px';
+                panel.style.maxHeight = '75vh';
+                panel.style.borderRadius = '10px';
 
                 // 内容区域正常样式
-                content.style.maxHeight = 'calc(80vh - 60px)';
-                content.style.fontSize = '16px';
-                content.style.padding = '16px 20px';
+                content.style.maxHeight = 'calc(75vh - 50px)';
+                content.style.fontSize = '13px';
+                content.style.padding = '12px 16px';
                 content.style.lineHeight = '1.5';
 
                 btn.innerHTML = '⛶';
@@ -1712,9 +1712,9 @@ ${comments.map((c, i) => {
         // Convert markdown to HTML
         const htmlContent = cleanedContent
             // Headers (must be processed before list items)
-            .replace(/^### (.*?)$/gm, '<h3 style="margin-top: 4px; margin-bottom: 2px; color: rgb(231, 233, 234); font-size: 18px; font-weight: 600;">$1</h3>')
-            .replace(/^## (.*?)$/gm, '<h2 style="margin-top: 6px; margin-bottom: 3px; color: rgb(231, 233, 234); font-size: 20px; font-weight: 700;">$1</h2>')
-            .replace(/^# (.*?)$/gm, '<h1 style="margin-top: 8px; margin-bottom: 4px; color: rgb(231, 233, 234); font-size: 24px; font-weight: 700;">$1</h1>')
+            .replace(/^### (.*?)$/gm, '<h3 style="margin-top: 4px; margin-bottom: 2px; color: rgb(231, 233, 234); font-size: 14px; font-weight: 600;">$1</h3>')
+            .replace(/^## (.*?)$/gm, '<h2 style="margin-top: 6px; margin-bottom: 3px; color: rgb(231, 233, 234); font-size: 16px; font-weight: 700;">$1</h2>')
+            .replace(/^# (.*?)$/gm, '<h1 style="margin-top: 8px; margin-bottom: 4px; color: rgb(231, 233, 234); font-size: 18px; font-weight: 700;">$1</h1>')
             // Bold and italic
             .replace(/\*\*(.*?)\*\*/g, '<strong style="color: rgb(139, 213, 255); font-weight: 600;">$1</strong>')
             .replace(/\*(.*?)\*/g, '<em style="color: rgb(255, 212, 121);">$1</em>')
