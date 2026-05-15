@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.4.4
+// @version      2.4.5.pre
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -2603,6 +2603,9 @@ ${comments.map((c, i) => {
         let processingTimer = null;
 
         commentObserver = new MutationObserver(() => {
+            // 只在推文详情页运行，避免在时间线误触发
+            if (!isOnTweetDetailPage()) return;
+
             // 立即检查新评论是否是已拉黑用户，如果是则立即隐藏
             const articles = document.querySelectorAll('article[data-testid="tweet"]');
             articles.forEach(article => {
@@ -2804,6 +2807,13 @@ ${comments.map((c, i) => {
             // Reset AI filter state for new page
             aiFilterProcessed = new Set();
             aiFilterInProgress = false;
+            // 停止评论监听器，避免在非详情页误触发过滤
+            if (commentObserver) {
+                commentObserver.disconnect();
+                commentObserver = null;
+            }
+            // 清空已拉黑用户集合，避免时间线推文被误隐藏
+            blockedUsersSet = new Set();
             // Reinitialize
             setTimeout(init, 1000);
         }
