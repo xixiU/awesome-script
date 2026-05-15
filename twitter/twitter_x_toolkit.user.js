@@ -34,6 +34,7 @@
     // AI 过滤相关状态
     let blockedUsersSet = new Set(); // 已拉黑的用户名集合（用于自动隐藏新加载的评论）
     let commentObserver = null; // MutationObserver 实例
+    let commentDebounceTimer = null; // watchForNewComments 内 debounce 计时器（模块级以便路由切换时清理）
 
     // Internationalization (i18n) text dictionary
     const i18n = {
@@ -1054,6 +1055,8 @@ ${comments.map((c, i) => {
      * @param {string} reason - 理由
      */
     function markCommentByCategory(username, category, reason) {
+        // 兜底：仅在推文详情页执行隐藏/打标，避免 async 过程中路由切换后误伤时间线推文
+        if (!isOnTweetDetailPage()) return;
         // 查找该用户的所有评论
         const articles = document.querySelectorAll('article[data-testid="tweet"]');
 
@@ -2435,12 +2438,18 @@ ${comments.map((c, i) => {
             return;
         }
 
+        // 记录函数启动时的 URL，async 过程中如果路由变化（用户切回时间线/个人页等）立即终止
+        // 否则会用时间线推文当作评论送进 AI，并把结果写回 DOM 误隐藏正常推文
+        const startUrl = location.href;
+        const stillOnDetail = () => isOnTweetDetailPage() && location.href === startUrl;
+
         aiFilterInProgress = true;
         console.log(t('consoleAiFilterStart'));
 
         try {
             // 等待评论加载（给用户一些时间看到评论）
             await sleep(2000);
+            if (!stillOnDetail()) return;
 
             // 获取当前可见的评论
             const commentersMap = getAllCommentersWithText();
@@ -2495,6 +2504,7 @@ ${comments.map((c, i) => {
                 }
 
                 const bioHits = await checkBiosInBackground(candidateNames, bioPrefixes);
+                if (!stillOnDetail()) return;
                 if (bioHits.size > 0) {
                     const remainingComments = [];
                     for (const c of comments) {
@@ -2519,6 +2529,7 @@ ${comments.map((c, i) => {
                     .filter(c => preFilterBlacklist.includes(c.username))
                     .map(c => [c.username, { text: c.text, displayName: c.displayName, avatarUrl: c.avatarUrl }]));
                 await processAIFilterResults({ blacklist: preFilterBlacklist, spam: [] }, preMap);
+                if (!stillOnDetail()) return;
                 preFilterBlacklist.forEach(u => aiFilterProcessed.add(u));
             }
 
@@ -2539,6 +2550,7 @@ ${comments.map((c, i) => {
             let processedCount = 0;
 
             for (let i = 0; i < comments.length; i += batchSize) {
+                if (!stillOnDetail()) return;
                 const batch = comments.slice(i, i + batchSize);
                 const batchDataMap = new Map(batch.map(c => [c.username, {
                     text: c.text,
@@ -2548,9 +2560,11 @@ ${comments.map((c, i) => {
 
                 try {
                     const results = await classifyCommentsByAI(batch, mainTweet);
+                    if (!stillOnDetail()) return;
 
                     // 处理结果
                     await processAIFilterResults(results, batchDataMap);
+                    if (!stillOnDetail()) return;
 
                     // 标记已处理
                     batch.forEach(c => aiFilterProcessed.add(c.username));
@@ -2569,6 +2583,7 @@ ${comments.map((c, i) => {
                 // 批次之间延迟，避免API限流
                 if (i + batchSize < comments.length) {
                     await sleep(1000);
+                    if (!stillOnDetail()) return;
                 }
             }
 
@@ -2599,8 +2614,11 @@ ${comments.map((c, i) => {
         if (commentObserver) {
             commentObserver.disconnect();
         }
-
-        let processingTimer = null;
+        // 清理可能挂在前一次监听器上的 debounce 计时器
+        if (commentDebounceTimer) {
+            clearTimeout(commentDebounceTimer);
+            commentDebounceTimer = null;
+        }
 
         commentObserver = new MutationObserver(() => {
             // 只在推文详情页运行，避免在时间线误触发
@@ -2638,8 +2656,9 @@ ${comments.map((c, i) => {
             });
 
             // 延迟执行 AI 过滤，避免频繁触发
-            if (processingTimer) clearTimeout(processingTimer);
-            processingTimer = setTimeout(() => {
+            if (commentDebounceTimer) clearTimeout(commentDebounceTimer);
+            commentDebounceTimer = setTimeout(() => {
+                commentDebounceTimer = null;
                 if (!aiFilterInProgress && isOnTweetDetailPage()) {
                     autoAIFilterComments();
                 }
@@ -2811,6 +2830,11 @@ ${comments.map((c, i) => {
             if (commentObserver) {
                 commentObserver.disconnect();
                 commentObserver = null;
+            }
+            // 清理 watchForNewComments 内的 debounce 计时器，避免跨页 fire 误触发
+            if (commentDebounceTimer) {
+                clearTimeout(commentDebounceTimer);
+                commentDebounceTimer = null;
             }
             // 清空已拉黑用户集合，避免时间线推文被误隐藏
             blockedUsersSet = new Set();
