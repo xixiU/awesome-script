@@ -2780,6 +2780,17 @@ ${comments.map((c, i) => {
             createResultPanel();
         }
 
+        // 非详情页一律回滚残留的 data-ai-filtered DOM 副作用，防止从详情页切回时间线后污染
+        if (!isOnTweetDetailPage()) {
+            document.querySelectorAll('article[data-ai-filtered]').forEach(article => {
+                article.removeAttribute('data-ai-filtered');
+                article.removeAttribute('data-blacklist-reason');
+                if (article.style.display === 'none') article.style.display = '';
+                if (article.style.position === 'relative') article.style.position = '';
+                article.querySelectorAll('.ai-spam-overlay').forEach(o => o.remove());
+            });
+        }
+
         // Auto block if enabled and on tweet detail page
         if (config.get('autoBlock') && isOnTweetDetailPage()) {
             setTimeout(autoBlockCommenters, 2000);
@@ -2838,6 +2849,15 @@ ${comments.map((c, i) => {
             }
             // 清空已拉黑用户集合，避免时间线推文被误隐藏
             blockedUsersSet = new Set();
+            // 清理上一页留下的 data-ai-filtered 副作用：Twitter SPA 会复用部分 article DOM，
+            // 上一次详情页打的隐藏/遮罩会跟着节点进入新页面，必须主动回滚
+            document.querySelectorAll('article[data-ai-filtered]').forEach(article => {
+                article.removeAttribute('data-ai-filtered');
+                article.removeAttribute('data-blacklist-reason');
+                if (article.style.display === 'none') article.style.display = '';
+                if (article.style.position === 'relative') article.style.position = '';
+                article.querySelectorAll('.ai-spam-overlay').forEach(o => o.remove());
+            });
             // Reinitialize
             setTimeout(init, 1000);
         }
