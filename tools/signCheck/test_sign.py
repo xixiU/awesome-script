@@ -125,6 +125,7 @@ def test_api_sign(url: str, method: str = "GET", body=None, token: str = ""):
 # ============== 法正接口签名测试（保留原逻辑） ==============
 
 def test_fz_sign():
+    print('法正接口测试')
     ts = str(int(time.time() * 1000))
     sg = fz_sign(ts, SECRET_KEY)
     import requests
@@ -139,14 +140,14 @@ def test_fz_sign():
 
 if __name__ == "__main__":
     # ============== 通用接口签名测试（自己改 URL / METHOD / BODY / TOKEN） ==============
-    test_api_sign(
-        url="https://hktestservice.iflysec.com/ts-service/internet/meet/getMeetingType",
-        method="GET",
-        body=None,
-        token="",
-    )
+    # test_api_sign(
+    #     url="https://hktestservice.iflysec.com/ts-service/internet/case/getMember/7480610",
+    #     method="GET",
+    #     body=None,
+    #     token="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIzNTMiLCJpc3MiOiJJRkxZVEVLLVpGQkciLCJleHAiOjE3Nzk0NTAxMzAsImlhdCI6MTc3OTE5ODEzMCwidXNlcklkIjoiMzUzIn0.wemnBfkuU9dekAXimYIk9CLCzhgtvL5-4setRaauoAM",
+    # )
 
-    # test_fz_sign()
+    test_fz_sign()
 
     # WebSocket（websocket-client）
     # import websocket
