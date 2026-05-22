@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.4.3
+// @version      2.4.5.pre
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -34,6 +34,7 @@
     // AI 过滤相关状态
     let blockedUsersSet = new Set(); // 已拉黑的用户名集合（用于自动隐藏新加载的评论）
     let commentObserver = null; // MutationObserver 实例
+    let commentDebounceTimer = null; // watchForNewComments 内 debounce 计时器（模块级以便路由切换时清理）
 
     // Internationalization (i18n) text dictionary
     const i18n = {
@@ -1054,6 +1055,8 @@ ${comments.map((c, i) => {
      * @param {string} reason - 理由
      */
     function markCommentByCategory(username, category, reason) {
+        // 兜底：仅在推文详情页执行隐藏/打标，避免 async 过程中路由切换后误伤时间线推文
+        if (!isOnTweetDetailPage()) return;
         // 查找该用户的所有评论
         const articles = document.querySelectorAll('article[data-testid="tweet"]');
 
@@ -1093,26 +1096,26 @@ ${comments.map((c, i) => {
                     right: 0;
                     bottom: 0;
                     background: rgba(0, 0, 0, 0.7);
-                    backdrop-filter: blur(8px);
+                    backdrop-filter: blur(6px);
                     z-index: 10;
                     display: flex;
                     flex-direction: column;
                     align-items: center;
                     justify-content: center;
-                    gap: 8px;
+                    gap: 4px;
                     cursor: pointer;
-                    transition: all 0.3s ease;
+                    transition: all 0.25s ease;
                 `;
 
                 // 创建标签
                 const label = document.createElement('div');
                 label.style.cssText = `
                     color: #ff9800;
-                    font-size: 16px;
+                    font-size: 13px;
                     font-weight: bold;
                     display: flex;
                     align-items: center;
-                    gap: 6px;
+                    gap: 4px;
                 `;
                 label.textContent = t('spamCommentLabel');
 
@@ -1120,21 +1123,21 @@ ${comments.map((c, i) => {
                 const reasonText = document.createElement('div');
                 reasonText.style.cssText = `
                     color: #ccc;
-                    font-size: 12px;
+                    font-size: 11px;
                 `;
                 reasonText.textContent = reason;
 
                 // 创建显示按钮
                 const showButton = document.createElement('button');
                 showButton.style.cssText = `
-                    padding: 6px 16px;
+                    padding: 4px 12px;
                     background: #1DA1F2;
                     color: white;
                     border: none;
-                    border-radius: 20px;
+                    border-radius: 14px;
                     cursor: pointer;
-                    font-size: 14px;
-                    margin-top: 8px;
+                    font-size: 12px;
+                    margin-top: 4px;
                     transition: all 0.2s ease;
                 `;
                 showButton.textContent = t('spamCommentShow');
@@ -1248,20 +1251,20 @@ ${comments.map((c, i) => {
         indicator.id = 'ai-filter-status';
         indicator.style.cssText = `
             position: fixed;
-            top: 80px;
-            right: 20px;
+            top: 70px;
+            right: 16px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 12px 20px;
-            border-radius: 25px;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            padding: 6px 12px;
+            border-radius: 16px;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.35);
             z-index: 99998;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 500;
             display: flex;
             align-items: center;
-            gap: 8px;
-            transition: all 0.3s ease;
+            gap: 6px;
+            transition: all 0.25s ease;
             opacity: 0;
             transform: translateX(100px);
         `;
@@ -1311,21 +1314,93 @@ ${comments.map((c, i) => {
 
     // Create block button
     // Create floating toolbar with draggable functionality
+    // 工具栏位置：按"距离最近边缘"锚定保存
+    // 这样用户调整窗口大小、切换屏幕都不会让工具栏跑到中间
+    const TOOLBAR_BTN_SIZE = 40;
+    const TOOLBAR_DEFAULT_MARGIN = 20;
+
+    // 一次性清理旧版（v2.4.3 及之前）的绝对像素位置 key，避免遗留坐标污染新逻辑
+    if (GM_getValue('toolbar_position_x', null) !== null || GM_getValue('toolbar_position_y', null) !== null) {
+        try { GM_setValue('toolbar_position_x', undefined); } catch (_) {}
+        try { GM_setValue('toolbar_position_y', undefined); } catch (_) {}
+    }
+
+    function loadToolbarPosition() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const btn = TOOLBAR_BTN_SIZE;
+        // 默认贴左侧、垂直居中
+        const anchorX = GM_getValue('toolbar_anchor_x', 'left');
+        const anchorY = GM_getValue('toolbar_anchor_y', 'center');
+        const dx = GM_getValue('toolbar_dx', TOOLBAR_DEFAULT_MARGIN);
+        // center 模式存的是"工具栏中心相对视口中心的偏移"
+        const dy = GM_getValue('toolbar_dy', 0);
+        let x;
+        if (anchorX === 'right') x = w - btn - dx;
+        else if (anchorX === 'center') x = (w - btn) / 2 + dx;
+        else x = dx;
+        let y;
+        if (anchorY === 'bottom') y = h - btn - dy;
+        else if (anchorY === 'center') y = (h - btn) / 2 + dy;
+        else y = dy;
+        // 视口边界保护
+        x = Math.max(0, Math.min(x, Math.max(0, w - btn)));
+        y = Math.max(0, Math.min(y, Math.max(0, h - btn)));
+        return { x, y };
+    }
+
+    function saveToolbarPosition(x, y) {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const btn = TOOLBAR_BTN_SIZE;
+        // 用户拖动后，按到三条参考线（左/右/中）的距离选锚点：哪个最近选哪个
+        const distLeft = x;
+        const distRight = w - btn - x;
+        const distCenterX = Math.abs(x - (w - btn) / 2);
+        let anchorX, dx;
+        if (distCenterX < distLeft && distCenterX < distRight) {
+            anchorX = 'center';
+            dx = x - (w - btn) / 2;
+        } else if (distRight < distLeft) {
+            anchorX = 'right';
+            dx = Math.max(0, distRight);
+        } else {
+            anchorX = 'left';
+            dx = Math.max(0, distLeft);
+        }
+
+        const distTop = y;
+        const distBottom = h - btn - y;
+        const distCenterY = Math.abs(y - (h - btn) / 2);
+        let anchorY, dy;
+        if (distCenterY < distTop && distCenterY < distBottom) {
+            anchorY = 'center';
+            dy = y - (h - btn) / 2;
+        } else if (distBottom < distTop) {
+            anchorY = 'bottom';
+            dy = Math.max(0, distBottom);
+        } else {
+            anchorY = 'top';
+            dy = Math.max(0, distTop);
+        }
+
+        GM_setValue('toolbar_anchor_x', anchorX);
+        GM_setValue('toolbar_anchor_y', anchorY);
+        GM_setValue('toolbar_dx', dx);
+        GM_setValue('toolbar_dy', dy);
+    }
+
+    // 窗口缩放时按锚点重新计算位置，工具栏永远贴在用户选定的边
+    window.addEventListener('resize', () => {
+        const toolbar = document.getElementById('x-toolkit-toolbar');
+        if (!toolbar) return;
+        const pos = loadToolbarPosition();
+        toolbar.style.left = pos.x + 'px';
+        toolbar.style.top = pos.y + 'px';
+    });
+
     function createFloatingToolbar() {
-        // Load saved position, clamp to current viewport in case the window shrank
-        // (previously persisted coords may now fall outside the visible area).
-        const BTN_SIZE = 56;
-        const MARGIN = 20;
-        const defaultX = Math.max(MARGIN, window.innerWidth - BTN_SIZE - MARGIN);
-        const defaultY = Math.max(MARGIN, window.innerHeight - BTN_SIZE - MARGIN);
-        const rawX = GM_getValue('toolbar_position_x', defaultX);
-        const rawY = GM_getValue('toolbar_position_y', defaultY);
-        const maxX = Math.max(0, window.innerWidth - BTN_SIZE);
-        const maxY = Math.max(0, window.innerHeight - BTN_SIZE);
-        const savedPosition = {
-            x: Math.max(0, Math.min(rawX, maxX)),
-            y: Math.max(0, Math.min(rawY, maxY))
-        };
+        const savedPosition = loadToolbarPosition();
 
         // Create container
         const container = document.createElement('div');
@@ -1338,7 +1413,7 @@ ${comments.map((c, i) => {
             display: flex;
             flex-direction: column-reverse;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         `;
 
         // Create main button (always visible)
@@ -1347,16 +1422,16 @@ ${comments.map((c, i) => {
         mainButton.innerHTML = '🛠️';
         mainButton.title = t('toolbarMainButton') || 'Twitter X Toolkit';
         mainButton.style.cssText = `
-            width: 56px;
-            height: 56px;
+            width: 40px;
+            height: 40px;
             background: linear-gradient(135deg, #1DA1F2 0%, #0d8bd9 100%);
             color: white;
             border: none;
             border-radius: 50%;
             cursor: move;
-            font-size: 24px;
-            box-shadow: 0 4px 12px rgba(29, 161, 242, 0.4);
-            transition: all 0.3s ease;
+            font-size: 18px;
+            box-shadow: 0 2px 8px rgba(29, 161, 242, 0.35);
+            transition: all 0.25s ease;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1369,10 +1444,10 @@ ${comments.map((c, i) => {
             display: flex;
             flex-direction: column-reverse;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             opacity: 0;
-            transform: translateY(10px);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(8px);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
             pointer-events: none;
         `;
 
@@ -1390,13 +1465,13 @@ ${comments.map((c, i) => {
             blockButton.addEventListener('click', handleBlockAllCommenters);
             blockButton.addEventListener('mouseenter', function () {
                 if (!isBlocking) {
-                    this.style.transform = 'scale(1.1)';
-                    this.style.boxShadow = '0 6px 16px rgba(102, 126, 234, 0.5)';
+                    this.style.transform = 'scale(1.12)';
+                    this.style.boxShadow = '0 3px 10px rgba(102, 126, 234, 0.5)';
                 }
             });
             blockButton.addEventListener('mouseleave', function () {
                 this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
+                this.style.boxShadow = '0 2px 6px rgba(102, 126, 234, 0.35)';
             });
             actionsContainer.appendChild(blockButton);
         }
@@ -1411,13 +1486,13 @@ ${comments.map((c, i) => {
             summarizeButton.addEventListener('click', handleAISummarize);
             summarizeButton.addEventListener('mouseenter', function () {
                 if (!isSummarizing) {
-                    this.style.transform = 'scale(1.1)';
-                    this.style.boxShadow = '0 6px 16px rgba(240, 147, 251, 0.5)';
+                    this.style.transform = 'scale(1.12)';
+                    this.style.boxShadow = '0 3px 10px rgba(240, 147, 251, 0.5)';
                 }
             });
             summarizeButton.addEventListener('mouseleave', function () {
                 this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 4px 12px rgba(240, 147, 251, 0.4)';
+                this.style.boxShadow = '0 2px 6px rgba(240, 147, 251, 0.35)';
             });
             actionsContainer.appendChild(summarizeButton);
         }
@@ -1432,13 +1507,13 @@ ${comments.map((c, i) => {
             aiFilterButton.addEventListener('click', handleManualAIFilter);
             aiFilterButton.addEventListener('mouseenter', function () {
                 if (!aiFilterInProgress) {
-                    this.style.transform = 'scale(1.1)';
-                    this.style.boxShadow = '0 6px 16px rgba(17, 153, 142, 0.5)';
+                    this.style.transform = 'scale(1.12)';
+                    this.style.boxShadow = '0 3px 10px rgba(17, 153, 142, 0.5)';
                 }
             });
             aiFilterButton.addEventListener('mouseleave', function () {
                 this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 4px 12px rgba(17, 153, 142, 0.4)';
+                this.style.boxShadow = '0 2px 6px rgba(17, 153, 142, 0.35)';
             });
             actionsContainer.appendChild(aiFilterButton);
 
@@ -1450,12 +1525,12 @@ ${comments.map((c, i) => {
             showSpamButton.style.cssText = getActionButtonStyle('#fa709a', '#fee140');
             showSpamButton.addEventListener('click', handleShowAllSpam);
             showSpamButton.addEventListener('mouseenter', function () {
-                this.style.transform = 'scale(1.1)';
-                this.style.boxShadow = '0 6px 16px rgba(250, 112, 154, 0.5)';
+                this.style.transform = 'scale(1.12)';
+                this.style.boxShadow = '0 3px 10px rgba(250, 112, 154, 0.5)';
             });
             showSpamButton.addEventListener('mouseleave', function () {
                 this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 4px 12px rgba(250, 112, 154, 0.4)';
+                this.style.boxShadow = '0 2px 6px rgba(250, 112, 154, 0.35)';
             });
             actionsContainer.appendChild(showSpamButton);
         }
@@ -1468,12 +1543,12 @@ ${comments.map((c, i) => {
         settingsButton.style.cssText = getActionButtonStyle('#536471', '#657786');
         settingsButton.addEventListener('click', () => config.show());
         settingsButton.addEventListener('mouseenter', function () {
-            this.style.transform = 'scale(1.1)';
-            this.style.boxShadow = '0 6px 16px rgba(83, 100, 113, 0.5)';
+            this.style.transform = 'scale(1.12)';
+            this.style.boxShadow = '0 3px 10px rgba(83, 100, 113, 0.5)';
         });
         settingsButton.addEventListener('mouseleave', function () {
             this.style.transform = 'scale(1)';
-            this.style.boxShadow = '0 4px 12px rgba(83, 100, 113, 0.4)';
+            this.style.boxShadow = '0 2px 6px rgba(83, 100, 113, 0.35)';
         });
         actionsContainer.appendChild(settingsButton);
 
@@ -1518,8 +1593,8 @@ ${comments.map((c, i) => {
             let newY = e.clientY - dragOffset.y;
 
             // Constrain within viewport
-            const maxX = window.innerWidth - 56;
-            const maxY = window.innerHeight - 56;
+            const maxX = window.innerWidth - 40;
+            const maxY = window.innerHeight - 40;
             newX = Math.max(0, Math.min(newX, maxX));
             newY = Math.max(0, Math.min(newY, maxY));
 
@@ -1533,9 +1608,8 @@ ${comments.map((c, i) => {
                 mainButton.style.cursor = 'move';
                 container.style.transition = '';
 
-                // Save position
-                GM_setValue('toolbar_position_x', parseInt(container.style.left));
-                GM_setValue('toolbar_position_y', parseInt(container.style.top));
+                // Save position with edge anchoring (resize-friendly)
+                saveToolbarPosition(parseInt(container.style.left), parseInt(container.style.top));
             }
         });
 
@@ -1543,14 +1617,14 @@ ${comments.map((c, i) => {
         mainButton.addEventListener('mouseenter', function () {
             if (!isDragging) {
                 this.style.transform = 'scale(1.1)';
-                this.style.boxShadow = '0 6px 16px rgba(29, 161, 242, 0.6)';
+                this.style.boxShadow = '0 3px 12px rgba(29, 161, 242, 0.55)';
             }
         });
 
         mainButton.addEventListener('mouseleave', function () {
             if (!isDragging) {
                 this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 4px 12px rgba(29, 161, 242, 0.4)';
+                this.style.boxShadow = '0 2px 8px rgba(29, 161, 242, 0.35)';
             }
         });
 
@@ -1561,16 +1635,16 @@ ${comments.map((c, i) => {
     // Helper function to get action button style
     function getActionButtonStyle(colorStart, colorEnd) {
         return `
-            width: 48px;
-            height: 48px;
+            width: 32px;
+            height: 32px;
             background: linear-gradient(135deg, ${colorStart} 0%, ${colorEnd} 100%);
             color: white;
             border: none;
             border-radius: 50%;
             cursor: pointer;
-            font-size: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            transition: all 0.3s ease;
+            font-size: 14px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+            transition: all 0.25s ease;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1586,12 +1660,12 @@ ${comments.map((c, i) => {
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 90%;
-            max-width: 800px;
-            max-height: 80vh;
+            width: 86%;
+            max-width: 640px;
+            max-height: 75vh;
             background: rgb(21, 32, 43);
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
             z-index: 10000;
             display: none;
             overflow: hidden;
@@ -1600,15 +1674,15 @@ ${comments.map((c, i) => {
         `;
 
         panel.innerHTML = `
-            <div id="panel-header" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="margin: 0; font-size: 18px; font-weight: 600;">${t('panelTitle')}</h3>
-                <div id="panel-actions" style="display: flex; gap: 10px; align-items: center;">
-                    <button id="panel-fullscreen-btn" title="${t('panelFullscreen')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">⛶</button>
-                    <button id="panel-copy-btn" title="${t('panelCopy')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">📋</button>
-                    <button id="panel-close-btn" title="${t('panelClose')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">×</button>
+            <div id="panel-header" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; font-size: 15px; font-weight: 600;">${t('panelTitle')}</h3>
+                <div id="panel-actions" style="display: flex; gap: 6px; align-items: center;">
+                    <button id="panel-fullscreen-btn" title="${t('panelFullscreen')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 13px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">⛶</button>
+                    <button id="panel-copy-btn" title="${t('panelCopy')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 13px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">📋</button>
+                    <button id="panel-close-btn" title="${t('panelClose')}" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 15px; line-height: 1; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">×</button>
                 </div>
             </div>
-            <div id="panel-content" style="padding: 16px 20px; overflow-y: auto; overflow-x: hidden; max-height: calc(80vh - 60px); line-height: 1.5; color: rgb(231, 233, 234); user-select: text; -webkit-user-select: text; cursor: text; box-sizing: border-box;"></div>
+            <div id="panel-content" style="padding: 12px 16px; overflow-y: auto; overflow-x: hidden; max-height: calc(75vh - 50px); line-height: 1.5; font-size: 13px; color: rgb(231, 233, 234); user-select: text; -webkit-user-select: text; cursor: text; box-sizing: border-box;"></div>
         `;
 
         document.body.appendChild(panel);
@@ -1663,9 +1737,9 @@ ${comments.map((c, i) => {
                 panel.style.borderRadius = '0';
 
                 // 内容区域全屏样式
-                content.style.maxHeight = 'calc(100vh - 60px)';
-                content.style.fontSize = '18px';
-                content.style.padding = '20px 24px 32px 24px';
+                content.style.maxHeight = 'calc(100vh - 50px)';
+                content.style.fontSize = '15px';
+                content.style.padding = '16px 20px 24px 20px';
                 content.style.lineHeight = '1.5';
 
                 btn.innerHTML = '⛶';
@@ -1676,16 +1750,16 @@ ${comments.map((c, i) => {
                 panel.style.top = '50%';
                 panel.style.left = '50%';
                 panel.style.transform = 'translate(-50%, -50%)';
-                panel.style.width = '90%';
+                panel.style.width = '86%';
                 panel.style.height = 'auto';
-                panel.style.maxWidth = '800px';
-                panel.style.maxHeight = '80vh';
-                panel.style.borderRadius = '12px';
+                panel.style.maxWidth = '640px';
+                panel.style.maxHeight = '75vh';
+                panel.style.borderRadius = '10px';
 
                 // 内容区域正常样式
-                content.style.maxHeight = 'calc(80vh - 60px)';
-                content.style.fontSize = '16px';
-                content.style.padding = '16px 20px';
+                content.style.maxHeight = 'calc(75vh - 50px)';
+                content.style.fontSize = '13px';
+                content.style.padding = '12px 16px';
                 content.style.lineHeight = '1.5';
 
                 btn.innerHTML = '⛶';
@@ -1712,9 +1786,9 @@ ${comments.map((c, i) => {
         // Convert markdown to HTML
         const htmlContent = cleanedContent
             // Headers (must be processed before list items)
-            .replace(/^### (.*?)$/gm, '<h3 style="margin-top: 4px; margin-bottom: 2px; color: rgb(231, 233, 234); font-size: 18px; font-weight: 600;">$1</h3>')
-            .replace(/^## (.*?)$/gm, '<h2 style="margin-top: 6px; margin-bottom: 3px; color: rgb(231, 233, 234); font-size: 20px; font-weight: 700;">$1</h2>')
-            .replace(/^# (.*?)$/gm, '<h1 style="margin-top: 8px; margin-bottom: 4px; color: rgb(231, 233, 234); font-size: 24px; font-weight: 700;">$1</h1>')
+            .replace(/^### (.*?)$/gm, '<h3 style="margin-top: 4px; margin-bottom: 2px; color: rgb(231, 233, 234); font-size: 14px; font-weight: 600;">$1</h3>')
+            .replace(/^## (.*?)$/gm, '<h2 style="margin-top: 6px; margin-bottom: 3px; color: rgb(231, 233, 234); font-size: 16px; font-weight: 700;">$1</h2>')
+            .replace(/^# (.*?)$/gm, '<h1 style="margin-top: 8px; margin-bottom: 4px; color: rgb(231, 233, 234); font-size: 18px; font-weight: 700;">$1</h1>')
             // Bold and italic
             .replace(/\*\*(.*?)\*\*/g, '<strong style="color: rgb(139, 213, 255); font-weight: 600;">$1</strong>')
             .replace(/\*(.*?)\*/g, '<em style="color: rgb(255, 212, 121);">$1</em>')
@@ -2364,12 +2438,18 @@ ${comments.map((c, i) => {
             return;
         }
 
+        // 记录函数启动时的 URL，async 过程中如果路由变化（用户切回时间线/个人页等）立即终止
+        // 否则会用时间线推文当作评论送进 AI，并把结果写回 DOM 误隐藏正常推文
+        const startUrl = location.href;
+        const stillOnDetail = () => isOnTweetDetailPage() && location.href === startUrl;
+
         aiFilterInProgress = true;
         console.log(t('consoleAiFilterStart'));
 
         try {
             // 等待评论加载（给用户一些时间看到评论）
             await sleep(2000);
+            if (!stillOnDetail()) return;
 
             // 获取当前可见的评论
             const commentersMap = getAllCommentersWithText();
@@ -2424,6 +2504,7 @@ ${comments.map((c, i) => {
                 }
 
                 const bioHits = await checkBiosInBackground(candidateNames, bioPrefixes);
+                if (!stillOnDetail()) return;
                 if (bioHits.size > 0) {
                     const remainingComments = [];
                     for (const c of comments) {
@@ -2448,6 +2529,7 @@ ${comments.map((c, i) => {
                     .filter(c => preFilterBlacklist.includes(c.username))
                     .map(c => [c.username, { text: c.text, displayName: c.displayName, avatarUrl: c.avatarUrl }]));
                 await processAIFilterResults({ blacklist: preFilterBlacklist, spam: [] }, preMap);
+                if (!stillOnDetail()) return;
                 preFilterBlacklist.forEach(u => aiFilterProcessed.add(u));
             }
 
@@ -2468,6 +2550,7 @@ ${comments.map((c, i) => {
             let processedCount = 0;
 
             for (let i = 0; i < comments.length; i += batchSize) {
+                if (!stillOnDetail()) return;
                 const batch = comments.slice(i, i + batchSize);
                 const batchDataMap = new Map(batch.map(c => [c.username, {
                     text: c.text,
@@ -2477,9 +2560,11 @@ ${comments.map((c, i) => {
 
                 try {
                     const results = await classifyCommentsByAI(batch, mainTweet);
+                    if (!stillOnDetail()) return;
 
                     // 处理结果
                     await processAIFilterResults(results, batchDataMap);
+                    if (!stillOnDetail()) return;
 
                     // 标记已处理
                     batch.forEach(c => aiFilterProcessed.add(c.username));
@@ -2498,6 +2583,7 @@ ${comments.map((c, i) => {
                 // 批次之间延迟，避免API限流
                 if (i + batchSize < comments.length) {
                     await sleep(1000);
+                    if (!stillOnDetail()) return;
                 }
             }
 
@@ -2528,10 +2614,16 @@ ${comments.map((c, i) => {
         if (commentObserver) {
             commentObserver.disconnect();
         }
-
-        let processingTimer = null;
+        // 清理可能挂在前一次监听器上的 debounce 计时器
+        if (commentDebounceTimer) {
+            clearTimeout(commentDebounceTimer);
+            commentDebounceTimer = null;
+        }
 
         commentObserver = new MutationObserver(() => {
+            // 只在推文详情页运行，避免在时间线误触发
+            if (!isOnTweetDetailPage()) return;
+
             // 立即检查新评论是否是已拉黑用户，如果是则立即隐藏
             const articles = document.querySelectorAll('article[data-testid="tweet"]');
             articles.forEach(article => {
@@ -2564,8 +2656,9 @@ ${comments.map((c, i) => {
             });
 
             // 延迟执行 AI 过滤，避免频繁触发
-            if (processingTimer) clearTimeout(processingTimer);
-            processingTimer = setTimeout(() => {
+            if (commentDebounceTimer) clearTimeout(commentDebounceTimer);
+            commentDebounceTimer = setTimeout(() => {
+                commentDebounceTimer = null;
                 if (!aiFilterInProgress && isOnTweetDetailPage()) {
                     autoAIFilterComments();
                 }
@@ -2687,6 +2780,17 @@ ${comments.map((c, i) => {
             createResultPanel();
         }
 
+        // 非详情页一律回滚残留的 data-ai-filtered DOM 副作用，防止从详情页切回时间线后污染
+        if (!isOnTweetDetailPage()) {
+            document.querySelectorAll('article[data-ai-filtered]').forEach(article => {
+                article.removeAttribute('data-ai-filtered');
+                article.removeAttribute('data-blacklist-reason');
+                if (article.style.display === 'none') article.style.display = '';
+                if (article.style.position === 'relative') article.style.position = '';
+                article.querySelectorAll('.ai-spam-overlay').forEach(o => o.remove());
+            });
+        }
+
         // Auto block if enabled and on tweet detail page
         if (config.get('autoBlock') && isOnTweetDetailPage()) {
             setTimeout(autoBlockCommenters, 2000);
@@ -2721,9 +2825,8 @@ ${comments.map((c, i) => {
             if (oldToolbar) {
                 const currentLeft = parseInt(oldToolbar.style.left) || 0;
                 const currentTop = parseInt(oldToolbar.style.top) || 0;
-                // Save current actual position so createFloatingToolbar uses it instead of stale saved position
-                GM_setValue('toolbar_position_x', currentLeft);
-                GM_setValue('toolbar_position_y', currentTop);
+                // Save with edge anchoring so it stays put across viewport changes
+                saveToolbarPosition(currentLeft, currentTop);
                 oldToolbar.remove();
             }
             // Remove old AI filter status indicator
@@ -2734,6 +2837,27 @@ ${comments.map((c, i) => {
             // Reset AI filter state for new page
             aiFilterProcessed = new Set();
             aiFilterInProgress = false;
+            // 停止评论监听器，避免在非详情页误触发过滤
+            if (commentObserver) {
+                commentObserver.disconnect();
+                commentObserver = null;
+            }
+            // 清理 watchForNewComments 内的 debounce 计时器，避免跨页 fire 误触发
+            if (commentDebounceTimer) {
+                clearTimeout(commentDebounceTimer);
+                commentDebounceTimer = null;
+            }
+            // 清空已拉黑用户集合，避免时间线推文被误隐藏
+            blockedUsersSet = new Set();
+            // 清理上一页留下的 data-ai-filtered 副作用：Twitter SPA 会复用部分 article DOM，
+            // 上一次详情页打的隐藏/遮罩会跟着节点进入新页面，必须主动回滚
+            document.querySelectorAll('article[data-ai-filtered]').forEach(article => {
+                article.removeAttribute('data-ai-filtered');
+                article.removeAttribute('data-blacklist-reason');
+                if (article.style.display === 'none') article.style.display = '';
+                if (article.style.position === 'relative') article.style.position = '';
+                article.querySelectorAll('.ai-spam-overlay').forEach(o => o.remove());
+            });
             // Reinitialize
             setTimeout(init, 1000);
         }
