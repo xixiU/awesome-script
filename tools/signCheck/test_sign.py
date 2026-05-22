@@ -140,12 +140,12 @@ def test_fz_sign():
 
 if __name__ == "__main__":
     # ============== 通用接口签名测试（自己改 URL / METHOD / BODY / TOKEN） ==============
-    # test_api_sign(
-    #     url="https://hktestservice.iflysec.com/ts-service/internet/case/getMember/7480610",
-    #     method="GET",
-    #     body=None,
-    #     token="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIzNTMiLCJpc3MiOiJJRkxZVEVLLVpGQkciLCJleHAiOjE3Nzk0NTAxMzAsImlhdCI6MTc3OTE5ODEzMCwidXNlcklkIjoiMzUzIn0.wemnBfkuU9dekAXimYIk9CLCzhgtvL5-4setRaauoAM",
-    # )
+    test_api_sign(
+        url="https://hktestservice.iflysec.com/ts-service/internet/case/getMember/7480610",
+        method="GET",
+        body=None,
+        token="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMzExMTExMTExMSIsImlzcyI6IklGTFlURUstWkZCRyIsImV4cCI6MTc3OTQ3MzY3OCwiaWF0IjoxNzc5NDMwNDc4LCJ1c2VySWQiOiIxMzExMTExMTExMSJ9.PFGXP8m63PisJxBZbHtvnRuu6jNJhz2wGxKV37JlnnI",
+    )
 
     test_fz_sign()
 
