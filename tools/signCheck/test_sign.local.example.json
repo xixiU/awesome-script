@@ -1,0 +1,4 @@
+{
+  "fz_secret_key": "REPLACE_WITH_FZ_SECRET",
+  "api_sign_secret_key": "REPLACE_WITH_API_SIGN_SECRET"
+}

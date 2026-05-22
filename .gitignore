@@ -22,3 +22,4 @@ enetedu/chrome_extension/eneteduPro.zip
 **/.claude
 *.pac
 tools/clash.yaml
+tools/signCheck/test_sign.local.json
