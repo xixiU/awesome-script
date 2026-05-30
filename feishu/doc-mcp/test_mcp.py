@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """快速测试 MCP 服务是否正常
 
 用法:
