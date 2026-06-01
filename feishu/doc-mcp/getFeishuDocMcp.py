@@ -175,6 +175,64 @@ def _guess_obj_type(token: str) -> str:
     return "docx"
 
 
+# 飞书 URL 路径段 → (来源 source, 文档类型 obj_type)
+# 来源 wiki 表示需先 get_node 解析；drive 表示 token 即文档实体，类型已确定
+_URL_PATH_MAP = {
+    "wiki": ("wiki", None),       # 知识库节点，类型需 get_node 才知道
+    "docx": ("drive", "docx"),
+    "docs": ("drive", "docx"),    # 旧版文档链接，按 docx 读
+    "doc": ("drive", "docx"),
+    "sheets": ("drive", "sheet"),
+    "sheet": ("drive", "sheet"),
+    "base": ("drive", "bitable"),
+    "bitable": ("drive", "bitable"),
+    "mindnotes": ("drive", "mindnote"),
+    "file": ("drive", "file"),
+    "drive": ("drive", "folder"),  # /drive/folder/xxx 文件夹
+}
+
+
+def _parse_feishu_input(raw: str):
+    """解析用户输入，统一抽取出 (token, source, obj_type)。
+
+    支持两种输入：
+      1. 完整飞书 URL，如 https://xxx.feishu.cn/sheets/shtABC?sheet=0
+         → 从路径段精准识别类型，零猜测
+      2. 裸 token，如 shtABC / CQv6wuy...
+         → URL 无从判断，回退到前缀猜测，source 标记为 "unknown"
+
+    返回:
+        (token, source, obj_type)
+        - source: "wiki" 需 get_node 解析；"drive" 类型已确定；"unknown" 裸 token 待定
+        - obj_type: drive 来源时为确定类型；wiki/unknown 时可能为 None
+    """
+    s = (raw or "").strip()
+    if not s:
+        return s, "unknown", None
+
+    if s.startswith("http://") or s.startswith("https://"):
+        # 去掉协议和查询参数，按 / 切分路径段
+        path = s.split("://", 1)[1]
+        path = path.split("?", 1)[0].split("#", 1)[0]
+        segs = [seg for seg in path.split("/")[1:] if seg]  # 去掉域名
+        # 找到第一个已知关键字段，其后紧跟的非空段即为 token
+        for i, seg in enumerate(segs):
+            key = seg.lower()
+            if key in _URL_PATH_MAP:
+                source, obj_type = _URL_PATH_MAP[key]
+                token = segs[i + 1] if i + 1 < len(segs) else ""
+                # /drive/folder/xxx：token 在 folder 之后再后一段
+                if key == "drive" and token.lower() == "folder":
+                    token = segs[i + 2] if i + 2 < len(segs) else ""
+                return token, source, obj_type
+        # URL 里没有识别到关键字段，取最后一段当 token
+        token = segs[-1] if segs else ""
+        return token, "unknown", _guess_obj_type(token)
+
+    # 裸 token：URL 无从判断，回退前缀猜测
+    return s, "unknown", _guess_obj_type(s)
+
+
 def _col_num_to_letter(n: int) -> str:
     """列序号(1-based)转 A1 列字母，如 1->A, 26->Z, 27->AA"""
     s = ""
@@ -532,7 +590,7 @@ async def _read_by_type(auth_token: str, token: str, obj_type: str) -> str:
 
 
 @mcp.tool()
-async def read_document(token: str) -> str:
+async def read_document(input: str) -> str:
     """【统一入口】读取文档内容（支持 docx 文档、电子表格 sheet、多维表格 bitable；知识库与云空间均可）。
 
     自动识别类型并分发：
@@ -542,40 +600,56 @@ async def read_document(token: str) -> str:
       - slides/mindnote → 暂不支持，返回提示
 
     参数:
-        token: 文档 token，支持以下格式：
-               - obj_token/file_id: 云空间文档实体 token（如 doxrzXXX / shtXXX / basXXX）
-               - wiki_token: 知识库节点 token，会自动解析 obj_token 与 obj_type 后读取
+        input: 支持两种输入格式：
+               1. 完整飞书 URL（推荐）：如 https://xxx.feishu.cn/sheets/shtABC
+                  从 URL 路径段精准识别类型，零猜测，最快
+               2. 裸 token：如 shtABC / CQv6wuy...（知识库 wiki_token 或云空间 obj_token）
+                  会先试 wiki 节点解析，失败后按前缀猜测类型
     返回:
         文档内容（docx 为纯文本，sheet/bitable 为 Markdown 表格）
     """
     auth_token = await get_tenant_auth()
+    token, source, obj_type = _parse_feishu_input(input)
 
-    # 1. 先尝试作为知识库 wiki 节点解析（拿到权威的 obj_type 与 obj_token）
-    try:
-        node = await _get_wiki_node_info(auth_token, token)
-        obj_token = node.get("obj_token")
-        obj_type = node.get("obj_type")
-        if obj_token and obj_type:
-            return await _read_by_type(auth_token, obj_token, obj_type)
-    except Exception:
-        pass
+    if not token:
+        return json.dumps({"error": "无法从输入中提取有效 token"}, ensure_ascii=False)
 
-    # 2. 不是 wiki 节点（或解析失败），按 token 前缀粗判类型直接读云空间实体
-    obj_type = _guess_obj_type(token)
-    try:
-        return await _read_by_type(auth_token, token, obj_type)
-    except httpx.HTTPStatusError as e:
-        # docx 前缀猜错时，尝试其余类型兜底
-        if obj_type == "docx":
-            for fallback in ("sheet", "bitable"):
-                try:
-                    return await _read_by_type(auth_token, token, fallback)
-                except Exception:
-                    continue
-        return json.dumps({
-            "error": f"读取失败({e.response.status_code})：无法识别 token 类型或无访问权限",
-            "token": token,
-        }, ensure_ascii=False)
+    # 1. URL 明确标识为 wiki 节点，或裸 token 先试 wiki（拿权威 obj_type）
+    if source in ("wiki", "unknown"):
+        try:
+            node = await _get_wiki_node_info(auth_token, token)
+            obj_token = node.get("obj_token")
+            node_obj_type = node.get("obj_type")
+            if obj_token and node_obj_type:
+                return await _read_by_type(auth_token, obj_token, node_obj_type)
+        except Exception:
+            if source == "wiki":
+                # URL 明确是 /wiki/xxx 却解析失败，直接报错
+                return json.dumps({
+                    "error": "wiki 节点解析失败，token 无效或无访问权限",
+                    "token": token
+                }, ensure_ascii=False)
+            # source == "unknown"：裸 token 试 wiki 失败，继续下面的云空间逻辑
+
+    # 2. URL 明确标识为 drive（类型已确定），或裸 token 按前缀猜测
+    if source == "drive" or (source == "unknown" and obj_type):
+        try:
+            return await _read_by_type(auth_token, token, obj_type)
+        except httpx.HTTPStatusError as e:
+            # 仅在裸 token + 前缀猜测场景才兜底尝试其他类型
+            if source == "unknown" and obj_type == "docx":
+                for fallback in ("sheet", "bitable"):
+                    try:
+                        return await _read_by_type(auth_token, token, fallback)
+                    except Exception:
+                        continue
+            return json.dumps({
+                "error": f"读取失败({e.response.status_code})：无法识别 token 类型或无访问权限",
+                "token": token,
+                "guessed_type": obj_type,
+            }, ensure_ascii=False)
+
+    return json.dumps({"error": "无法识别输入类型"}, ensure_ascii=False)
 
 
 # ========== 云空间专用（drive_ 前缀） ==========
