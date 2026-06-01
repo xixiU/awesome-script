@@ -153,6 +153,210 @@ async def _list_drive_files(auth_token: str, folder_token: str = None) -> list:
     return files
 
 
+# --- 电子表格 / 多维表格：类型识别与单元格格式化 ---
+
+def _guess_obj_type(token: str) -> str:
+    """根据 token 前缀粗判文档类型（仅作辅助，最可靠仍是 wiki obj_type / drive type）。
+
+    飞书 token 前缀约定（私有化部署可能不同）：
+        sht* 电子表格 / bas* 多维表格 / box* 文件 / bmn* 思维笔记
+        dox*、doc* 文档（docx/旧版 doc）
+    """
+    t = (token or "").lower()
+    if t.startswith("sht"):
+        return "sheet"
+    if t.startswith("bas"):
+        return "bitable"
+    if t.startswith("box"):
+        return "file"
+    if t.startswith("bmn"):
+        return "mindnote"
+    # dox/doc 及无法识别的，统一按 docx 处理
+    return "docx"
+
+
+def _col_num_to_letter(n: int) -> str:
+    """列序号(1-based)转 A1 列字母，如 1->A, 26->Z, 27->AA"""
+    s = ""
+    while n > 0:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def _cell_to_text(cell) -> str:
+    """单元格值转纯文本。ToString 渲染下多为字符串，富文本/超链接兜底为 JSON"""
+    if cell is None:
+        return ""
+    if isinstance(cell, (list, dict)):
+        return json.dumps(cell, ensure_ascii=False)
+    return str(cell)
+
+
+def _values_to_markdown(values: list) -> str:
+    """二维数组转 Markdown 表格；首行作表头，空表返回提示"""
+    rows = [r for r in (values or []) if any(_cell_to_text(c).strip() for c in r)]
+    if not rows:
+        return "_(空表/无数据)_"
+    width = max(len(r) for r in rows)
+
+    def fmt(r):
+        cells = [_cell_to_text(c).replace("\n", " ").replace("|", "\\|") for c in r]
+        cells += [""] * (width - len(cells))
+        return "| " + " | ".join(cells) + " |"
+
+    out = [fmt(rows[0]), "| " + " | ".join(["---"] * width) + " |"]
+    out += [fmt(r) for r in rows[1:]]
+    return "\n".join(out)
+
+
+async def _sheet_query_sheets(auth_token: str, spreadsheet_token: str) -> list:
+    """【电子表格 sheets】列出表格内所有工作表
+
+    接口: GET /open-apis/sheets/v3/spreadsheets/{token}/sheets/query
+    返回: 工作表列表，每项含 sheet_id / title / index / grid_properties(row_count,column_count)
+    """
+    url = f"{URL_PREFIX}/open-apis/sheets/v3/spreadsheets/{spreadsheet_token}/sheets/query"
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        resp = await client.get(url, headers=_make_headers(auth_token))
+        resp.raise_for_status()
+        return resp.json().get("data", {}).get("sheets", []) or []
+
+
+async def _sheet_read_range(auth_token: str, spreadsheet_token: str, range_str: str) -> list:
+    """【电子表格 sheets】读取指定 range 的单元格值（二维数组）
+
+    接口: GET /open-apis/sheets/v2/spreadsheets/{token}/values/{range}
+    说明: 列工作表用 v3，读数据用 v2（飞书历史版本割裂）。valueRenderOption=ToString 取纯文本
+    """
+    url = f"{URL_PREFIX}/open-apis/sheets/v2/spreadsheets/{spreadsheet_token}/values/{range_str}"
+    params = {"valueRenderOption": "ToString", "dateTimeRenderOption": "FormattedString"}
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=20.0) as client:
+        resp = await client.get(url, headers=_make_headers(auth_token), params=params)
+        resp.raise_for_status()
+        return resp.json().get("data", {}).get("valueRange", {}).get("values", []) or []
+
+
+async def _read_spreadsheet(auth_token: str, spreadsheet_token: str) -> str:
+    """读取整个电子表格：遍历每个工作表，按行列数读单元格，拼成 Markdown"""
+    sheets = await _sheet_query_sheets(auth_token, spreadsheet_token)
+    if not sheets:
+        return "_(该电子表格没有工作表，或无访问权限)_"
+    parts = []
+    for s in sheets:
+        sheet_id = s.get("sheet_id")
+        title = s.get("title", sheet_id)
+        grid = s.get("grid_properties", {}) or {}
+        rows = grid.get("row_count") or 0
+        cols = grid.get("column_count") or 0
+        if not sheet_id or rows <= 0 or cols <= 0:
+            parts.append(f"## {title}\n\n_(空工作表)_")
+            continue
+        # 单次最多 100 列，行数过大也截断，避免超 10MB 响应
+        cols = min(cols, 100)
+        rows = min(rows, 5000)
+        range_str = f"{sheet_id}!A1:{_col_num_to_letter(cols)}{rows}"
+        try:
+            values = await _sheet_read_range(auth_token, spreadsheet_token, range_str)
+            parts.append(f"## {title}\n\n{_values_to_markdown(values)}")
+        except Exception as e:
+            parts.append(f"## {title}\n\n_(读取失败: {e})_")
+    return "\n\n".join(parts)
+
+
+async def _bitable_list_tables(auth_token: str, app_token: str) -> list:
+    """【多维表格 bitable】列出所有数据表
+
+    接口: GET /open-apis/bitable/v1/apps/{app_token}/tables
+    返回: 数据表列表，每项含 table_id / name
+    """
+    url = f"{URL_PREFIX}/open-apis/bitable/v1/apps/{app_token}/tables"
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        return await _get_all_pages(client, url, _make_headers(auth_token), {"page_size": 100})
+
+
+async def _bitable_list_fields(auth_token: str, app_token: str, table_id: str) -> list:
+    """【多维表格 bitable】列出某数据表的字段
+
+    接口: GET /open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/fields
+    返回: 字段列表，每项含 field_name / type / ui_type / is_primary
+    """
+    url = f"{URL_PREFIX}/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/fields"
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        return await _get_all_pages(client, url, _make_headers(auth_token), {"page_size": 100})
+
+
+async def _bitable_search_records(auth_token: str, app_token: str, table_id: str, max_records: int = 500) -> list:
+    """【多维表格 bitable】查询某数据表的记录
+
+    接口: POST /open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records/search
+    返回: 记录列表，每项含 record_id / fields(字段名->值)
+    """
+    url = f"{URL_PREFIX}/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records/search"
+    records = []
+    page_token = None
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=20.0) as client:
+        while len(records) < max_records:
+            params = {"page_size": min(500, max_records - len(records))}
+            if page_token:
+                params["page_token"] = page_token
+            resp = await client.post(url, headers=_make_headers(auth_token), params=params, json={})
+            resp.raise_for_status()
+            data = resp.json().get("data", {})
+            records.extend(data.get("items") or [])
+            if not data.get("has_more"):
+                break
+            page_token = data.get("page_token")
+    return records
+
+
+def _bitable_field_value_to_text(value) -> str:
+    """多维表格字段值转文本。值类型多样：字符串、数字、数组(多选/人员/附件)、对象(超链接等)"""
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        parts = []
+        for v in value:
+            if isinstance(v, dict):
+                # 人员 name / 文本段 text / 附件 name / 链接 link
+                parts.append(v.get("name") or v.get("text") or v.get("link") or json.dumps(v, ensure_ascii=False))
+            else:
+                parts.append(str(v))
+        return ", ".join(parts)
+    if isinstance(value, dict):
+        return value.get("name") or value.get("text") or value.get("link") or json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+async def _read_bitable(auth_token: str, app_token: str) -> str:
+    """读取整个多维表格：遍历每个数据表，读字段+记录，拼成 Markdown"""
+    tables = await _bitable_list_tables(auth_token, app_token)
+    if not tables:
+        return "_(该多维表格没有数据表，或无访问权限)_"
+    parts = []
+    for t in tables:
+        table_id = t.get("table_id")
+        name = t.get("name", table_id)
+        if not table_id:
+            continue
+        try:
+            fields = await _bitable_list_fields(auth_token, app_token, table_id)
+            field_names = [f.get("field_name") for f in fields if f.get("field_name")]
+            records = await _bitable_search_records(auth_token, app_token, table_id)
+            if not field_names:
+                parts.append(f"## {name}\n\n_(无字段)_")
+                continue
+            # 拼成二维数组（表头 + 记录行），复用 Markdown 渲染
+            grid = [field_names]
+            for rec in records:
+                rfields = rec.get("fields", {}) or {}
+                grid.append([_bitable_field_value_to_text(rfields.get(fn)) for fn in field_names])
+            parts.append(f"## {name}\n\n{_values_to_markdown(grid)}")
+        except Exception as e:
+            parts.append(f"## {name}\n\n_(读取失败: {e})_")
+    return "\n\n".join(parts)
+
+
 # --- MCP 工具 ---
 # 工具按「归属系统」分成三类，命名统一：
 #   1. 统一入口（无前缀）：list_children / read_document
@@ -303,35 +507,75 @@ async def list_children(token: str, type: str = "auto", recursive: bool = False)
     return json.dumps({"error": "无法识别 token 类型"}, ensure_ascii=False)
 
 
+async def _read_by_type(auth_token: str, token: str, obj_type: str) -> str:
+    """按文档类型分发读取。
+
+    参数:
+        token: 文档实体 token（docx 的 obj_token、sheet 的 spreadsheet_token、bitable 的 app_token）
+        obj_type: 类型（docx/doc/sheet/bitable/mindnote/file/slides...）
+    """
+    t = (obj_type or "").lower()
+    if t in ("docx", "doc"):
+        return await _get_document_raw_content(auth_token, token)
+    if t in ("sheet", "spreadsheet"):
+        return await _read_spreadsheet(auth_token, token)
+    if t == "bitable":
+        return await _read_bitable(auth_token, token)
+    if t == "slides":
+        return json.dumps({
+            "error": "暂不支持读取幻灯片(slides)。飞书官方未提供 slides 正文读取 API，"
+                     "如需内容请在飞书中导出为 PDF/Word 后再处理。"
+        }, ensure_ascii=False)
+    return json.dumps({
+        "error": f"暂不支持读取该类型: {obj_type}（支持 docx/sheet/bitable）"
+    }, ensure_ascii=False)
+
+
 @mcp.tool()
 async def read_document(token: str) -> str:
-    """【统一入口】读取文档内容（支持知识库文档和云空间文档）。
+    """【统一入口】读取文档内容（支持 docx 文档、电子表格 sheet、多维表格 bitable；知识库与云空间均可）。
+
+    自动识别类型并分发：
+      - docx/doc → 纯文本
+      - sheet（sht 开头）→ 各工作表单元格，Markdown 表格
+      - bitable（bas 开头）→ 各数据表字段+记录，Markdown 表格
+      - slides/mindnote → 暂不支持，返回提示
 
     参数:
         token: 文档 token，支持以下格式：
-               - obj_token/file_id: 直接读取（如 doxrzXXX，云空间 docx）
-               - wiki_token: 知识库节点 token（如 CQv6wuy5qiNGVIkyaetrbzOrzdf）
-                            会自动获取其 obj_token 后读取
+               - obj_token/file_id: 云空间文档实体 token（如 doxrzXXX / shtXXX / basXXX）
+               - wiki_token: 知识库节点 token，会自动解析 obj_token 与 obj_type 后读取
     返回:
-        文档的纯文本内容
+        文档内容（docx 为纯文本，sheet/bitable 为 Markdown 表格）
     """
     auth_token = await get_tenant_auth()
 
-    # 先尝试直接读取（假设是 obj_token / file_id）
+    # 1. 先尝试作为知识库 wiki 节点解析（拿到权威的 obj_type 与 obj_token）
     try:
-        return await _get_document_raw_content(auth_token, token)
+        node = await _get_wiki_node_info(auth_token, token)
+        obj_token = node.get("obj_token")
+        obj_type = node.get("obj_type")
+        if obj_token and obj_type:
+            return await _read_by_type(auth_token, obj_token, obj_type)
+    except Exception:
+        pass
+
+    # 2. 不是 wiki 节点（或解析失败），按 token 前缀粗判类型直接读云空间实体
+    obj_type = _guess_obj_type(token)
+    try:
+        return await _read_by_type(auth_token, token, obj_type)
     except httpx.HTTPStatusError as e:
-        # 如果 404，尝试作为 wiki_token 处理
-        if e.response.status_code == 404:
-            try:
-                node = await _get_wiki_node_info(auth_token, token)
-                obj_token = node.get("obj_token")
-                if obj_token:
-                    return await _get_document_raw_content(auth_token, obj_token)
-            except Exception:
-                pass
-        # 其他错误，重新抛出
-        raise
+        # docx 前缀猜错时，尝试其余类型兜底
+        if obj_type == "docx":
+            for fallback in ("sheet", "bitable"):
+                try:
+                    return await _read_by_type(auth_token, token, fallback)
+                except Exception:
+                    continue
+        return json.dumps({
+            "error": f"读取失败({e.response.status_code})：无法识别 token 类型或无访问权限",
+            "token": token,
+        }, ensure_ascii=False)
 
 
 # ========== 云空间专用（drive_ 前缀） ==========
@@ -401,18 +645,104 @@ async def drive_list_folder(folder_token: str = None, recursive: bool = False) -
 
 
 @mcp.tool()
-async def drive_read_document(file_id: str) -> str:
-    """【云空间】读取云空间 docx 文档的原始文本内容。
+async def drive_read_document(file_id: str, type: str = "auto") -> str:
+    """【云空间】读取云空间文档内容（支持 docx 文档 / 电子表格 sheet / 多维表格 bitable）。
 
-    接口: GET /open-apis/docx/v1/documents/{file_id}/raw_content
-    适用场景：URL 形如 /docx/xxx 时直接使用，file_id 即 URL 中的 xxx。
+    适用场景：URL 形如 /docx/xxx、/sheets/xxx、/base/xxx 时直接使用，file_id 即 URL 中的 xxx。
     参数:
-        file_id: 云空间文档 ID，从 /docx/xxx 的 URL 中提取
+        file_id: 云空间文档实体 token，从 URL 中提取（如 doxXXX / shtXXX / basXXX）
+        type: 类型提示，"docx"/"sheet"/"bitable"，默认 "auto" 按 token 前缀自动识别
     返回:
-        文档的纯文本内容
+        docx 为纯文本；sheet/bitable 为 Markdown 表格
     """
     token = await get_tenant_auth()
-    return await _get_document_raw_content(token, file_id)
+    obj_type = _guess_obj_type(file_id) if type == "auto" else type
+    return await _read_by_type(token, file_id, obj_type)
+
+
+@mcp.tool()
+async def sheet_read(spreadsheet_token: str, range: str = None) -> str:
+    """【电子表格】读取电子表格内容。
+
+    接口: GET sheets/v3/.../sheets/query 列工作表 + GET sheets/v2/.../values/{range} 读单元格
+    适用场景：URL 形如 /sheets/xxx 时直接使用，spreadsheet_token 即 URL 中的 xxx。
+    参数:
+        spreadsheet_token: 电子表格 token（sht 开头）
+        range: 可选，指定读取范围如 "sheetId!A1:C10"；不填则读取所有工作表全部数据
+    返回:
+        Markdown 表格文本
+    """
+    token = await get_tenant_auth()
+    if range:
+        values = await _sheet_read_range(token, spreadsheet_token, range)
+        return _values_to_markdown(values)
+    return await _read_spreadsheet(token, spreadsheet_token)
+
+
+@mcp.tool()
+async def sheet_list_worksheets(spreadsheet_token: str) -> str:
+    """【电子表格】列出电子表格内所有工作表的元信息。
+
+    接口: GET /open-apis/sheets/v3/spreadsheets/{token}/sheets/query
+    参数:
+        spreadsheet_token: 电子表格 token（sht 开头）
+    返回:
+        工作表列表 JSON，含 sheet_id / title / index / row_count / column_count
+    """
+    token = await get_tenant_auth()
+    sheets = await _sheet_query_sheets(token, spreadsheet_token)
+    results = []
+    for s in sheets:
+        grid = s.get("grid_properties", {}) or {}
+        results.append({
+            "sheet_id": s.get("sheet_id"),
+            "title": s.get("title"),
+            "index": s.get("index"),
+            "row_count": grid.get("row_count"),
+            "column_count": grid.get("column_count"),
+        })
+    return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+async def bitable_read(app_token: str, table_id: str = None) -> str:
+    """【多维表格】读取多维表格内容（字段 + 记录）。
+
+    接口: bitable/v1 的 tables / fields / records.search
+    适用场景：URL 形如 /base/xxx 时直接使用，app_token 即 URL 中的 xxx。
+    参数:
+        app_token: 多维表格 token（bas 开头）
+        table_id: 可选，指定数据表 ID；不填则读取所有数据表
+    返回:
+        Markdown 表格文本
+    """
+    token = await get_tenant_auth()
+    if table_id:
+        fields = await _bitable_list_fields(token, app_token, table_id)
+        field_names = [f.get("field_name") for f in fields if f.get("field_name")]
+        records = await _bitable_search_records(token, app_token, table_id)
+        grid = [field_names]
+        for rec in records:
+            rfields = rec.get("fields", {}) or {}
+            grid.append([_bitable_field_value_to_text(rfields.get(fn)) for fn in field_names])
+        return _values_to_markdown(grid)
+    return await _read_bitable(token, app_token)
+
+
+@mcp.tool()
+async def bitable_list_tables(app_token: str) -> str:
+    """【多维表格】列出多维表格内所有数据表。
+
+    接口: GET /open-apis/bitable/v1/apps/{app_token}/tables
+    参数:
+        app_token: 多维表格 token（bas 开头）
+    返回:
+        数据表列表 JSON，含 table_id / name
+    """
+    token = await get_tenant_auth()
+    tables = await _bitable_list_tables(token, app_token)
+    results = [{"table_id": t.get("table_id"), "name": t.get("name")} for t in tables]
+    return json.dumps(results, ensure_ascii=False, indent=2)
 
 
 # ========== 知识库专用（wiki_ 前缀) ==========
@@ -542,21 +872,22 @@ async def wiki_list_nodes(wiki_token: str, recursive: bool = False) -> str:
 
 @mcp.tool()
 async def wiki_read_document(wiki_token: str) -> str:
-    """【知识库】读取知识库文档的完整内容。
+    """【知识库】读取知识库文档的完整内容（支持 docx / 电子表格 sheet / 多维表格 bitable）。
 
-    组合调用: wiki_get_node_info 取 obj_token → docx raw_content 读内容
+    组合调用: wiki_get_node_info 取 obj_token + obj_type → 按类型分发读取
     适用场景：URL 形如 /wiki/xxx 时直接使用。
     参数:
         wiki_token: 知识库节点 token（从 /wiki/xxx 的 URL 中提取）
     返回:
-        文档的纯文本内容
+        docx 为纯文本；sheet/bitable 为 Markdown 表格
     """
     auth_token = await get_tenant_auth()
     node = await _get_wiki_node_info(auth_token, wiki_token)
     obj_token = node.get("obj_token")
+    obj_type = node.get("obj_type")
     if not obj_token:
         return json.dumps({"error": "无法获取 obj_token，该 wiki 节点可能不是文档类型"}, ensure_ascii=False)
-    return await _get_document_raw_content(auth_token, obj_token)
+    return await _read_by_type(auth_token, obj_token, obj_type or _guess_obj_type(obj_token))
 
 
 # === wiki_search 全文搜索 ===
@@ -676,9 +1007,44 @@ async def wiki_search(keyword: str, wiki_token: str = None, count: int = 10) -> 
     return json.dumps(results, ensure_ascii=False, indent=2)
 
 
-if __name__ == "__main__":
-    import asyncio
+def _setup_logging():
+    """配置日志格式，给所有日志加上请求时间（启动入口调用，不侵入业务/工具代码）。
 
+    覆盖三类日志：
+      - root logger：接管 httpx 的 "HTTP Request: ..." 与 mcp server 的 "Processing request..." 等
+      - uvicorn 的 default/access formatter：就地加 %(asctime)s
+        （uvicorn 启动时会用 dictConfig 重新配置 uvicorn.* 这几个 logger，
+         覆盖 root 设置，故必须改它的默认 LOGGING_CONFIG 才能让访问日志带上时间）
+    """
+    import logging
+
+    datefmt = "%Y-%m-%d %H:%M:%S"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt=datefmt,
+        force=True,
+    )
+
+    try:
+        # LOGGING_CONFIG 是模块级字典，uvicorn.Config 默认 log_config 即引用它，
+        # 就地修改其内容即可生效（不要重新赋值变量名）
+        from uvicorn.config import LOGGING_CONFIG
+        fmts = LOGGING_CONFIG.get("formatters", {})
+        if "default" in fmts:
+            fmts["default"]["fmt"] = "%(asctime)s %(levelprefix)s %(message)s"
+            fmts["default"]["datefmt"] = datefmt
+        if "access" in fmts:
+            fmts["access"]["fmt"] = (
+                '%(asctime)s %(levelprefix)s %(client_addr)s - '
+                '"%(request_line)s" %(status_code)s'
+            )
+            fmts["access"]["datefmt"] = datefmt
+    except Exception:
+        pass
+
+
+if __name__ == "__main__":
     if len(sys.argv) > 1:
         test_token = sys.argv[1]
         print(f"测试读取文档: {test_token}")
@@ -692,4 +1058,5 @@ if __name__ == "__main__":
         asyncio.run(test())
     else:
         print(f"启动 MCP 服务器: {config['server']['host']}:{config['server']['port']}")
+        _setup_logging()
         mcp.run(transport="sse")

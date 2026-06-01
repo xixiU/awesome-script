@@ -6,6 +6,8 @@
 
 - 🔐 支持飞书开放平台 API 认证
 - 📄 读取飞书文档原始文本内容
+- 📊 **读取电子表格（sheet）** 各工作表单元格数据，输出 Markdown 表格
+- 🗂️ **读取多维表格（bitable）** 数据表字段与记录，输出 Markdown 表格
 - 🌐 **全局搜索所有有权限的云文档**（无需指定知识库）
 - 📁 **列出云空间文件夹内容**（支持文件夹遍历）
 - 📚 列出和搜索知识库（Wiki）空间
@@ -156,9 +158,14 @@ list_children(token="xxx", type="drive")  # 强制云空间
 | URL 形如 | 类型 | 推荐工具 |
 |----------|------|----------|
 | `/docx/doxrzXXX` | 云空间 docx | `drive_read_document(file_id)` |
+| `/sheets/shtXXX` | 电子表格 | `sheet_read(spreadsheet_token)`，列工作表 `sheet_list_worksheets` |
+| `/base/basXXX` | 多维表格 | `bitable_read(app_token)`，列数据表 `bitable_list_tables` |
 | `/drive/folder/HRfkf7XXX` | 云空间文件夹 | `drive_list_folder(folder_token)` |
 | `/wiki/CQv6wuyXXX` | 知识库节点 | `wiki_read_document(wiki_token)` 或 `wiki_list_nodes(wiki_token)` |
 | 仅有 token 不知来源 | 未知 | `read_document(token)` / `list_children(token)` |
+
+> 说明：`read_document`、`drive_read_document`、`wiki_read_document` 均已支持自动按类型分发，
+> docx 返回纯文本，电子表格 / 多维表格返回 Markdown 表格；幻灯片（slides）飞书无文本读取 API，返回提示。
 
 ```python
 # === 统一入口（无前缀，token 类型不明时使用） ===

@@ -15,7 +15,13 @@
 
     # === 云空间专用（drive_ 前缀，URL 形如 /drive/folder/xxx 或 /docx/xxx） ===
     python test_mcp.py drive_folder [folder_token] [recursive]  # 列出云空间文件夹内容
-    python test_mcp.py drive_doc <file_id>          # 读取云空间 docx 文档
+    python test_mcp.py drive_doc <file_id> [type]   # 读取云空间文档(docx/sheet/bitable)
+
+    # === 电子表格 / 多维表格 ===
+    python test_mcp.py sheet <spreadsheet_token> [range]  # 读取电子表格
+    python test_mcp.py sheet_list <spreadsheet_token>     # 列出工作表
+    python test_mcp.py bitable <app_token> [table_id]     # 读取多维表格
+    python test_mcp.py bitable_list <app_token>           # 列出数据表
 
     # === 知识库专用（wiki_ 前缀，URL 形如 /wiki/xxx） ===
     python test_mcp.py wiki_spaces                  # 列出所有知识库空间
@@ -52,7 +58,13 @@ def print_help():
     print()
     print("  === 云空间专用（URL 形如 /drive/folder/xxx 或 /docx/xxx） ===")
     print("  python test_mcp.py drive_folder [folder_token] [recursive]   # 列出云空间文件夹")
-    print("  python test_mcp.py drive_doc <file_id>           # 读取云空间 docx")
+    print("  python test_mcp.py drive_doc <file_id> [type]    # 读取云空间文档(docx/sheet/bitable)")
+    print()
+    print("  === 电子表格 / 多维表格 ===")
+    print("  python test_mcp.py sheet <spreadsheet_token> [range]  # 读取电子表格")
+    print("  python test_mcp.py sheet_list <spreadsheet_token>     # 列出工作表")
+    print("  python test_mcp.py bitable <app_token> [table_id]     # 读取多维表格")
+    print("  python test_mcp.py bitable_list <app_token>           # 列出数据表")
     print()
     print("  === 知识库专用（URL 形如 /wiki/xxx） ===")
     # print("  python test_mcp.py wiki_spaces                   # 列出知识库空间,还没测试通过")
@@ -133,11 +145,57 @@ async def main():
             elif cmd == "drive_doc":
                 file_id = sys.argv[2] if len(sys.argv) > 2 else None
                 if not file_id:
-                    print("用法: python test_mcp.py drive_doc <file_id>")
+                    print("用法: python test_mcp.py drive_doc <file_id> [type]")
                     return
-                print(f"--- 读取云空间文档: {file_id} ---")
-                result = await session.call_tool("drive_read_document", {"file_id": file_id})
+                type_hint = sys.argv[3] if len(sys.argv) > 3 else "auto"
+                print(f"--- 读取云空间文档: {file_id} (type={type_hint}) ---")
+                result = await session.call_tool("drive_read_document", {"file_id": file_id, "type": type_hint})
                 print(str(result.content[0].text)[:500])
+
+            # === 电子表格 / 多维表格 ===
+            elif cmd == "sheet":
+                spreadsheet_token = sys.argv[2] if len(sys.argv) > 2 else None
+                if not spreadsheet_token:
+                    print("用法: python test_mcp.py sheet <spreadsheet_token> [range]")
+                    return
+                rng = sys.argv[3] if len(sys.argv) > 3 else None
+                print(f"--- 读取电子表格: {spreadsheet_token} (range={rng}) ---")
+                args = {"spreadsheet_token": spreadsheet_token}
+                if rng:
+                    args["range"] = rng
+                result = await session.call_tool("sheet_read", args)
+                print(str(result.content[0].text)[:1000])
+
+            elif cmd == "sheet_list":
+                spreadsheet_token = sys.argv[2] if len(sys.argv) > 2 else None
+                if not spreadsheet_token:
+                    print("用法: python test_mcp.py sheet_list <spreadsheet_token>")
+                    return
+                print(f"--- 列出工作表: {spreadsheet_token} ---")
+                result = await session.call_tool("sheet_list_worksheets", {"spreadsheet_token": spreadsheet_token})
+                print_json(str(result.content[0].text))
+
+            elif cmd == "bitable":
+                app_token = sys.argv[2] if len(sys.argv) > 2 else None
+                if not app_token:
+                    print("用法: python test_mcp.py bitable <app_token> [table_id]")
+                    return
+                table_id = sys.argv[3] if len(sys.argv) > 3 else None
+                print(f"--- 读取多维表格: {app_token} (table_id={table_id}) ---")
+                args = {"app_token": app_token}
+                if table_id:
+                    args["table_id"] = table_id
+                result = await session.call_tool("bitable_read", args)
+                print(str(result.content[0].text)[:1000])
+
+            elif cmd == "bitable_list":
+                app_token = sys.argv[2] if len(sys.argv) > 2 else None
+                if not app_token:
+                    print("用法: python test_mcp.py bitable_list <app_token>")
+                    return
+                print(f"--- 列出数据表: {app_token} ---")
+                result = await session.call_tool("bitable_list_tables", {"app_token": app_token})
+                print_json(str(result.content[0].text))
 
             # === 知识库专用 ===
             elif cmd == "wiki_spaces":
