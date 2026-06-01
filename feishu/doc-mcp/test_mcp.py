@@ -23,6 +23,14 @@
     python test_mcp.py bitable <app_token> [table_id]     # 读取多维表格
     python test_mcp.py bitable_list <app_token>           # 列出数据表
 
+    # === docx 结构化 / 导出 / 评论 / 统计 ===
+    python test_mcp.py docx_blocks <document_id> [format]  # 读取文档结构(markdown/json)
+    python test_mcp.py export <file_token> <file_type> <export_type>  # 导出文档
+    python test_mcp.py comments <file_token> <file_type>   # 读取评论
+    python test_mcp.py stats <file_token> <file_type>      # 文档统计
+    python test_mcp.py views <file_token> <file_type>      # 查看记录
+    python test_mcp.py media <file_token1> [file_token2]   # 媒体下载链接
+
     # === 知识库专用（wiki_ 前缀，URL 形如 /wiki/xxx） ===
     python test_mcp.py wiki_spaces                  # 列出所有知识库空间
     python test_mcp.py wiki_info <wiki_token>       # 获取知识库节点信息
@@ -65,6 +73,14 @@ def print_help():
     print("  python test_mcp.py sheet_list <spreadsheet_token>     # 列出工作表")
     print("  python test_mcp.py bitable <app_token> [table_id]     # 读取多维表格")
     print("  python test_mcp.py bitable_list <app_token>           # 列出数据表")
+    print()
+    print("  === docx 结构化 / 导出 / 评论 / 统计 ===")
+    print("  python test_mcp.py docx_blocks <document_id> [format]  # 读取文档结构")
+    print("  python test_mcp.py export <file_token> <file_type> <export_type>  # 导出")
+    print("  python test_mcp.py comments <file_token> <file_type>   # 评论")
+    print("  python test_mcp.py stats <file_token> <file_type>      # 统计")
+    print("  python test_mcp.py views <file_token> <file_type>      # 查看记录")
+    print("  python test_mcp.py media <file_token1> [...]           # 媒体下载")
     print()
     print("  === 知识库专用（URL 形如 /wiki/xxx） ===")
     # print("  python test_mcp.py wiki_spaces                   # 列出知识库空间,还没测试通过")
@@ -195,6 +211,82 @@ async def main():
                     return
                 print(f"--- 列出数据表: {app_token} ---")
                 result = await session.call_tool("bitable_list_tables", {"app_token": app_token})
+                print_json(str(result.content[0].text))
+
+            # === docx 结构化 / 导出 / 评论 / 统计 ===
+            elif cmd == "docx_blocks":
+                document_id = sys.argv[2] if len(sys.argv) > 2 else None
+                if not document_id:
+                    print("用法: python test_mcp.py docx_blocks <document_id> [format]")
+                    return
+                fmt = sys.argv[3] if len(sys.argv) > 3 else "markdown"
+                print(f"--- 读取文档结构: {document_id} (format={fmt}) ---")
+                result = await session.call_tool("docx_read_blocks", {"document_id": document_id, "output_format": fmt})
+                print(str(result.content[0].text)[:1000])
+
+            elif cmd == "export":
+                if len(sys.argv) < 5:
+                    print("用法: python test_mcp.py export <file_token> <file_type> <export_type>")
+                    print("示例: python test_mcp.py export doxXXX docx pdf")
+                    return
+                file_token = sys.argv[2]
+                file_type = sys.argv[3]
+                export_type = sys.argv[4]
+                print(f"--- 导出文档: {file_token} ({file_type} → {export_type}) ---")
+                result = await session.call_tool("export_document", {
+                    "file_token": file_token,
+                    "file_type": file_type,
+                    "export_type": export_type
+                })
+                print_json(str(result.content[0].text))
+
+            elif cmd == "comments":
+                if len(sys.argv) < 4:
+                    print("用法: python test_mcp.py comments <file_token> <file_type>")
+                    return
+                file_token = sys.argv[2]
+                file_type = sys.argv[3]
+                print(f"--- 读取评论: {file_token} ({file_type}) ---")
+                result = await session.call_tool("read_comments", {
+                    "file_token": file_token,
+                    "file_type": file_type,
+                    "include_replies": False
+                })
+                print_json(str(result.content[0].text))
+
+            elif cmd == "stats":
+                if len(sys.argv) < 4:
+                    print("用法: python test_mcp.py stats <file_token> <file_type>")
+                    return
+                file_token = sys.argv[2]
+                file_type = sys.argv[3]
+                print(f"--- 文档统计: {file_token} ({file_type}) ---")
+                result = await session.call_tool("get_file_statistics", {
+                    "file_token": file_token,
+                    "file_type": file_type
+                })
+                print_json(str(result.content[0].text))
+
+            elif cmd == "views":
+                if len(sys.argv) < 4:
+                    print("用法: python test_mcp.py views <file_token> <file_type>")
+                    return
+                file_token = sys.argv[2]
+                file_type = sys.argv[3]
+                print(f"--- 查看记录: {file_token} ({file_type}) ---")
+                result = await session.call_tool("get_file_view_records", {
+                    "file_token": file_token,
+                    "file_type": file_type
+                })
+                print_json(str(result.content[0].text))
+
+            elif cmd == "media":
+                if len(sys.argv) < 3:
+                    print("用法: python test_mcp.py media <file_token1> [file_token2] ...")
+                    return
+                file_tokens = sys.argv[2:]
+                print(f"--- 媒体下载链接: {file_tokens} ---")
+                result = await session.call_tool("media_download", {"file_tokens": file_tokens})
                 print_json(str(result.content[0].text))
 
             # === 知识库专用 ===

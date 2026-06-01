@@ -415,6 +415,249 @@ async def _read_bitable(auth_token: str, app_token: str) -> str:
     return "\n\n".join(parts)
 
 
+# --- docx Block 结构化读取 ---
+
+async def _docx_list_blocks(auth_token: str, document_id: str, page_size: int = 500) -> list:
+    """【docx Block】列出文档所有 Block（深度遍历）
+
+    接口: GET /open-apis/docx/v1/documents/{document_id}/blocks
+    返回: Block 列表，每项含 block_id / block_type / parent_id / children / text/table/image 等
+    """
+    url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{document_id}/blocks"
+    params = {"page_size": page_size, "document_revision_id": -1}
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=20.0) as client:
+        return await _get_all_pages(client, url, _make_headers(auth_token), params)
+
+
+async def _docx_get_block(auth_token: str, document_id: str, block_id: str) -> dict:
+    """【docx Block】获取指定 Block 的详细内容
+
+    接口: GET /open-apis/docx/v1/documents/{document_id}/blocks/{block_id}
+    返回: Block 详细富文本结构
+    """
+    url = f"{URL_PREFIX}/open-apis/docx/v1/documents/{document_id}/blocks/{block_id}"
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        resp = await client.get(url, headers=_make_headers(auth_token))
+        resp.raise_for_status()
+        return resp.json().get("data", {}).get("block", {})
+
+
+def _block_to_markdown(block: dict, level: int = 0) -> str:
+    """将 Block 转为 Markdown 文本（递归处理子块）"""
+    block_type = (block.get("block_type") or "").lower()
+    indent = "  " * level
+    lines = []
+
+    if block_type == "page":
+        # 页面块，只处理子块
+        pass
+    elif block_type.startswith("heading"):
+        # 标题块 heading1~heading9
+        heading_level = int(block_type.replace("heading", "") or "1")
+        text = _extract_text_from_block(block)
+        lines.append(f"{'#' * heading_level} {text}")
+    elif block_type == "text":
+        # 文本段落
+        text = _extract_text_from_block(block)
+        if text.strip():
+            lines.append(f"{indent}{text}")
+    elif block_type == "bullet":
+        # 无序列表
+        text = _extract_text_from_block(block)
+        lines.append(f"{indent}- {text}")
+    elif block_type == "ordered":
+        # 有序列表
+        text = _extract_text_from_block(block)
+        lines.append(f"{indent}1. {text}")
+    elif block_type == "code":
+        # 代码块
+        code_block = block.get("code", {}) or {}
+        language = code_block.get("style", {}).get("language") or ""
+        text = _extract_text_from_block(block)
+        lines.append(f"```{language}\n{text}\n```")
+    elif block_type == "quote":
+        # 引用块
+        text = _extract_text_from_block(block)
+        lines.append(f"{indent}> {text}")
+    elif block_type == "todo":
+        # 待办
+        todo = block.get("todo", {}) or {}
+        checked = "x" if todo.get("style", {}).get("done") else " "
+        text = _extract_text_from_block(block)
+        lines.append(f"{indent}- [{checked}] {text}")
+    elif block_type == "divider":
+        # 分割线
+        lines.append("---")
+    elif block_type == "image":
+        # 图片
+        image = block.get("image", {}) or {}
+        token = image.get("token", "")
+        lines.append(f"{indent}![image]({token})")
+    elif block_type == "table":
+        # 表格（简化处理，只显示提示）
+        table = block.get("table", {}) or {}
+        rows = table.get("property", {}).get("row_size", 0)
+        cols = table.get("property", {}).get("column_size", 0)
+        lines.append(f"{indent}_[表格: {rows}行 x {cols}列]_")
+    elif block_type == "table_cell":
+        # 表格单元格
+        text = _extract_text_from_block(block)
+        lines.append(f"{indent}{text}")
+    elif block_type in ("file", "media", "bitable", "callout", "chat_card", "diagram", "embed"):
+        # 其他块类型，显示类型提示
+        lines.append(f"{indent}_[{block_type}]_")
+
+    # 递归处理子块
+    children = block.get("children") or []
+    for child_id in children:
+        # 注意：这里只有 child_id，需要外部先 list_blocks 拿到所有块再构建树
+        pass
+
+    return "\n".join(lines) if lines else ""
+
+
+def _extract_text_from_block(block: dict) -> str:
+    """从 Block 的 text_elements 中提取纯文本"""
+    block_type = block.get("block_type", "")
+    content_key = {
+        "text": "text", "heading1": "heading1", "heading2": "heading2",
+        "heading3": "heading3", "heading4": "heading4", "heading5": "heading5",
+        "heading6": "heading6", "heading7": "heading7", "heading8": "heading8",
+        "heading9": "heading9", "bullet": "bullet", "ordered": "ordered",
+        "code": "code", "quote": "quote", "todo": "todo", "table_cell": "table_cell"
+    }.get(block_type)
+
+    if not content_key:
+        return ""
+
+    content = block.get(content_key, {}) or {}
+    elements = content.get("elements") or []
+    texts = []
+    for elem in elements:
+        if elem.get("text_run"):
+            texts.append(elem["text_run"].get("content", ""))
+        elif elem.get("mention_doc"):
+            texts.append(f"[@文档:{elem['mention_doc'].get('title', '')}]")
+        elif elem.get("mention_user"):
+            texts.append(f"[@用户:{elem['mention_user'].get('user_id', '')}]")
+    return "".join(texts)
+
+
+# --- 导出任务 ---
+
+async def _create_export_task(auth_token: str, file_token: str, file_type: str, export_type: str) -> str:
+    """【导出任务】创建导出任务
+
+    接口: POST /open-apis/drive/v1/export_tasks
+    参数:
+        file_token: 文档 token
+        file_type: 文档类型 (docx/sheet/bitable/doc)
+        export_type: 导出格式 (pdf/docx/xlsx/csv)
+    返回: 导出任务 ticket
+    """
+    url = f"{URL_PREFIX}/open-apis/drive/v1/export_tasks"
+    body = {"file_extension": export_type, "token": file_token, "type": file_type}
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        resp = await client.post(url, headers=_make_headers(auth_token), json=body)
+        resp.raise_for_status()
+        return resp.json().get("data", {}).get("ticket", "")
+
+
+async def _get_export_task(auth_token: str, ticket: str, max_wait: int = 60) -> dict:
+    """【导出任务】轮询查询导出任务结果
+
+    接口: GET /open-apis/drive/v1/export_tasks/{ticket}
+    返回: 导出结果，含 file_token（导出后的文件 token）
+    """
+    url = f"{URL_PREFIX}/open-apis/drive/v1/export_tasks/{ticket}"
+    start = asyncio.get_event_loop().time()
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        while True:
+            resp = await client.get(url, headers=_make_headers(auth_token), params={"token": ticket})
+            resp.raise_for_status()
+            result = resp.json().get("data", {}).get("result", {})
+            job_status = result.get("job_status")
+            if job_status == 0:  # 成功
+                return result
+            elif job_status in (1, 2):  # 初始化中 / 处理中
+                if asyncio.get_event_loop().time() - start > max_wait:
+                    return {"job_status": -1, "job_error_msg": f"导出超时({max_wait}秒)"}
+                await asyncio.sleep(2)
+            else:  # 失败
+                return result
+
+
+# --- 评论读取 ---
+
+async def _list_file_comments(auth_token: str, file_token: str, file_type: str) -> list:
+    """【评论】列出文档所有评论
+
+    接口: GET /open-apis/drive/v1/files/{file_token}/comments
+    返回: 评论列表，每项含 comment_id / content / user_id / is_whole(是否全局评论)
+    """
+    url = f"{URL_PREFIX}/open-apis/drive/v1/files/{file_token}/comments"
+    params = {"file_type": file_type, "page_size": 50}
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        return await _get_all_pages(client, url, _make_headers(auth_token), params)
+
+
+async def _list_comment_replies(auth_token: str, file_token: str, file_type: str, comment_id: str) -> list:
+    """【评论】列出评论的回复
+
+    接口: GET /open-apis/drive/v1/files/{file_token}/comments/{comment_id}/replies
+    返回: 回复列表
+    """
+    url = f"{URL_PREFIX}/open-apis/drive/v1/files/{file_token}/comments/{comment_id}/replies"
+    params = {"file_type": file_type, "page_size": 50}
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        return await _get_all_pages(client, url, _make_headers(auth_token), params)
+
+
+# --- 文档统计与查看记录 ---
+
+async def _get_file_statistics(auth_token: str, file_token: str, file_type: str) -> dict:
+    """【统计】获取文档统计信息
+
+    接口: GET /open-apis/drive/v1/files/{file_token}/statistics
+    返回: UV(访问人数) / PV(浏览次数) / 点赞数
+    """
+    url = f"{URL_PREFIX}/open-apis/drive/v1/files/{file_token}/statistics"
+    params = {"file_type": file_type}
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        resp = await client.get(url, headers=_make_headers(auth_token), params=params)
+        resp.raise_for_status()
+        return resp.json().get("data", {})
+
+
+async def _list_file_view_records(auth_token: str, file_token: str, file_type: str) -> list:
+    """【查看记录】获取文档查看记录
+
+    接口: GET /open-apis/drive/v1/files/{file_token}/view_records
+    返回: 查看者列表，每项含 user_id / avatar_url / last_view_time
+    """
+    url = f"{URL_PREFIX}/open-apis/drive/v1/files/{file_token}/view_records"
+    params = {"file_type": file_type, "page_size": 50}
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        return await _get_all_pages(client, url, _make_headers(auth_token), params)
+
+
+# --- 媒体文件下载 ---
+
+async def _batch_get_media_tmp_download_url(auth_token: str, file_tokens: list) -> dict:
+    """【媒体下载】批量获取媒体文件临时下载 URL
+
+    接口: POST /open-apis/drive/v1/medias/batch_get_tmp_download_url
+    返回: file_token → tmp_download_url 映射（有效期 24 小时）
+    """
+    url = f"{URL_PREFIX}/open-apis/drive/v1/medias/batch_get_tmp_download_url"
+    body = {"file_tokens": file_tokens, "extra": {}}
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
+        resp = await client.post(url, headers=_make_headers(auth_token), json=body)
+        resp.raise_for_status()
+        tmp_urls = resp.json().get("data", {}).get("tmp_download_urls") or []
+        return {item.get("file_token"): item.get("tmp_download_url") for item in tmp_urls}
+
+
 # --- MCP 工具 ---
 # 工具按「归属系统」分成三类，命名统一：
 #   1. 统一入口（无前缀）：list_children / read_document
@@ -817,6 +1060,226 @@ async def bitable_list_tables(app_token: str) -> str:
     tables = await _bitable_list_tables(token, app_token)
     results = [{"table_id": t.get("table_id"), "name": t.get("name")} for t in tables]
     return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+# ========== docx 结构化读取 ==========
+
+@mcp.tool()
+async def docx_read_blocks(document_id: str, output_format: str = "markdown") -> str:
+    """【docx 结构化】读取文档的 Block 结构（标题/段落/列表/表格/图片等）。
+
+    与 read_document 的区别：
+      - read_document: 返回纯文本，丢失格式
+      - docx_read_blocks: 返回结构化内容，保留标题层级、列表、表格、代码块等
+
+    接口: GET /open-apis/docx/v1/documents/{document_id}/blocks
+    适用场景：需要理解文档结构（提取大纲、识别章节、定位表格）
+    参数:
+        document_id: 文档 token（dox 开头）
+        output_format: 输出格式，"markdown"(默认) 或 "json"
+    返回:
+        markdown: Markdown 格式文本，保留标题层级、列表、代码块等
+        json: Block 列表 JSON，含 block_id / block_type / parent_id / children
+    """
+    token = await get_tenant_auth()
+    blocks = await _docx_list_blocks(token, document_id)
+
+    if output_format == "json":
+        # 返回原始 Block 列表
+        results = []
+        for b in blocks:
+            results.append({
+                "block_id": b.get("block_id"),
+                "block_type": b.get("block_type"),
+                "parent_id": b.get("parent_id"),
+                "children": b.get("children"),
+                "has_children": len(b.get("children") or []) > 0,
+            })
+        return json.dumps(results, ensure_ascii=False, indent=2)
+
+    # 返回 Markdown
+    lines = []
+    for b in blocks:
+        md = _block_to_markdown(b)
+        if md:
+            lines.append(md)
+    return "\n\n".join(lines) if lines else "_(文档为空)_"
+
+
+@mcp.tool()
+async def docx_get_block(document_id: str, block_id: str) -> str:
+    """【docx 结构化】获取指定 Block 的详细内容。
+
+    接口: GET /open-apis/docx/v1/documents/{document_id}/blocks/{block_id}
+    参数:
+        document_id: 文档 token
+        block_id: Block ID（从 docx_read_blocks 获取）
+    返回:
+        Block 详细信息 JSON，含富文本结构
+    """
+    token = await get_tenant_auth()
+    block = await _docx_get_block(token, document_id, block_id)
+    return json.dumps(block, ensure_ascii=False, indent=2)
+
+
+# ========== 导出任务 ==========
+
+@mcp.tool()
+async def export_document(file_token: str, file_type: str, export_type: str) -> str:
+    """【导出】将飞书文档/表格/多维表格导出为 PDF/Word/Excel/CSV。
+
+    接口: POST /open-apis/drive/v1/export_tasks + GET 轮询结果
+    适用场景：格式转换、本地备份、间接读取 slides/mindnote（导出 PDF 再解析）
+    参数:
+        file_token: 文档 token（dox/sht/bas 开头）
+        file_type: 文档类型，"docx" / "sheet" / "bitable" / "doc"(旧版文档)
+        export_type: 导出格式
+                    - docx 可导出: "pdf" / "docx"
+                    - sheet 可导出: "pdf" / "xlsx" / "csv"
+                    - bitable 可导出: "xlsx" / "csv"
+    返回:
+        导出结果 JSON，含 file_token（导出后的文件 token，可用 media 下载接口获取）
+    """
+    token = await get_tenant_auth()
+    ticket = await _create_export_task(token, file_token, file_type, export_type)
+    if not ticket:
+        return json.dumps({"error": "创建导出任务失败"}, ensure_ascii=False)
+
+    result = await _get_export_task(token, ticket, max_wait=60)
+    job_status = result.get("job_status")
+    if job_status == 0:
+        return json.dumps({
+            "status": "success",
+            "file_token": result.get("file_token"),
+            "file_name": result.get("file_name"),
+            "file_extension": result.get("file_extension"),
+            "file_size": result.get("file_size"),
+            "message": "导出成功，使用 file_token 调用 media_download 获取下载链接"
+        }, ensure_ascii=False, indent=2)
+    else:
+        return json.dumps({
+            "status": "failed",
+            "job_status": job_status,
+            "error": result.get("job_error_msg", "导出失败")
+        }, ensure_ascii=False, indent=2)
+
+
+# ========== 评论读取 ==========
+
+@mcp.tool()
+async def read_comments(file_token: str, file_type: str, include_replies: bool = False) -> str:
+    """【评论】读取文档的所有评论。
+
+    接口: GET /open-apis/drive/v1/files/{file_token}/comments
+    适用场景：协作场景，查看文档讨论上下文
+    参数:
+        file_token: 文档 token
+        file_type: 文档类型，"docx" / "sheet" / "bitable" / "file" / "wiki"
+        include_replies: 是否包含每条评论的回复（默认 False，只返回顶层评论）
+    返回:
+        评论列表 JSON，每项含 comment_id / content / user_id / create_time / is_whole(是否全局评论)
+    """
+    token = await get_tenant_auth()
+    comments = await _list_file_comments(token, file_token, file_type)
+
+    results = []
+    for c in comments:
+        item = {
+            "comment_id": c.get("comment_id"),
+            "user_id": c.get("user_id", {}).get("user_id"),
+            "create_time": c.get("create_time"),
+            "update_time": c.get("update_time"),
+            "is_whole": c.get("is_whole"),
+            "quote": c.get("quote"),
+            "reply_list": [],
+        }
+        # 提取评论内容文本
+        content = c.get("reply_list", {}).get("replies", [])
+        if content:
+            item["content"] = content[0].get("content", {}).get("elements", [])
+
+        # 可选：获取回复
+        if include_replies and c.get("reply_list", {}).get("has_more"):
+            replies = await _list_comment_replies(token, file_token, file_type, c.get("comment_id"))
+            item["reply_list"] = [
+                {
+                    "reply_id": r.get("reply_id"),
+                    "user_id": r.get("user_id", {}).get("user_id"),
+                    "create_time": r.get("create_time"),
+                    "content": r.get("content", {}).get("elements", []),
+                }
+                for r in replies
+            ]
+        results.append(item)
+
+    return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+# ========== 文档统计与查看记录 ==========
+
+@mcp.tool()
+async def get_file_statistics(file_token: str, file_type: str) -> str:
+    """【统计】获取文档统计信息（访问人数、浏览次数、点赞数）。
+
+    接口: GET /open-apis/drive/v1/files/{file_token}/statistics
+    适用场景：分析文档热度、协作活跃度
+    参数:
+        file_token: 文档 token
+        file_type: 文档类型，"docx" / "sheet" / "bitable" / "file" / "wiki"
+    返回:
+        统计信息 JSON，含 uv(访问人数) / pv(浏览次数) / like_count(点赞数)
+    """
+    token = await get_tenant_auth()
+    stats = await _get_file_statistics(token, file_token, file_type)
+    return json.dumps({
+        "uv": stats.get("uv"),
+        "pv": stats.get("pv"),
+        "like_count": stats.get("like_count"),
+    }, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+async def get_file_view_records(file_token: str, file_type: str) -> str:
+    """【查看记录】获取文档查看记录（查看者列表、最后查看时间）。
+
+    接口: GET /open-apis/drive/v1/files/{file_token}/view_records
+    适用场景：协作分析、访问记录追踪
+    参数:
+        file_token: 文档 token
+        file_type: 文档类型，"docx" / "sheet" / "bitable" / "file" / "wiki"
+    返回:
+        查看者列表 JSON，每项含 viewer_id / avatar_url / name / last_view_time
+    """
+    token = await get_tenant_auth()
+    records = await _list_file_view_records(token, file_token, file_type)
+    results = []
+    for r in records:
+        viewer = r.get("viewer_id", {}) or {}
+        results.append({
+            "viewer_id": viewer.get("user_id") or viewer.get("open_id") or viewer.get("union_id"),
+            "name": r.get("name"),
+            "avatar_url": r.get("avatar_url"),
+            "last_view_time": r.get("last_view_time"),
+        })
+    return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+# ========== 媒体文件下载 ==========
+
+@mcp.tool()
+async def media_download(file_tokens: list) -> str:
+    """【媒体下载】批量获取媒体文件（图片/附件）的临时下载链接。
+
+    接口: POST /open-apis/drive/v1/medias/batch_get_tmp_download_url
+    适用场景：下载文档中的图片、附件等媒体资源
+    参数:
+        file_tokens: 媒体文件 token 列表（从文档 Block/评论/附件中获取）
+    返回:
+        下载链接映射 JSON，file_token → tmp_download_url（有效期 24 小时）
+    """
+    token = await get_tenant_auth()
+    urls = await _batch_get_media_tmp_download_url(token, file_tokens)
+    return json.dumps(urls, ensure_ascii=False, indent=2)
 
 
 # ========== 知识库专用（wiki_ 前缀) ==========
