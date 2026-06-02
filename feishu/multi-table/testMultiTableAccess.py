@@ -6,8 +6,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import URL_PREFIX, payload
 
-APP_TOKEN = "basrzK2AfEBf18oK1bsBHXxic5c"
-TABLE_ID = 'tblHn6kBKkWgQGfu'
+# APP_TOKEN = "basrzK2AfEBf18oK1bsBHXxic5c"
+# TABLE_ID = 'tblHn6kBKkWgQGfu'
+# 智慧法庭产品授权管理（测试0326） 
+APP_TOKEN = "basrzKtgcIs4KqbOETKCtssf8Oe"
+TABLE_ID = 'tblbyZk6HWQN85FH'
 
 def get_tenant_access_token():
     auth_url = f"{URL_PREFIX}/open-apis/auth/v3/tenant_access_token/internal"
@@ -17,7 +20,7 @@ def get_tenant_access_token():
 
 token = get_tenant_access_token()
 headers = {"Authorization": f"Bearer {token}"}
-
+print(f'header:{headers}')
 def test_connection():
     meta_url = f"{URL_PREFIX}/open-apis/bitable/v1/apps/{APP_TOKEN}"
     res = requests.get(meta_url, headers=headers).json()
@@ -51,6 +54,7 @@ def get_fields():
 
 def download_file(file_token, file_name):
     url = f"{URL_PREFIX}/open-apis/drive/v1/medias/{file_token}/download"
+    print(f'下载地址:{url}')
     resp = requests.get(url, headers=headers)
     with open(file_name, "wb") as f:
         f.write(resp.content)
@@ -256,4 +260,13 @@ def test_create_record_with_file():
 
 
 if __name__ == "__main__":
-    test_get_record()
+    # test_get_record()
+    # download_file(file_name="笔录精简授权模板.xlsx",file_token="boxrziHpxMrRsPmUVeG9fmQIJAM")
+    get_record(record_id="recl7KwZKn")
+    # download_file(file_name="图片1.png",file_token="boxrzbUMf8ptNoXgPrKXXNINHyg")
+    # download_file_by_link(file_link='https://open.xfchat.iflytek.com/open-apis/drive/v1/medias/batch_get_tmp_download_url?file_tokens=boxrzfW8d642yZtFNP0gkU2cZQb&extra=%7B%22bitablePerm%22%3A%7B%22tableId%22%3A%22tblbyZk6HWQN85FH%22%2C%22rev%22%3A191%7D%7D',file_name="test_finger.scf")
+    # tmp-url
+    # download_file_by_link(file_link='https://open.xfchat.iflytek.com/open-apis/drive/v1/medias/batch_get_tmp_download_url?file_tokens=boxrzbUMf8ptNoXgPrKXXNINHyg&extra=%7B%22bitablePerm%22%3A%7B%22tableId%22%3A%22tblbyZk6HWQN85FH%22%2C%22rev%22%3A191%7D%7D',file_name="test_finger.png")
+    # url 
+    download_file_by_link(file_link='https://open.xfchat.iflytek.com/open-apis/drive/v1/medias/boxrzbUMf8ptNoXgPrKXXNINHyg/download?extra=%7B%22bitablePerm%22%3A%7B%22tableId%22%3A%22tblbyZk6HWQN85FH%22%2C%22rev%22%3A191%7D%7D',file_name="image.png")
+    pass
