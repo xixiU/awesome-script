@@ -73,10 +73,33 @@ def build_curl(url: str, method: str, headers: dict, body=None) -> str:
     return " ".join(shlex.quote(p) for p in parts)
 
 
-def test_api_sign(url: str, method: str = "GET", body=None, token: str = ""):
+def test_api_sign(url: str, method: str = "GET", body=None, token: str = "", extra_headers: dict = None):
     """
     通用接口签名测试。打印签名细节、可重放的 curl 命令、HTTP 响应。
     用 curl 命令再跑一遍可验证 nonce 防重放（第二次应返回 401 "签名已使用"）。
+
+    参数：
+        url: 完整请求 URL
+        method: HTTP 方法（GET/POST/PUT/DELETE）
+        body: 请求体（dict，会自动转 JSON）
+        token: JWT token（自动加 Bearer 前缀）
+        extra_headers: 额外的业务 headers（如 terminalType, roleId, deviceId, deviceType 等）
+
+    示例：
+        # 模拟小程序请求
+        test_api_sign(
+            url="https://xxx/ts-service/internet/av/network/status",
+            method="POST",
+            body={"networkStatus": 3, "trialCode": "TEST123", "deviceId": "xxx"},
+            token="eyJ0eXAi...",
+            extra_headers={
+                "terminalType": "4",
+                "roleId": "TEST123",
+                "trialCode": "TEST123",
+                "deviceId": "xxx",
+                "deviceType": "wechat_applet"
+            }
+        )
     """
     import requests
 
@@ -86,6 +109,8 @@ def test_api_sign(url: str, method: str = "GET", body=None, token: str = ""):
     req_headers = dict(sign_headers)
     if token:
         req_headers["Authorization"] = "Bearer " + token
+    if extra_headers:
+        req_headers.update(extra_headers)
 
     print("=== 签名计算 ===")
     print(f"URL       : {url}")
@@ -100,6 +125,12 @@ def test_api_sign(url: str, method: str = "GET", body=None, token: str = ""):
         f"{sign_headers['X-Timestamp']}{API_SIGN_SECRET_KEY}"
     )
     print()
+
+    if extra_headers:
+        print("=== 额外业务 Headers ===")
+        for k, v in extra_headers.items():
+            print(f"{k}: {v}")
+        print()
 
     print("=== 重放测试 curl（连续跑两次，第二次应 401 nonce 已使用）===")
     print(build_curl(url, method, req_headers, body))
@@ -130,26 +161,61 @@ def test_fz_sign():
     sg = fz_sign(ts, SECRET_KEY)
     import requests
     resp = requests.post(
-        "https://hktestservice.iflysec.com/ts-service/internet/fz",
+        "https://wqzyserver.iflysec.com/ts-service/internet/fz",
+
+        # "https://hktestservice.iflysec.com/ts-service/internet/fz",
+        # "http://172.31.243.225:9797/ts-service/internet/fz",
+
         params={"timestamp": ts, "sign": sg},
         json={"orgCode": "O", "courtCode": "C", "trialCode": "T"},
         timeout=5,
     )
+    print({"timestamp": ts, "sign": sg})
     print(resp.status_code, resp.text)
 
 
 if __name__ == "__main__":
-    # ============== 通用接口签名测试（自己改 URL / METHOD / BODY / TOKEN） ==============
-    test_api_sign(
-        url="https://hktestservice.iflysec.com/ts-service/internet/case/getMember/7480610",
-        method="GET",
-        body=None,
-        token="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMzExMTExMTExMSIsImlzcyI6IklGTFlURUstWkZCRyIsImV4cCI6MTc3OTQ3MzY3OCwiaWF0IjoxNzc5NDMwNDc4LCJ1c2VySWQiOiIxMzExMTExMTExMSJ9.PFGXP8m63PisJxBZbHtvnRuu6jNJhz2wGxKV37JlnnI",
-    )
-
+    # ============== 测试 /av/network/status 接口（模拟小程序请求）==============
+    device_id = gen_nonce()  # 生成设备 UUID
+    trial_code = "TEST123"   # 替换为真实庭审码
     test_fz_sign()
+    # test_api_sign(
+    #     url="https://hktestservice.iflysec.com/ts-service/internet/av/network/status",
+    #     method="POST",
+    #     body={
+    #         "networkStatus": 3,
+    #         "trialCode": trial_code,
+    #         "deviceId": device_id,
+    #     },
+    #     token="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMzUzODI2NDI1MyIsImlzcyI6IklGTFlURUstWkZCRyIsImV4cCI6MTc3OTg4ODM5MywiaWF0IjoxNzc5ODQ1MTkzLCJ1c2VySWQiOiIxMzUzODI2NDI1MyJ9.ap5k8VkkPgCTn_i6a2JEYVk8xc3mFb0U-_0DW25msWE",
+    #     extra_headers={
+    #         "terminalType": "4",
+    #         "roleId": trial_code.upper(),
+    #         "trialCode": trial_code,
+    #         "deviceId": device_id,
+    #         "deviceType": "wechat_applet",
+    #     }
+    # )
 
-    # WebSocket（websocket-client）
+    # ============== 其他接口测试示例 ==============
+    # 测试获取会议类型（GET 请求）
+    # test_api_sign(
+    #     url="https://hktestservice.iflysec.com/ts-service/internet/meet/getMeetingType",
+    #     method="GET",
+    #     token="your_token_here",
+    #     extra_headers={
+    #         "terminalType": "4",
+    #         "roleId": "TEST123",
+    #         "deviceType": "wechat_applet",
+    #     }
+    # )
+
+    # 测试法正接口（旧逻辑）
+    # test_fz_sign()
+
+    # WebSocket 测试（需要 websocket-client 库）
     # import websocket
+    # ts = str(int(time.time() * 1000))
+    # sg = fz_sign(ts, SECRET_KEY)
     # ws_url = f"wss://hktestservice.iflysec.com/ts-service/control?orgCode=O&courtCode=C&timestamp={ts}&sign={sg}"
     # ws = websocket.create_connection(ws_url)

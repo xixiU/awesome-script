@@ -262,11 +262,13 @@ def test_create_record_with_file():
 if __name__ == "__main__":
     # test_get_record()
     # download_file(file_name="笔录精简授权模板.xlsx",file_token="boxrziHpxMrRsPmUVeG9fmQIJAM")
-    get_record(record_id="recl7KwZKn")
+    # get_record(record_id="recl7KwZKn")
     # download_file(file_name="图片1.png",file_token="boxrzbUMf8ptNoXgPrKXXNINHyg")
     # download_file_by_link(file_link='https://open.xfchat.iflytek.com/open-apis/drive/v1/medias/batch_get_tmp_download_url?file_tokens=boxrzfW8d642yZtFNP0gkU2cZQb&extra=%7B%22bitablePerm%22%3A%7B%22tableId%22%3A%22tblbyZk6HWQN85FH%22%2C%22rev%22%3A191%7D%7D',file_name="test_finger.scf")
     # tmp-url
     # download_file_by_link(file_link='https://open.xfchat.iflytek.com/open-apis/drive/v1/medias/batch_get_tmp_download_url?file_tokens=boxrzbUMf8ptNoXgPrKXXNINHyg&extra=%7B%22bitablePerm%22%3A%7B%22tableId%22%3A%22tblbyZk6HWQN85FH%22%2C%22rev%22%3A191%7D%7D',file_name="test_finger.png")
-    # url 
-    download_file_by_link(file_link='https://open.xfchat.iflytek.com/open-apis/drive/v1/medias/boxrzbUMf8ptNoXgPrKXXNINHyg/download?extra=%7B%22bitablePerm%22%3A%7B%22tableId%22%3A%22tblbyZk6HWQN85FH%22%2C%22rev%22%3A191%7D%7D',file_name="image.png")
+    get_record(record_id="recOVLUjNw")
+    download_file(file_name="笔录精简授权模板.xlsx",file_token="boxrzHs3mfOBSsCYAr1UGv1qh6f")
+
+    # download_file_by_link(file_link='https://open.xfchat.iflytek.com/open-apis/drive/v1/medias/boxrzbUMf8ptNoXgPrKXXNINHyg/download?extra=%7B%22bitablePerm%22%3A%7B%22tableId%22%3A%22tblbyZk6HWQN85FH%22%2C%22rev%22%3A191%7D%7D',file_name="image.png")
     pass
