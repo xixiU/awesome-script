@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+import time
 import httpx
 import certifi
 import asyncio
@@ -38,13 +39,35 @@ mcp = FastMCP(
 
 # --- 通用辅助函数 ---
 
+# tenant_access_token 内存缓存
+# 飞书规则: token 最大有效期 2 小时, 剩余 >=30 分钟时复用旧 token
+# 本地缓存 20 分钟, 命中即跳过 HTTP 请求; 锁防止并发场景下重复刷新
+_TOKEN_CACHE_TTL = 20 * 60  # 秒
+_token_cache = {"value": None, "expires_at": 0.0}
+_token_lock = asyncio.Lock()
+
+
 async def get_tenant_auth():
-    """异步获取飞书 Tenant Access Token"""
-    url = f"{URL_PREFIX}/open-apis/auth/v3/tenant_access_token/internal"
-    async with httpx.AsyncClient(verify=certifi.where()) as client:
-        response = await client.post(url, json=CONFIG)
-        response.raise_for_status()
-        return response.json().get("tenant_access_token")
+    """异步获取飞书 Tenant Access Token(带 20 分钟内存缓存)"""
+    now = time.monotonic()
+    if _token_cache["value"] and now < _token_cache["expires_at"]:
+        return _token_cache["value"]
+
+    async with _token_lock:
+        # 双重检查: 等锁期间可能已被其他协程刷新
+        now = time.monotonic()
+        if _token_cache["value"] and now < _token_cache["expires_at"]:
+            return _token_cache["value"]
+
+        url = f"{URL_PREFIX}/open-apis/auth/v3/tenant_access_token/internal"
+        async with httpx.AsyncClient(verify=certifi.where()) as client:
+            response = await client.post(url, json=CONFIG)
+            response.raise_for_status()
+            token = response.json().get("tenant_access_token")
+
+        _token_cache["value"] = token
+        _token_cache["expires_at"] = time.monotonic() + _TOKEN_CACHE_TTL
+        return token
 
 
 def _make_headers(token: str) -> dict:
