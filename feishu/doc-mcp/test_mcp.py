@@ -124,7 +124,7 @@ async def main():
                     print("用法: python test_mcp.py read <token>")
                     return
                 print(f"--- 读取文档: {token} ---")
-                result = await session.call_tool("read_document", {"token": token})
+                result = await session.call_tool("read_document", {"input": token})
                 print(str(result.content[0].text)[:500])
 
             elif cmd == "search_all":
