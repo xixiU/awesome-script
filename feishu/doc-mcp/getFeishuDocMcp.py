@@ -116,6 +116,7 @@ async def _get_wiki_node_info(auth_token: str, wiki_token: str) -> dict:
 
     接口: GET /open-apis/wiki/v2/spaces/get_node
     适用: 知识库节点；用于从 wiki_token 解析出 space_id、obj_token、obj_type
+    注意: 快捷方式会被飞书自动解析,直接返回原始文档的 obj_token/obj_type
     参数:
         auth_token: 认证 token
         wiki_token: wiki 节点 token
@@ -176,6 +177,24 @@ async def _list_drive_files(auth_token: str, folder_token: str = None) -> list:
     return files
 
 
+async def _get_shortcut_meta(auth_token: str, shortcut_token: str) -> dict:
+    """【云空间快捷方式】获取快捷方式的元信息（包含原始文档 token）
+
+    接口: GET /open-apis/drive/v1/files/{file_token}/shortcut_meta
+    适用: 云空间快捷方式解析
+    参数:
+        auth_token: 认证 token
+        shortcut_token: 快捷方式 token
+    返回:
+        元信息字典，含 target_type / target_token
+    """
+    url = f"{URL_PREFIX}/open-apis/drive/v1/files/{shortcut_token}/shortcut_meta"
+    async with httpx.AsyncClient(verify=certifi.where(), timeout=10.0) as client:
+        resp = await client.get(url, headers=_make_headers(auth_token))
+        resp.raise_for_status()
+        return resp.json().get("data", {}).get("shortcut_meta", {})
+
+
 # --- 电子表格 / 多维表格：类型识别与单元格格式化 ---
 
 def _guess_obj_type(token: str) -> str:
@@ -183,19 +202,24 @@ def _guess_obj_type(token: str) -> str:
 
     飞书 token 前缀约定（私有化部署可能不同）：
         sht* 电子表格 / bas* 多维表格 / box* 文件 / bmn* 思维笔记
-        dox*、doc* 文档（docx/旧版 doc）
+        dox*、doc* 文档（docx/旧版 doc）/ nodr* 快捷方式
     """
     t = (token or "").lower()
     if t.startswith("sht"):
         return "sheet"
     if t.startswith("bas"):
         return "bitable"
+    if t.startswith("nodr"):
+        return "shortcut"
     if t.startswith("box"):
         return "file"
     if t.startswith("bmn"):
         return "mindnote"
     # dox/doc 及无法识别的，统一按 docx 处理
     return "docx"
+
+
+# 飞书 URL 路径段 → (来源 source, 文档类型 obj_type)
 
 
 # 飞书 URL 路径段 → (来源 source, 文档类型 obj_type)
@@ -864,12 +888,13 @@ async def read_document(input: str) -> str:
       - sheet（sht 开头）→ 各工作表单元格，Markdown 表格
       - bitable（bas 开头）→ 各数据表字段+记录，Markdown 表格
       - slides/mindnote → 暂不支持，返回提示
+      - 知识库快捷方式会被飞书自动解析,云空间快捷方式会自动跟随
 
     参数:
         input: 支持两种输入格式：
                1. 完整飞书 URL（推荐）：如 https://xxx.feishu.cn/sheets/shtABC
                   从 URL 路径段精准识别类型，零猜测，最快
-               2. 裸 token：如 shtABC / CQv6wuy...（知识库 wiki_token 或云空间 obj_token）
+               2. 裸 token：如 shtABC / nodrXXX / CQv6wuy...（知识库 wiki_token 或云空间 obj_token）
                   会先试 wiki 节点解析，失败后按前缀猜测类型
     返回:
         文档内容（docx 为纯文本，sheet/bitable 为 Markdown 表格）
@@ -880,7 +905,23 @@ async def read_document(input: str) -> str:
     if not token:
         return json.dumps({"error": "无法从输入中提取有效 token"}, ensure_ascii=False)
 
-    # 1. URL 明确标识为 wiki 节点，或裸 token 先试 wiki（拿权威 obj_type）
+    # 1. 快捷方式优先处理(nodr 开头)
+    #    统一用 wiki 接口解析,因为它能自动跟随快捷方式
+    #    (讯飞飞书的云空间 shortcut_meta 接口不可用)
+    if (token or "").lower().startswith("nodr"):
+        try:
+            node = await _get_wiki_node_info(auth_token, token)
+            obj_token = node.get("obj_token")
+            node_obj_type = node.get("obj_type")
+            if obj_token and node_obj_type:
+                return await _read_by_type(auth_token, obj_token, node_obj_type)
+        except Exception as e:
+            return json.dumps({
+                "error": f"快捷方式解析失败: {e}",
+                "shortcut_token": token
+            }, ensure_ascii=False)
+
+    # 2. URL 明确标识为 wiki 节点，或裸 token 先试 wiki（拿权威 obj_type）
     if source in ("wiki", "unknown"):
         try:
             node = await _get_wiki_node_info(auth_token, token)
@@ -897,8 +938,9 @@ async def read_document(input: str) -> str:
                 }, ensure_ascii=False)
             # source == "unknown"：裸 token 试 wiki 失败，继续下面的云空间逻辑
 
-    # 2. URL 明确标识为 drive（类型已确定），或裸 token 按前缀猜测
+    # 3. URL 明确标识为 drive（类型已确定），或裸 token 按前缀猜测
     if source == "drive" or (source == "unknown" and obj_type):
+
         try:
             return await _read_by_type(auth_token, token, obj_type)
         except httpx.HTTPStatusError as e:
@@ -990,14 +1032,30 @@ async def drive_read_document(file_id: str, type: str = "auto") -> str:
 
     适用场景：URL 形如 /docx/xxx、/sheets/xxx、/base/xxx 时直接使用，file_id 即 URL 中的 xxx。
     参数:
-        file_id: 云空间文档实体 token，从 URL 中提取（如 doxXXX / shtXXX / basXXX）
+        file_id: 云空间文档实体 token，从 URL 中提取（如 doxXXX / shtXXX / basXXX / nodrXXX）
         type: 类型提示，"docx"/"sheet"/"bitable"，默认 "auto" 按 token 前缀自动识别
     返回:
         docx 为纯文本；sheet/bitable 为 Markdown 表格
     """
-    token = await get_tenant_auth()
+    auth_token = await get_tenant_auth()
     obj_type = _guess_obj_type(file_id) if type == "auto" else type
-    return await _read_by_type(token, file_id, obj_type)
+
+    # 如果是快捷方式(nodr 开头),尝试用 wiki 接口解析
+    # (跨空间快捷方式:知识库→云空间 或 云空间→知识库)
+    if obj_type == "shortcut" or (file_id or "").lower().startswith("nodr"):
+        try:
+            node = await _get_wiki_node_info(auth_token, file_id)
+            obj_token = node.get("obj_token")
+            node_obj_type = node.get("obj_type")
+            if obj_token and node_obj_type:
+                return await _read_by_type(auth_token, obj_token, node_obj_type)
+        except Exception as e:
+            return json.dumps({
+                "error": f"快捷方式解析失败: {e}",
+                "shortcut_token": file_id
+            }, ensure_ascii=False)
+
+    return await _read_by_type(auth_token, file_id, obj_type)
 
 
 @mcp.tool()
@@ -1436,8 +1494,9 @@ async def wiki_read_document(wiki_token: str) -> str:
 
     组合调用: wiki_get_node_info 取 obj_token + obj_type → 按类型分发读取
     适用场景：URL 形如 /wiki/xxx 时直接使用。
+    注意: 快捷方式会被飞书自动解析,无需特殊处理
     参数:
-        wiki_token: 知识库节点 token（从 /wiki/xxx 的 URL 中提取）
+        wiki_token: 知识库节点 token（从 /wiki/xxx 的 URL 中提取,可以是快捷方式 token）
     返回:
         docx 为纯文本；sheet/bitable 为 Markdown 表格
     """
