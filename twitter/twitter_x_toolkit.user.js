@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.4.5.pre
+// @version      2.4.5
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -529,25 +529,27 @@
     // Extract main tweet content
     function extractTweetContent() {
         try {
-            const firstArticle = document.querySelector('article[data-testid="tweet"]');
-            if (!firstArticle) return null;
+            const urlAuthor = getOriginalPosterUsername();
+            const articles = document.querySelectorAll('article[data-testid="tweet"]');
+            let targetArticle = null;
 
-            // Extract tweet text
-            const tweetTextElement = firstArticle.querySelector('[data-testid="tweetText"]');
-            const tweetText = getElementTextWithEmoji(tweetTextElement);
-
-            // Extract author info
-            const userLink = firstArticle.querySelector('a[href^="/"][role="link"]');
-            let author = '';
-            if (userLink) {
-                const href = userLink.getAttribute('href');
-                if (href && href.match(/^\/[^\/]+$/)) {
-                    author = href.substring(1);
+            // 在回复链中，用 URL 里的 username 定位正确的原推 article
+            if (urlAuthor) {
+                for (const article of articles) {
+                    if (article.querySelector(`a[href="/${urlAuthor}"][role="link"]`)) {
+                        targetArticle = article;
+                        break;
+                    }
                 }
             }
+            if (!targetArticle) targetArticle = articles[0] || null;
+            if (!targetArticle) return null;
+
+            const tweetTextElement = targetArticle.querySelector('[data-testid="tweetText"]');
+            const tweetText = getElementTextWithEmoji(tweetTextElement);
 
             return {
-                author: author,
+                author: urlAuthor || '',
                 text: tweetText,
                 url: window.location.href
             };
@@ -2098,6 +2100,12 @@ ${comments.map((c, i) => {
                 throw new Error('Failed to get user ID');
             }
 
+            // 保护已关注的用户不被误拉黑
+            const isFollowing = userInfoData.data?.user?.result?.legacy?.following;
+            if (isFollowing) {
+                return false;
+            }
+
             // 执行拉黑
             const blockResponse = await fetch(`https://x.com/i/api/1.1/blocks/create.json`, {
                 method: 'POST',
@@ -2265,14 +2273,6 @@ ${comments.map((c, i) => {
 
         const commentersMap = getAllCommentersWithText();
 
-        // Log excluded original poster once (if applicable)
-        if (config.get('excludeOriginalPoster')) {
-            const originalPoster = getOriginalPosterUsername();
-            if (originalPoster) {
-                console.log(t('consoleExcludedOriginal', { username: originalPoster }));
-            }
-        }
-
         // Filter commenters by keywords (if keywords are set, reuse parsed keywords from confirm step)
         let commenters;
         if (keywords.length > 0) {
@@ -2355,14 +2355,6 @@ ${comments.map((c, i) => {
         if (keywords.length === 0) return; // auto block requires keywords
 
         console.log(t('consoleAutoBlockStart'));
-
-        // Log excluded original poster once (if applicable)
-        if (config.get('excludeOriginalPoster')) {
-            const originalPoster = getOriginalPosterUsername();
-            if (originalPoster) {
-                console.log(t('consoleExcludedOriginal', { username: originalPoster }));
-            }
-        }
 
         // Process currently visible comments without scrolling
         await processCurrentComments(keywords);
@@ -2447,8 +2439,8 @@ ${comments.map((c, i) => {
         console.log(t('consoleAiFilterStart'));
 
         try {
-            // 等待评论加载（给用户一些时间看到评论）
-            await sleep(2000);
+            // 等待评论加载
+            await sleep(1000);
             if (!stillOnDetail()) return;
 
             // 获取当前可见的评论
@@ -2489,37 +2481,17 @@ ${comments.map((c, i) => {
             }
 
             // 规则 3 bio-prefix：后台查询用户简介，命中配置前缀的直接判黑名单
-            // 只对"未被文本规则命中"的用户查询，避免浪费请求
-            // 优化：评论长度 > 50 字的用户跳过简介检查（色情账号评论通常很短）
+            // 与 AI 调用并行执行，不阻塞主流程
             const bioPrefixesRaw = config.get('bioBlacklistPrefixes') || '';
             const bioPrefixes = bioPrefixesRaw.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+            let bioPromise = Promise.resolve(new Map());
             if (bioPrefixes.length > 0 && comments.length > 0) {
                 const COMMENT_LENGTH_THRESHOLD = 50;
                 const candidateNames = comments
                     .filter(c => c.text.length <= COMMENT_LENGTH_THRESHOLD)
                     .map(c => c.username);
-
                 if (candidateNames.length > 0) {
-                    console.log(`🔍 简介检查：${candidateNames.length} 个用户（已跳过 ${comments.length - candidateNames.length} 个长评论用户）`);
-                }
-
-                const bioHits = await checkBiosInBackground(candidateNames, bioPrefixes);
-                if (!stillOnDetail()) return;
-                if (bioHits.size > 0) {
-                    const remainingComments = [];
-                    for (const c of comments) {
-                        const matched = bioHits.get(c.username);
-                        if (matched) {
-                            preFilterBlacklist.push(c.username);
-                            const label = `简介前缀「${matched}」`;
-                            preFilterReason.set(c.username, label);
-                            console.log(`🎯 前置命中（${label}）@${c.username}`);
-                        } else {
-                            remainingComments.push(c);
-                        }
-                    }
-                    comments.length = 0;
-                    comments.push(...remainingComments);
+                    bioPromise = checkBiosInBackground(candidateNames, bioPrefixes);
                 }
             }
 
@@ -2584,6 +2556,20 @@ ${comments.map((c, i) => {
                 if (i + batchSize < comments.length) {
                     await sleep(1000);
                     if (!stillOnDetail()) return;
+                }
+            }
+
+            // 等待并行的简介检查完成，处理 AI 未覆盖到的 bio 命中
+            const bioHits = await bioPromise;
+            if (!stillOnDetail()) return;
+            if (bioHits.size > 0) {
+                const bioBL = [...bioHits.keys()].filter(u => !aiFilterProcessed.has(u) && !blockedUsersSet.has(u));
+                if (bioBL.length > 0) {
+                    const bioMap = new Map(allComments
+                        .filter(c => bioBL.includes(c.username))
+                        .map(c => [c.username, { text: c.text, displayName: c.displayName, avatarUrl: c.avatarUrl }]));
+                    await processAIFilterResults({ blacklist: bioBL, spam: [] }, bioMap);
+                    bioBL.forEach(u => aiFilterProcessed.add(u));
                 }
             }
 
@@ -2801,7 +2787,7 @@ ${comments.map((c, i) => {
             setTimeout(() => {
                 autoAIFilterComments();
                 watchForNewComments();
-            }, 3000);
+            }, 1500);
         }
 
         console.log(t('consoleScriptLoaded'));
@@ -2859,7 +2845,7 @@ ${comments.map((c, i) => {
                 article.querySelectorAll('.ai-spam-overlay').forEach(o => o.remove());
             });
             // Reinitialize
-            setTimeout(init, 1000);
+            setTimeout(init, 500);
         }
     }).observe(document.body, { subtree: true, childList: true });
 
