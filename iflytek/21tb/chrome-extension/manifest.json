@@ -9,6 +9,7 @@
   ],
   "host_permissions": [
     "*://*.21tb.com/*",
+    "*://*.iflytek.com/*",
     "*://api.dify.ai/*"
   ],
   "content_scripts": [
