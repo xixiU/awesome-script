@@ -666,14 +666,14 @@ async def _get_file_statistics(auth_token: str, file_token: str, file_type: str)
     """【统计】获取文档统计信息
 
     接口: GET /open-apis/drive/v1/files/{file_token}/statistics
-    返回: UV(访问人数) / PV(浏览次数) / 点赞数
+    返回: 实际响应结构为 data.statistics.{uv, pv, like_count, uv_today, pv_today, like_count_today, timestamp}
     """
     url = f"{URL_PREFIX}/open-apis/drive/v1/files/{file_token}/statistics"
     params = {"file_type": file_type}
     async with httpx.AsyncClient(verify=certifi.where(), timeout=15.0) as client:
         resp = await client.get(url, headers=_make_headers(auth_token), params=params)
         resp.raise_for_status()
-        return resp.json().get("data", {})
+        return resp.json().get("data", {}).get("statistics", {})
 
 
 async def _list_file_view_records(auth_token: str, file_token: str, file_type: str) -> list:
@@ -1308,15 +1308,19 @@ async def get_file_statistics(file_token: str, file_type: str) -> str:
         file_token: 文档 token
         file_type: 文档类型，"docx" / "sheet" / "bitable" / "file" / "wiki"
     返回:
-        统计信息 JSON，含 uv(访问人数) / pv(浏览次数) / like_count(点赞数)
+        统计信息 JSON，含 uv(累计访问人数) / pv(累计浏览次数) / like_count(点赞数)
+        以及当日统计 uv_today / pv_today / like_count_today 和 timestamp
     """
     token = await get_tenant_auth()
     stats = await _get_file_statistics(token, file_token, file_type)
-    print(stats)
     return json.dumps({
         "uv": stats.get("uv"),
         "pv": stats.get("pv"),
         "like_count": stats.get("like_count"),
+        "uv_today": stats.get("uv_today"),
+        "pv_today": stats.get("pv_today"),
+        "like_count_today": stats.get("like_count_today"),
+        "timestamp": stats.get("timestamp"),
     }, ensure_ascii=False, indent=2)
 
 
