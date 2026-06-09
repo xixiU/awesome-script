@@ -1312,6 +1312,7 @@ async def get_file_statistics(file_token: str, file_type: str) -> str:
     """
     token = await get_tenant_auth()
     stats = await _get_file_statistics(token, file_token, file_type)
+    print(stats)
     return json.dumps({
         "uv": stats.get("uv"),
         "pv": stats.get("pv"),
