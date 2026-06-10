@@ -104,6 +104,27 @@ GM_xmlhttpRequest({
 
 ## 更新记录
 
+### v4.3.2 (2026-06-10)
+
+**修复 iframe 中重复执行导致的多个体验问题**
+
+- ✅ 在脚本入口处包装 `GM_registerMenuCommand` / `GM_unregisterMenuCommand`，菜单注册仅在顶层 frame 生效
+- ✅ 修复包含同源 iframe 的页面（如 iflymail.iflytek.com）上提示框出现两次的问题
+- ✅ 修复"标记当前网站没有验证码"点击确定后还会再弹一次输入框的问题（iframe 中再次触发 prompt）
+- ✅ 修复 Tampermonkey 菜单图标重复注册导致显示异常的问题
+- ✅ **保留 iframe 内的识别能力**：未使用 `@noframes`，脚本仍会在每个同源 iframe 中执行验证码检测和填充逻辑，仅菜单/对话框注册被屏蔽
+
+**问题根因**
+
+`@match *://*/*` 会让脚本在主页面和所有同源 iframe 中各运行一次：
+
+- `GM_registerMenuCommand` 被注册多次，菜单出现重复条目
+- `confirm()` / `prompt()` / `Vue.$message` 在两个上下文中分别弹出，看起来像"提示了两次"或"确定后又要输入"
+
+**为什么不直接加 `@noframes`**
+
+加 `@noframes` 虽然能彻底解决重复执行，但代价是 iframe 中的验证码（包括跨域 iframe）会失去识别能力。当前方案通过覆盖 GM 菜单 API，让 iframe 中的脚本继续正常工作，仅屏蔽菜单/对话框这种"全局副作用"调用。
+
 ### v4.3.1 (2026-05-12)
 
 **启用滑块验证码功能**

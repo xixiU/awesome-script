@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        网页通用验证码识别
 // @namespace    http://tampermonkey.net/
-// @version      4.3.1
+// @version      4.3.2
 // @description  解放眼睛和双手，自动识别并填入数字，字母（支持大小写）,文字验证码。增强版：支持更多验证码类型，智能识别验证码输入框。支持通配符批量排除网站。支持滑块验证码。
 // @author       xixiu
 // @thanks       哈士奇
@@ -43,6 +43,25 @@
 
 (function () {
     // GM_setValue('tipsConfig',"")
+
+    // 同源 iframe 中脚本会重复执行：菜单/对话框只在顶层窗口注册，
+    // iframe 中保留识别填充逻辑，避免重复弹窗的同时不丢失 iframe 内验证码识别能力
+    const IS_TOP_FRAME = window.top === window.self;
+    try {
+        const _GM_registerMenuCommand = GM_registerMenuCommand;
+        const _GM_unregisterMenuCommand = GM_unregisterMenuCommand;
+        GM_registerMenuCommand = function (name, fn) {
+            if (!IS_TOP_FRAME) return null;
+            return _GM_registerMenuCommand(name, fn);
+        };
+        GM_unregisterMenuCommand = function (id) {
+            if (!IS_TOP_FRAME) return;
+            return _GM_unregisterMenuCommand(id);
+        };
+    } catch (e) {
+        // 某些环境下 GM_* 为只读绑定，覆盖失败时跳过；菜单可能在 iframe 中重复，但不影响识别功能
+        console.warn("[captcha] override GM menu APIs failed:", e);
+    }
 
     // 加载Element UI样式
     var elementUIcss = GM_getResourceText("elementUIcss");
