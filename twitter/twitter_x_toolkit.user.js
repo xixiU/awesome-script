@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.4.5
+// @version      2.4.6.preview
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -1216,10 +1216,11 @@ ${comments.map((c, i) => {
                 text: previewText(username)
             }));
             markCommentByCategory(username, 'blacklist', '');
-            blockedUsersSet.add(username); // 添加到已拉黑用户集合
-            await blockUserByAPI(username);
-            await sleep(500);
+            blockedUsersSet.add(username);
         }
+
+        // 并发执行拉黑，不串行等待
+        await Promise.all([...blacklistSet].map(username => blockUserByAPI(username)));
 
         for (const username of spamSet) {
             console.log(t('consoleAiFilterSpam', {
@@ -2439,8 +2440,6 @@ ${comments.map((c, i) => {
         console.log(t('consoleAiFilterStart'));
 
         try {
-            // 等待评论加载
-            await sleep(1000);
             if (!stillOnDetail()) return;
 
             // 获取当前可见的评论
@@ -2554,7 +2553,7 @@ ${comments.map((c, i) => {
 
                 // 批次之间延迟，避免API限流
                 if (i + batchSize < comments.length) {
-                    await sleep(1000);
+                    await sleep(500);
                     if (!stillOnDetail()) return;
                 }
             }
@@ -2648,7 +2647,7 @@ ${comments.map((c, i) => {
                 if (!aiFilterInProgress && isOnTweetDetailPage()) {
                     autoAIFilterComments();
                 }
-            }, 2000);
+            }, 1000);
         });
 
         commentObserver.observe(document.body, {
