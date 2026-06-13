@@ -695,7 +695,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 请使用markdown格式输出，包含清晰的结构。`;
         }
 
-        return config.callLLM({ prompt, temperature: 0.7, maxTokens: 4096 });
+        return config.callLLM({ prompt, temperature: 0.7, maxTokens: 16384 });
     }
 
     // ==================== AI评论过滤 ====================
@@ -1050,7 +1050,7 @@ ${comments.map((c, i) => {
         const responseText = await config.callLLM({
             prompt,
             temperature: 0.3, // 降低温度以获得更一致的分类结果
-            maxTokens: 2048
+            maxTokens: 16384
         });
 
         return extractUsernameBuckets(responseText);
@@ -1324,8 +1324,8 @@ ${comments.map((c, i) => {
 
     // 一次性清理旧版（v2.4.3 及之前）的绝对像素位置 key，避免遗留坐标污染新逻辑
     if (GM_getValue('toolbar_position_x', null) !== null || GM_getValue('toolbar_position_y', null) !== null) {
-        try { GM_setValue('toolbar_position_x', undefined); } catch (_) {}
-        try { GM_setValue('toolbar_position_y', undefined); } catch (_) {}
+        try { GM_setValue('toolbar_position_x', undefined); } catch (_) { }
+        try { GM_setValue('toolbar_position_y', undefined); } catch (_) { }
     }
 
     function loadToolbarPosition() {
