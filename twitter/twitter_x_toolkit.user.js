@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.4.5
+// @version      2.4.6.preview
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -695,7 +695,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 请使用markdown格式输出，包含清晰的结构。`;
         }
 
-        return config.callLLM({ prompt, temperature: 0.7, maxTokens: 4096 });
+        return config.callLLM({ prompt, temperature: 0.7, maxTokens: 16384 });
     }
 
     // ==================== AI评论过滤 ====================
@@ -832,9 +832,9 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         return countBotDecorChars(text) >= WORD_SPLIT_THRESHOLD;
     }
 
-    // 用户简介缓存：username -> 简介字符串（或 null 表示拉取失败）
+    // 用户信息缓存：username -> { bio, restId, following }（或 null 表示拉取失败）
     // 缓存粒度是整个会话，避免同一用户重复请求
-    const userBioCache = new Map();
+    const userInfoCache = new Map();
 
     // 通过 Twitter 内部 GraphQL 接口后台拉取用户简介
     // 复用 blockUserByAPI 已有的鉴权（bearer + ct0 cookie）
@@ -842,12 +842,15 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     let lastRateLimit = { remaining: 150, reset: 0 };
 
     async function fetchUserBio(username) {
-        if (userBioCache.has(username)) return { bio: userBioCache.get(username), rateLimit: lastRateLimit };
+        if (userInfoCache.has(username)) {
+            const cached = userInfoCache.get(username);
+            return { bio: cached?.bio ?? null, rateLimit: lastRateLimit };
+        }
 
         try {
             const csrfToken = document.cookie.match(/ct0=([^;]+)/)?.[1];
             if (!csrfToken) {
-                userBioCache.set(username, null);
+                userInfoCache.set(username, null);
                 return { bio: null, rateLimit: lastRateLimit };
             }
 
@@ -895,22 +898,25 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 const retryAfter = parseInt(response.headers.get('retry-after') || '0');
                 const waitUntil = retryAfter > 0 ? Date.now() + retryAfter * 1000 : reset * 1000;
                 console.warn(`⚠️ 触发限流 (429)，等待到 ${new Date(waitUntil).toLocaleTimeString()}`);
-                userBioCache.set(username, null);
+                userInfoCache.set(username, null);
                 return { bio: null, rateLimit: lastRateLimit, waitUntil };
             }
 
             if (!response.ok) {
-                userBioCache.set(username, null);
+                userInfoCache.set(username, null);
                 return { bio: null, rateLimit: lastRateLimit };
             }
 
             const data = await response.json();
-            const bio = data?.data?.user?.result?.legacy?.description || '';
-            userBioCache.set(username, bio);
+            const userResult = data?.data?.user?.result;
+            const bio = userResult?.legacy?.description || '';
+            const restId = userResult?.rest_id || null;
+            const following = !!userResult?.legacy?.following;
+            userInfoCache.set(username, { bio, restId, following });
             return { bio, rateLimit: lastRateLimit };
         } catch (error) {
             console.warn(`拉取 @${username} 简介失败:`, error.message);
-            userBioCache.set(username, null);
+            userInfoCache.set(username, null);
             return { bio: null, rateLimit: lastRateLimit };
         }
     }
@@ -1020,7 +1026,7 @@ ${tweetSection}${keywordsSection}
 
 分类标准：
 - blacklist：（最高优先级）包含上方"用户黑名单关键词"的评论（若已配置）；色情、约炮、线下见面等性暗示；诈骗、钓鱼、恶意链接；严重人身攻击、辱骂、威胁；极端政治煽动、仇恨言论；明显的机器人刷屏;大量 emoji/符号夹杂无实质内容的英文抒情句等；。
-- spam：无意义重复内容；过度营销、广告推广；。
+- spam：评论内容本身包含推广链接、重复刷屏、或明确的商品/服务推销。仅根据评论内容判断，不要因为昵称像营销号就归入 spam。
 - 其它（与原推文相关的正常讨论、提问、赞同、批评等）视为 normal，不需要返回。
 
 
@@ -1044,7 +1050,7 @@ ${comments.map((c, i) => {
         const responseText = await config.callLLM({
             prompt,
             temperature: 0.3, // 降低温度以获得更一致的分类结果
-            maxTokens: 2048
+            maxTokens: 16384
         });
 
         return extractUsernameBuckets(responseText);
@@ -1063,16 +1069,10 @@ ${comments.map((c, i) => {
         const articles = document.querySelectorAll('article[data-testid="tweet"]');
 
         articles.forEach(article => {
-            // 查找用户名链接
-            const userLinks = article.querySelectorAll('a[href^="/"][role="link"]');
-            let isTargetUser = false;
-
-            userLinks.forEach(link => {
-                const href = link.getAttribute('href');
-                if (href === `/${username}`) {
-                    isTargetUser = true;
-                }
-            });
+            // 只在 User-Name 区域匹配，避免评论正文中的 @mention 误命中
+            const userNameArea = article.querySelector('[data-testid="User-Name"]');
+            if (!userNameArea) return;
+            const isTargetUser = !!userNameArea.querySelector(`a[href="/${username}"][role="link"]`);
 
             if (!isTargetUser) return;
 
@@ -1216,10 +1216,11 @@ ${comments.map((c, i) => {
                 text: previewText(username)
             }));
             markCommentByCategory(username, 'blacklist', '');
-            blockedUsersSet.add(username); // 添加到已拉黑用户集合
-            await blockUserByAPI(username);
-            await sleep(500);
+            blockedUsersSet.add(username);
         }
+
+        // 并发执行拉黑，不串行等待
+        await Promise.all([...blacklistSet].map(username => blockUserByAPI(username)));
 
         for (const username of spamSet) {
             console.log(t('consoleAiFilterSpam', {
@@ -1323,8 +1324,8 @@ ${comments.map((c, i) => {
 
     // 一次性清理旧版（v2.4.3 及之前）的绝对像素位置 key，避免遗留坐标污染新逻辑
     if (GM_getValue('toolbar_position_x', null) !== null || GM_getValue('toolbar_position_y', null) !== null) {
-        try { GM_setValue('toolbar_position_x', undefined); } catch (_) {}
-        try { GM_setValue('toolbar_position_y', undefined); } catch (_) {}
+        try { GM_setValue('toolbar_position_x', undefined); } catch (_) { }
+        try { GM_setValue('toolbar_position_y', undefined); } catch (_) { }
     }
 
     function loadToolbarPosition() {
@@ -1949,24 +1950,28 @@ ${comments.map((c, i) => {
         // Comments on X/Twitter are usually in article tags
         const articles = document.querySelectorAll('article[data-testid="tweet"]');
         articles.forEach(article => {
-            // Find username links
-            const userLinks = article.querySelectorAll('a[href^="/"][role="link"]');
+            // 只在用户名区域（User-Name）内查找，避免把评论正文里的 @mention 当成评论者
+            const userNameArea = article.querySelector('[data-testid="User-Name"]');
             let username = null;
 
-            userLinks.forEach(link => {
-                const href = link.getAttribute('href');
-                if (href && href.match(/^\/[^\/]+$/)) {
-                    const user = href.substring(1);
-                    if (user &&
-                        user !== 'home' &&
-                        user !== 'explore' &&
-                        user !== 'notifications' &&
-                        user !== 'messages' &&
-                        (!excludeOriginal || user !== originalPoster)) {
-                        username = user;
+            if (userNameArea) {
+                const userLinks = userNameArea.querySelectorAll('a[href^="/"][role="link"]');
+                for (const link of userLinks) {
+                    const href = link.getAttribute('href');
+                    if (href && href.match(/^\/[^\/]+$/)) {
+                        const user = href.substring(1);
+                        if (user &&
+                            user !== 'home' &&
+                            user !== 'explore' &&
+                            user !== 'notifications' &&
+                            user !== 'messages' &&
+                            (!excludeOriginal || user !== originalPoster)) {
+                            username = user;
+                            break;
+                        }
                     }
                 }
-            });
+            }
 
             // Get comment text, display name and avatar URL
             if (username) {
@@ -2032,76 +2037,74 @@ ${comments.map((c, i) => {
         try {
             console.log(t('consoleTryBlockAPI', { username }));
 
-            // 从页面中获取用户ID（避免额外的API请求）
-            const articles = document.querySelectorAll('article[data-testid="tweet"]');
-            let userId = null;
-
-            for (const article of articles) {
-                const userLink = article.querySelector(`a[href="/${username}"]`);
-                if (userLink) {
-                    // 尝试从article的data属性或其他地方获取userId
-                    // 如果无法直接获取，则从用户链接的父元素中查找
-                    const timeLink = article.querySelector('a[href*="/status/"]');
-                    if (timeLink) {
-                        const href = timeLink.getAttribute('href');
-                        const match = href.match(/\/status\/(\d+)/);
-                        if (match) {
-                            // 通过推文ID反查用户ID（需要额外请求）
-                            // 更简单的方法：直接使用用户名查询
-                            break;
-                        }
-                    }
-                }
-            }
-
             // 获取CSRF token
             const csrfToken = document.cookie.match(/ct0=([^;]+)/)?.[1];
             if (!csrfToken) {
                 throw new Error('Failed to get CSRF token');
             }
 
-            // 先通过用户名获取用户ID
-            const userInfoResponse = await fetch(`https://x.com/i/api/graphql/G3KGOASz96M-Qu0nwmGXNg/UserByScreenName?variables=${encodeURIComponent(JSON.stringify({
-                screen_name: username,
-                withSafetyModeUserFields: true
-            }))}&features=${encodeURIComponent(JSON.stringify({
-                hidden_profile_subscriptions_enabled: true,
-                rweb_tipjar_consumption_enabled: true,
-                responsive_web_graphql_exclude_directive_enabled: true,
-                verified_phone_label_enabled: false,
-                subscriptions_verification_info_is_identity_verified_enabled: true,
-                subscriptions_verification_info_verified_since_enabled: true,
-                highlights_tweets_tab_ui_enabled: true,
-                responsive_web_twitter_article_notes_tab_enabled: true,
-                subscriptions_feature_can_gift_premium: true,
-                creator_subscriptions_tweet_preview_api_enabled: true,
-                responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
-                responsive_web_graphql_timeline_navigation_enabled: true
-            }))}`, {
-                method: 'GET',
-                headers: {
-                    'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
-                    'x-csrf-token': csrfToken,
-                    'x-twitter-auth-type': 'OAuth2Session',
-                    'x-twitter-active-user': 'yes',
-                    'x-twitter-client-language': 'en'
-                },
-                credentials: 'include'
-            });
+            let userId = null;
+            let isFollowing = false;
 
-            if (!userInfoResponse.ok) {
-                throw new Error('Failed to get user info');
+            // 优先从缓存中获取 userId（fetchUserBio 已缓存完整用户信息）
+            const cached = userInfoCache.get(username);
+            if (cached && cached.restId) {
+                userId = cached.restId;
+                isFollowing = cached.following;
+            } else {
+                // 缓存未命中，调用 UserByScreenName
+                const userInfoResponse = await fetch(`https://x.com/i/api/graphql/G3KGOASz96M-Qu0nwmGXNg/UserByScreenName?variables=${encodeURIComponent(JSON.stringify({
+                    screen_name: username,
+                    withSafetyModeUserFields: true
+                }))}&features=${encodeURIComponent(JSON.stringify({
+                    hidden_profile_subscriptions_enabled: true,
+                    rweb_tipjar_consumption_enabled: true,
+                    responsive_web_graphql_exclude_directive_enabled: true,
+                    verified_phone_label_enabled: false,
+                    subscriptions_verification_info_is_identity_verified_enabled: true,
+                    subscriptions_verification_info_verified_since_enabled: true,
+                    highlights_tweets_tab_ui_enabled: true,
+                    responsive_web_twitter_article_notes_tab_enabled: true,
+                    subscriptions_feature_can_gift_premium: true,
+                    creator_subscriptions_tweet_preview_api_enabled: true,
+                    responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+                    responsive_web_graphql_timeline_navigation_enabled: true
+                }))}`, {
+                    method: 'GET',
+                    headers: {
+                        'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+                        'x-csrf-token': csrfToken,
+                        'x-twitter-auth-type': 'OAuth2Session',
+                        'x-twitter-active-user': 'yes',
+                        'x-twitter-client-language': 'en'
+                    },
+                    credentials: 'include'
+                });
+
+                if (!userInfoResponse.ok) {
+                    throw new Error(`Failed to get user info: ${userInfoResponse.status}`);
+                }
+
+                const userInfoData = await userInfoResponse.json();
+                const userResult = userInfoData.data?.user?.result;
+                userId = userResult?.rest_id;
+                isFollowing = !!userResult?.legacy?.following;
+
+                // 写入缓存供后续复用
+                if (userId) {
+                    userInfoCache.set(username, {
+                        bio: userResult?.legacy?.description || '',
+                        restId: userId,
+                        following: isFollowing
+                    });
+                }
             }
-
-            const userInfoData = await userInfoResponse.json();
-            userId = userInfoData.data?.user?.result?.rest_id;
 
             if (!userId) {
                 throw new Error('Failed to get user ID');
             }
 
             // 保护已关注的用户不被误拉黑
-            const isFollowing = userInfoData.data?.user?.result?.legacy?.following;
             if (isFollowing) {
                 return false;
             }
@@ -2439,8 +2442,6 @@ ${comments.map((c, i) => {
         console.log(t('consoleAiFilterStart'));
 
         try {
-            // 等待评论加载
-            await sleep(1000);
             if (!stillOnDetail()) return;
 
             // 获取当前可见的评论
@@ -2554,7 +2555,7 @@ ${comments.map((c, i) => {
 
                 // 批次之间延迟，避免API限流
                 if (i + batchSize < comments.length) {
-                    await sleep(1000);
+                    await sleep(500);
                     if (!stillOnDetail()) return;
                 }
             }
@@ -2616,22 +2617,26 @@ ${comments.map((c, i) => {
                 // 跳过已处理的评论
                 if (article.hasAttribute('data-ai-filtered')) return;
 
-                // 提取用户名
-                const userLinks = article.querySelectorAll('a[href^="/"][role="link"]');
+                // 提取用户名（只从 User-Name 区域，避免把评论正文中的 @mention 误认为评论者）
+                const userNameArea = article.querySelector('[data-testid="User-Name"]');
                 let username = null;
-                userLinks.forEach(link => {
-                    const href = link.getAttribute('href');
-                    if (href && href.match(/^\/[^\/]+$/)) {
-                        const user = href.substring(1);
-                        if (user &&
-                            user !== 'home' &&
-                            user !== 'explore' &&
-                            user !== 'notifications' &&
-                            user !== 'messages') {
-                            username = user;
+                if (userNameArea) {
+                    const userLinks = userNameArea.querySelectorAll('a[href^="/"][role="link"]');
+                    for (const link of userLinks) {
+                        const href = link.getAttribute('href');
+                        if (href && href.match(/^\/[^\/]+$/)) {
+                            const user = href.substring(1);
+                            if (user &&
+                                user !== 'home' &&
+                                user !== 'explore' &&
+                                user !== 'notifications' &&
+                                user !== 'messages') {
+                                username = user;
+                                break;
+                            }
                         }
                     }
-                });
+                }
 
                 // 如果是已拉黑用户，立即隐藏
                 if (username && blockedUsersSet.has(username)) {
@@ -2648,7 +2653,7 @@ ${comments.map((c, i) => {
                 if (!aiFilterInProgress && isOnTweetDetailPage()) {
                     autoAIFilterComments();
                 }
-            }, 2000);
+            }, 1000);
         });
 
         commentObserver.observe(document.body, {
