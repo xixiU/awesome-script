@@ -30,7 +30,11 @@ def gen_nonce() -> str:
 def extract_path(url: str) -> str:
     """从完整 URL 提取 path（与后端 request.getRequestURI() 一致，含 /ts-service 前缀，去 query）"""
     parsed = urllib.parse.urlsplit(url)
-    return parsed.path or "/"
+    path = parsed.path or "/"
+    # 剥离网关路由前缀，提取从 /ts-service 开始的路径
+    if "/ts-service" in path:
+        path = "/ts-service" + path.split("/ts-service", 1)[1]
+    return path
 
 
 def api_sign(nonce: str, method: str, path: str, timestamp: str, secret_key: str) -> str:
@@ -161,7 +165,7 @@ def test_fz_sign():
     sg = fz_sign(ts, SECRET_KEY)
     import requests
     resp = requests.post(
-        "https://wqzyserver.iflysec.com/ts-service/internet/fz",
+        f"{HOST_PREFIX}/ts-service/internet/fz",
 
         # "https://hktestservice.iflysec.com/ts-service/internet/fz",
         # "http://172.31.243.225:9797/ts-service/internet/fz",
@@ -178,9 +182,10 @@ if __name__ == "__main__":
     # ============== 测试 /av/network/status 接口（模拟小程序请求）==============
     device_id = gen_nonce()  # 生成设备 UUID
     trial_code = "TEST123"   # 替换为真实庭审码
-    test_fz_sign()
+    HOST_PREFIX = 'http://zhft.iflysec.com/hngy'
+    # test_fz_sign()
     # test_api_sign(
-    #     url="https://hktestservice.iflysec.com/ts-service/internet/av/network/status",
+    #     url="/ts-service/internet/av/network/status",
     #     method="POST",
     #     body={
     #         "networkStatus": 3,
@@ -199,16 +204,16 @@ if __name__ == "__main__":
 
     # ============== 其他接口测试示例 ==============
     # 测试获取会议类型（GET 请求）
-    # test_api_sign(
-    #     url="https://hktestservice.iflysec.com/ts-service/internet/meet/getMeetingType",
-    #     method="GET",
-    #     token="your_token_here",
-    #     extra_headers={
-    #         "terminalType": "4",
-    #         "roleId": "TEST123",
-    #         "deviceType": "wechat_applet",
-    #     }
-    # )
+    test_api_sign(
+        url=f"{HOST_PREFIX}/ts-service/internet/meet/getMeetingType",
+        method="GET",
+        token="your_token_here",
+        extra_headers={
+            "terminalType": "4",
+            "roleId": "TEST123",
+            "deviceType": "wechat_applet",
+        }
+    )
 
     # 测试法正接口（旧逻辑）
     # test_fz_sign()
