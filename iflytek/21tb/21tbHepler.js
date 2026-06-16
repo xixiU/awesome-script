@@ -1,6 +1,5 @@
 // ==UserScript==
 // @name         ifly-21tb 增强脚本 (视频控制+自动答题+解除复制限制)
-// @namespace    http://tampermonkey.net/
 // @version      1.5.0
 // @description  视频页：左右键快进/回退，数字键调速。考试页：直接调用Dify API自动答题，无需本地代理服务，支持暂停/继续、失败题目重试。全站：解除网页禁止复制/粘贴/右键/选择的限制。
 // @author       yuan
