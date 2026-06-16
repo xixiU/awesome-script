@@ -1,18 +1,25 @@
 /**
  * ============================================================
  * 21tb增强脚本 Chrome扩展版
- * 
+ *
  * 功能概述：
  * 1. 视频控制增强
  *    - 键盘快捷键控制：左右箭头快进/回退，数字键调速
  *    - 滑块速度控制（1-5倍速，默认2倍）
- * 
+ *
  * 2. 考试自动答题
  *    - 直接调用 Dify API 进行智能答题
  *    - 无需本地代理服务，所有配置存储在浏览器中
  *    - 支持暂停/继续控制
  *    - 配置通过扩展弹窗管理
  *    - 失败题目重试功能
+ *
+ * 3. 解除网页限制（v2.1 新增）
+ *    - 解除网页禁止复制限制（包括多层 iframe）
+ *    - 解除网页禁止粘贴限制
+ *    - 解除右键菜单禁用
+ *    - 解除文本选择限制
+ *    - 实时拦截页面动态绑定的限制监听器
  * ============================================================
  */
 
@@ -481,10 +488,98 @@
         }
     }
 
+    /******************************************************************
+     * PART 3: 解除网页复制限制模块
+     ******************************************************************/
+
+    /**
+     * 解除网页复制/粘贴/右键/选择限制
+     *
+     * 工作原理：
+     * 1. 清除内联事件属性（oncopy/onpaste/oncontextmenu/onselectstart 等）
+     * 2. 在 window 捕获阶段拦截事件监听器
+     * 3. CSS 已通过 styles.css 注入（user-select: auto !important）
+     * 4. 递归处理所有 iframe
+     */
+    function removeWebRestrictions() {
+        console.log('[脚本] 解除网页复制限制模块已加载');
+
+        const eventsToUnblock = ['copy', 'cut', 'paste', 'contextmenu', 'selectstart', 'dragstart'];
+
+        function unlockWindow(win) {
+            try {
+                const doc = win.document;
+                const body = doc.body;
+                const docElem = doc.documentElement;
+
+                // 清除内联事件属性
+                const targets = [doc, docElem, body].filter(Boolean);
+                targets.forEach(target => {
+                    eventsToUnblock.forEach(eventType => {
+                        const attrName = 'on' + eventType;
+                        try {
+                            if (target.removeAttribute) {
+                                target.removeAttribute(attrName);
+                            }
+                        } catch (e) { }
+                        try {
+                            target[attrName] = null;
+                        } catch (e) { }
+                    });
+                });
+
+                // 捕获阶段拦截事件
+                eventsToUnblock.forEach(eventType => {
+                    win.addEventListener(eventType, (e) => {
+                        e.stopImmediatePropagation();
+                    }, true);
+                });
+
+                console.log(`[脚本] 已解除限制: ${win.location.href}`);
+            } catch (e) {
+                console.log('[脚本] 跨域 iframe 跳过:', e.message);
+            }
+        }
+
+        function unlockAllFrames(win) {
+            unlockWindow(win);
+            try {
+                for (let i = 0; i < win.frames.length; i++) {
+                    try {
+                        unlockAllFrames(win.frames[i]);
+                    } catch (e) { }
+                }
+            } catch (e) { }
+        }
+
+        // 立即执行
+        unlockAllFrames(window);
+
+        // 监听新加载的 iframe
+        const observer = new MutationObserver(mutations => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    if (node.tagName === 'IFRAME') {
+                        node.addEventListener('load', () => {
+                            try {
+                                unlockAllFrames(node.contentWindow);
+                            } catch (e) { }
+                        });
+                    }
+                });
+            });
+        });
+        observer.observe(document.body || document.documentElement, {
+            childList: true,
+            subtree: true
+        });
+    }
+
     // --- 脚本入口 ---
     window.addEventListener('load', () => {
         initializeExamModule();
         initializeVideoModule();
+        removeWebRestrictions();  // 解除复制限制
     });
 
 })();

@@ -213,3 +213,14 @@
     text-align: right;
 }
 
+/* ============================================
+   解除网页复制限制样式
+   ============================================ */
+
+/* 强制允许文本选择（覆盖页面的 user-select: none） */
+* {
+    user-select: auto !important;
+    -webkit-user-select: auto !important;
+    -moz-user-select: auto !important;
+    -ms-user-select: auto !important;
+}

@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         ifly-21tb 增强脚本 (视频控制+自动答题)
+// @name         ifly-21tb 增强脚本 (视频控制+自动答题+解除复制限制)
 // @namespace    http://tampermonkey.net/
-// @version      1.4.1
-// @description  视频页：左右键快进/回退，数字键调速。考试页：直接调用Dify API自动答题，无需本地代理服务，支持暂停/继续、失败题目重试。
+// @version      1.5.0
+// @description  视频页：左右键快进/回退，数字键调速。考试页：直接调用Dify API自动答题，无需本地代理服务，支持暂停/继续、失败题目重试。全站：解除网页禁止复制/粘贴/右键/选择的限制。
 // @author       yuan
 // @match        *://*.21tb.com/*
 // @connect      *
@@ -18,30 +18,37 @@
 /**
  * ============================================================
  * 脚本功能概述：
- * 
+ *
  * 1. 视频控制增强
  *    - 键盘快捷键控制：左右箭头快进/回退，数字键调速
  *    - 浮动速度控制按钮
- * 
+ *
  * 2. 考试自动答题
- *    - 直接调用 Dify API 进行智能答题（v1.4 新特性）
+ *    - 直接调用 Dify API 进行智能答题
  *    - 无需本地代理服务，所有配置存储在浏览器中
  *    - 支持暂停/继续控制
  *    - 配置通过油猴菜单管理，方便快捷
- *    - 失败题目重试功能（v1.5 新特性）
- * 
- * 更新日志 (v1.5)：
- * - 新增失败题目重试功能
- * - 自动记录答题失败的题目
- * - 答题完成后显示失败题目数量和重试按钮
- * - 支持多次重试，直到所有题目成功
- * 
+ *    - 失败题目重试功能
+ *
+ * 3. 解除网页限制（v1.5 新增）
+ *    - 解除网页禁止复制限制（包括多层 iframe）
+ *    - 解除网页禁止粘贴限制
+ *    - 解除右键菜单禁用
+ *    - 解除文本选择限制
+ *    - 实时拦截页面动态绑定的限制监听器
+ *
+ * 更新日志 (v1.5.0)：
+ * - 新增完整的网页限制解除功能
+ * - 自动递归处理所有 iframe（包括考试页面的嵌套 iframe）
+ * - 捕获阶段拦截 + 内联属性清除 + CSS 强制样式三重保障
+ * - 优化事件拦截逻辑，避免页面重新绑定
+ * - 失败题目重试功能（v1.4.1 引入）
+ *
  * 更新日志 (v1.4)：
  * - 移除对本地 proxy_iflyek.py 服务的依赖
  * - 直接调用 Dify API，使用 Bearer Token 认证
  * - 新增 difyApiKey 配置项
  * - 优化配置管理，所有设置存储在浏览器本地
- * - 增强错误提示和状态显示
  * ============================================================
  */
 
@@ -1005,10 +1012,142 @@
         }
     }
 
+    /******************************************************************
+     *
+     * PART 3: 解除网页复制限制模块
+     *
+     ******************************************************************/
+
+    /**
+     * 解除网页复制/粘贴/右键/选择限制
+     *
+     * 工作原理（第一性原理）：
+     * 1. 清除内联事件属性（oncopy/onpaste/oncontextmenu/onselectstart 等）
+     * 2. 在 window 捕获阶段拦截事件监听器（stopImmediatePropagation 阻止页面处理）
+     * 3. 注入 CSS 强制 user-select: auto（覆盖可能的 none）
+     * 4. 递归处理所有 iframe（包括多层嵌套，如考试页面）
+     *
+     * 为什么有效：
+     * - 捕获阶段优先级高于冒泡阶段，能拦截页面后续绑定的监听器
+     * - stopImmediatePropagation 阻止同级和后续监听器执行
+     * - 不调用 preventDefault，所以浏览器默认复制行为正常工作
+     *
+     * 适用场景：
+     * - 21tb 考试页面（嵌套 iframe 中的 body.oncopy）
+     * - 其他禁止复制的网页内容
+     */
+    function removeWebRestrictions() {
+        console.log('[脚本] 解除网页复制限制模块已加载');
+
+        // 需要解除的事件类型
+        const eventsToUnblock = ['copy', 'cut', 'paste', 'contextmenu', 'selectstart', 'dragstart'];
+
+        /**
+         * 对单个窗口/frame 解除限制
+         */
+        function unlockWindow(win) {
+            try {
+                const doc = win.document;
+                const body = doc.body;
+                const docElem = doc.documentElement;
+
+                // 1. 清除内联事件属性（body + html + document）
+                const targets = [doc, docElem, body].filter(Boolean);
+                targets.forEach(target => {
+                    eventsToUnblock.forEach(eventType => {
+                        const attrName = 'on' + eventType;
+                        // 移除 HTML 属性
+                        try {
+                            if (target.removeAttribute) {
+                                target.removeAttribute(attrName);
+                            }
+                        } catch (e) { }
+                        // 清除 JS 属性
+                        try {
+                            target[attrName] = null;
+                        } catch (e) { }
+                    });
+                });
+
+                // 2. 在 window 捕获阶段拦截事件（阻止页面处理，但保留默认行为）
+                eventsToUnblock.forEach(eventType => {
+                    win.addEventListener(eventType, (e) => {
+                        // stopImmediatePropagation: 阻止页面自身监听器运行
+                        // 不调用 preventDefault: 保留浏览器默认行为（复制仍然生效）
+                        e.stopImmediatePropagation();
+                    }, true); // true = 捕获阶段
+                });
+
+                // 3. 注入 CSS 强制允许文本选择
+                if (!doc.getElementById('tb21-unlock-style')) {
+                    const style = doc.createElement('style');
+                    style.id = 'tb21-unlock-style';
+                    style.textContent = `
+                        * {
+                            user-select: auto !important;
+                            -webkit-user-select: auto !important;
+                            -moz-user-select: auto !important;
+                            -ms-user-select: auto !important;
+                        }
+                    `;
+                    (doc.head || doc.documentElement).appendChild(style);
+                }
+
+                console.log(`[脚本] 已解除限制: ${win.location.href}`);
+            } catch (e) {
+                // 跨域 iframe 无法访问，静默跳过
+                console.log('[脚本] 跨域 iframe 跳过:', e.message);
+            }
+        }
+
+        /**
+         * 递归处理所有 iframe
+         */
+        function unlockAllFrames(win) {
+            // 处理当前窗口
+            unlockWindow(win);
+
+            // 递归处理所有子 frame
+            try {
+                for (let i = 0; i < win.frames.length; i++) {
+                    try {
+                        unlockAllFrames(win.frames[i]);
+                    } catch (e) {
+                        // 跨域 frame 无法访问，继续下一个
+                    }
+                }
+            } catch (e) { }
+        }
+
+        // 立即执行
+        unlockAllFrames(window);
+
+        // 监听新加载的 iframe（考试页面可能动态加载）
+        const observer = new MutationObserver(mutations => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    if (node.tagName === 'IFRAME') {
+                        // iframe 加载完成后解除限制
+                        node.addEventListener('load', () => {
+                            try {
+                                unlockAllFrames(node.contentWindow);
+                            } catch (e) { }
+                        });
+                    }
+                });
+            });
+        });
+        observer.observe(document.body || document.documentElement, {
+            childList: true,
+            subtree: true
+        });
+    }
+
     // --- 脚本入口 ---
     window.addEventListener('load', () => {
         initializeExamModule();
         initializeVideoModule();
+        removeWebRestrictions();  // 解除复制限制
     });
 
 })();

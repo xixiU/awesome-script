@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "21tb增强助手",
-  "version": "2.0.0",
-  "description": "21tb学习平台增强工具：视频速度控制(1-5倍速滑块)、键盘快捷键、自动答题",
+  "version": "2.1.0",
+  "description": "21tb学习平台增强工具：视频速度控制(1-5倍速滑块)、键盘快捷键、自动答题、解除复制/粘贴/右键限制",
   "permissions": [
     "storage",
     "activeTab"
