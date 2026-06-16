@@ -10,6 +10,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
+// @icon         https://in.iflytek.com/resources/fornt/img/icons/iflyui-shortcut.png
 // @downloadURL  https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/iflytek/21tb/21tbHepler.js
 // @updateURL    https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/iflytek/21tb/21tbHepler.js
 // ==/UserScript==
