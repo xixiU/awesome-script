@@ -179,7 +179,6 @@ def test_fz_sign():
 
 
 if __name__ == "__main__":
-    # ============== 测试 /av/network/status 接口（模拟小程序请求）==============
     device_id = gen_nonce()  # 生成设备 UUID
     trial_code = "TEST123"   # 替换为真实庭审码
     # 湖北
@@ -192,6 +191,7 @@ if __name__ == "__main__":
     # HOST_PREFIX = 'https://hktestservice.iflysec.com'
 
     test_fz_sign()
+    # ============== 测试 /av/network/status 接口（模拟小程序请求）==============
     # test_api_sign(
     #     url="/ts-service/internet/av/network/status",
     #     method="POST",
