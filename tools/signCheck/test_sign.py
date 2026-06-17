@@ -164,9 +164,9 @@ def test_fz_sign():
     ts = str(int(time.time() * 1000))
     sg = fz_sign(ts, SECRET_KEY)
     import requests
+    fz_url = f"{HOST_PREFIX}/ts-service/internet/fz"
     resp = requests.post(
-        f"{HOST_PREFIX}/ts-service/internet/fz",
-
+        fz_url,
         # "https://hktestservice.iflysec.com/ts-service/internet/fz",
         # "http://172.31.243.225:9797/ts-service/internet/fz",
 
@@ -174,7 +174,7 @@ def test_fz_sign():
         json={"courtCode":"dierting","orgCode":"I14","trialCode":"134137"},
         timeout=5,
     )
-    print({"timestamp": ts, "sign": sg})
+    print({"url":fz_url,"timestamp": ts, "sign": sg})
     print(resp.status_code, resp.text)
 
 
@@ -182,7 +182,13 @@ if __name__ == "__main__":
     # ============== 测试 /av/network/status 接口（模拟小程序请求）==============
     device_id = gen_nonce()  # 生成设备 UUID
     trial_code = "TEST123"   # 替换为真实庭审码
-    HOST_PREFIX = 'http://zhft.iflysec.com/hncs'
+    # 湖北
+    HOST_PREFIX = 'http://zhft.iflysec.com/whdx'
+    # 湖南长沙
+    # HOST_PREFIX = 'http://zhft.iflysec.com/hncs'
+    # 武清
+    # HOST_PREFIX= 'https://wqzyserver.iflysec.com'
+    # 研发环境
     # HOST_PREFIX = 'https://hktestservice.iflysec.com'
 
     test_fz_sign()
