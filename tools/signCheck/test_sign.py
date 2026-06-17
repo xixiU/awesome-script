@@ -171,7 +171,7 @@ def test_fz_sign():
         # "http://172.31.243.225:9797/ts-service/internet/fz",
 
         params={"timestamp": ts, "sign": sg},
-        json={"orgCode": "O", "courtCode": "C", "trialCode": "T"},
+        json={"courtCode":"dierting","orgCode":"I14","trialCode":"134137"},
         timeout=5,
     )
     print({"timestamp": ts, "sign": sg})
@@ -182,8 +182,10 @@ if __name__ == "__main__":
     # ============== 测试 /av/network/status 接口（模拟小程序请求）==============
     device_id = gen_nonce()  # 生成设备 UUID
     trial_code = "TEST123"   # 替换为真实庭审码
-    HOST_PREFIX = 'http://zhft.iflysec.com/hngy'
-    # test_fz_sign()
+    HOST_PREFIX = 'http://zhft.iflysec.com/hncs'
+    # HOST_PREFIX = 'https://hktestservice.iflysec.com'
+
+    test_fz_sign()
     # test_api_sign(
     #     url="/ts-service/internet/av/network/status",
     #     method="POST",
@@ -204,16 +206,16 @@ if __name__ == "__main__":
 
     # ============== 其他接口测试示例 ==============
     # 测试获取会议类型（GET 请求）
-    test_api_sign(
-        url=f"{HOST_PREFIX}/ts-service/internet/meet/getMeetingType",
-        method="GET",
-        token="your_token_here",
-        extra_headers={
-            "terminalType": "4",
-            "roleId": "TEST123",
-            "deviceType": "wechat_applet",
-        }
-    )
+    # test_api_sign(
+    #     url=f"{HOST_PREFIX}/ts-service/internet/meet/getMeetingType",
+    #     method="GET",
+    #     token="your_token_here",
+    #     extra_headers={
+    #         "terminalType": "4",
+    #         "roleId": "TEST123",
+    #         "deviceType": "wechat_applet",
+    #     }
+    # )
 
     # 测试法正接口（旧逻辑）
     # test_fz_sign()
