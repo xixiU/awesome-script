@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.4.6.preview
+// @version      2.4.6
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -1049,8 +1049,8 @@ ${comments.map((c, i) => {
 
         const responseText = await config.callLLM({
             prompt,
-            temperature: 0.3, // 降低温度以获得更一致的分类结果
-            maxTokens: 16384
+            temperature: 0.1,
+            maxTokens: 2048
         });
 
         return extractUsernameBuckets(responseText);
@@ -1219,9 +1219,6 @@ ${comments.map((c, i) => {
             blockedUsersSet.add(username);
         }
 
-        // 并发执行拉黑，不串行等待
-        await Promise.all([...blacklistSet].map(username => blockUserByAPI(username)));
-
         for (const username of spamSet) {
             console.log(t('consoleAiFilterSpam', {
                 displayName: getDisplayName(username),
@@ -1229,6 +1226,11 @@ ${comments.map((c, i) => {
                 text: previewText(username)
             }));
             markCommentByCategory(username, 'spam', '');
+        }
+
+        // 拉黑操作放后台，不阻塞 UI 标记和后续批次
+        if (blacklistSet.size > 0) {
+            Promise.all([...blacklistSet].map(username => blockUserByAPI(username))).catch(() => {});
         }
 
         const blacklistCount = blacklistSet.size;
@@ -2518,46 +2520,50 @@ ${comments.map((c, i) => {
             // 显示状态指示器
             updateAIFilterStatus(t('aiFilterStatusProcessing', { current: 0, total: comments.length }));
 
-            // 批量调用AI分类（每次最多处理20条评论）
-            const batchSize = 20;
+            // 批量调用AI分类（每次最多处理30条评论，最多2个批次并行）
+            const batchSize = 30;
+            const concurrency = 2;
             let processedCount = 0;
 
-            for (let i = 0; i < comments.length; i += batchSize) {
+            for (let i = 0; i < comments.length; i += batchSize * concurrency) {
                 if (!stillOnDetail()) return;
-                const batch = comments.slice(i, i + batchSize);
-                const batchDataMap = new Map(batch.map(c => [c.username, {
-                    text: c.text,
-                    displayName: c.displayName,
-                    avatarUrl: c.avatarUrl
-                }]));
 
-                try {
-                    const results = await classifyCommentsByAI(batch, mainTweet);
-                    if (!stillOnDetail()) return;
-
-                    // 处理结果
-                    await processAIFilterResults(results, batchDataMap);
-                    if (!stillOnDetail()) return;
-
-                    // 标记已处理
-                    batch.forEach(c => aiFilterProcessed.add(c.username));
-
-                    processedCount += batch.length;
-                    updateAIFilterStatus(t('aiFilterStatusProcessing', {
-                        current: processedCount,
-                        total: comments.length
-                    }));
-
-                } catch (error) {
-                    console.error(t('consoleAiFilterError', { error: error.message }));
-                    // 继续处理下一批
+                // 构建本轮要并行发送的批次
+                const batches = [];
+                for (let j = 0; j < concurrency && i + j * batchSize < comments.length; j++) {
+                    const start = i + j * batchSize;
+                    batches.push(comments.slice(start, start + batchSize));
                 }
 
-                // 批次之间延迟，避免API限流
-                if (i + batchSize < comments.length) {
-                    await sleep(500);
+                const batchPromises = batches.map(batch => {
+                    const batchDataMap = new Map(batch.map(c => [c.username, {
+                        text: c.text,
+                        displayName: c.displayName,
+                        avatarUrl: c.avatarUrl
+                    }]));
+                    return classifyCommentsByAI(batch, mainTweet)
+                        .then(results => ({ results, batchDataMap, batch }))
+                        .catch(error => {
+                            console.error(t('consoleAiFilterError', { error: error.message }));
+                            return null;
+                        });
+                });
+
+                const settled = await Promise.all(batchPromises);
+                if (!stillOnDetail()) return;
+
+                for (const item of settled) {
+                    if (!item) continue;
+                    await processAIFilterResults(item.results, item.batchDataMap);
                     if (!stillOnDetail()) return;
+                    item.batch.forEach(c => aiFilterProcessed.add(c.username));
+                    processedCount += item.batch.length;
                 }
+
+                updateAIFilterStatus(t('aiFilterStatusProcessing', {
+                    current: processedCount,
+                    total: comments.length
+                }));
             }
 
             // 等待并行的简介检查完成，处理 AI 未覆盖到的 bio 命中
@@ -2653,7 +2659,7 @@ ${comments.map((c, i) => {
                 if (!aiFilterInProgress && isOnTweetDetailPage()) {
                     autoAIFilterComments();
                 }
-            }, 1000);
+            }, 300);
         });
 
         commentObserver.observe(document.body, {
@@ -2792,7 +2798,7 @@ ${comments.map((c, i) => {
             setTimeout(() => {
                 autoAIFilterComments();
                 watchForNewComments();
-            }, 1500);
+            }, 800);
         }
 
         console.log(t('consoleScriptLoaded'));
