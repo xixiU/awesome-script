@@ -162,7 +162,7 @@ def test_api_sign(url: str, method: str = "GET", body=None, token: str = "", ext
 def test_fz_sign():
     print('法正接口测试')
     ts = str(int(time.time() * 1000))
-    sg = fz_sign(ts, SECRET_KEY)
+    sg = fz_sign(ts, SECRET_KEY) 
     import requests
     fz_url = f"{HOST_PREFIX}/ts-service/internet/fz"
     resp = requests.post(
@@ -181,8 +181,14 @@ def test_fz_sign():
 if __name__ == "__main__":
     device_id = gen_nonce()  # 生成设备 UUID
     trial_code = "TEST123"   # 替换为真实庭审码
+    # 吉林
+    HOST_PREFIX = 'https://xfrh-jlfy.e-court.gov.cn:8866/'
+    
+    # 成都
+    # HOST_PREFIX = 'https://zhft.iflysec.com/scdy'
+
     # 湖北
-    HOST_PREFIX = 'http://zhft.iflysec.com/whdx'
+    # HOST_PREFIX = 'http://zhft.iflysec.com/whdx'
     # 湖南长沙
     # HOST_PREFIX = 'http://zhft.iflysec.com/hncs'
     # 武清
@@ -212,15 +218,21 @@ if __name__ == "__main__":
 
     # ============== 其他接口测试示例 ==============
     # 测试获取会议类型（GET 请求）
+    test_api_sign(
+        url=f"{HOST_PREFIX}/ts-service/internet/meet/getMeetingType",
+        method="GET",
+        token="your_token_here",
+        extra_headers={
+            "terminalType": "4",
+            "roleId": "TEST123",
+            "deviceType": "wechat_applet",
+        }
+    )
+
+    # 测试短信发送
     # test_api_sign(
-    #     url=f"{HOST_PREFIX}/ts-service/internet/meet/getMeetingType",
-    #     method="GET",
-    #     token="your_token_here",
-    #     extra_headers={
-    #         "terminalType": "4",
-    #         "roleId": "TEST123",
-    #         "deviceType": "wechat_applet",
-    #     }
+    #     url=f"{HOST_PREFIX}/ts-service/internet/mobile/getCode/13877909302;19072972843;13877909302/1",
+    #     method="GET"
     # )
 
     # 测试法正接口（旧逻辑）
