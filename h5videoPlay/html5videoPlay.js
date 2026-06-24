@@ -1067,13 +1067,17 @@ const app = {
         };
         for (const i of this.rawProps.keys()) this.rawProps.set(i,
             Reflect.getOwnPropertyDescriptor(HTMLMediaElement.prototype, i));
+        // 支持视频和音频元素
         this.vList = d.getElementsByTagName('video');
+        this.aList = d.getElementsByTagName('audio');
         const fn = e => cfg.cssMV ? e.matches(cfg.cssMV) : e.offsetWidth > 9;
+        const fnAudio = e => e.offsetWidth > 1; // 音频元素检测
         this.findMV = find.bind(this.vList, fn);
+        this.findAudio = find.bind(this.aList, fnAudio);
         this.timer = polling(e => {
             v = e;
             this.bindEvent();
-        }, this.findMV);
+        }, () => this.findMV() || this.findAudio());
 
         hookAttachShadow(async shadowRoot => {
             bus.$emit('addShadowRoot', shadowRoot);
@@ -1489,4 +1493,129 @@ Native controls are forced on for all H5 videos so the timeline can be clicked o
     console.log('[HTML5视频工具] 脚本已启用，站点:', location.host);
     if (!router[u] || !router[u]()) app.init();
     if (!router[u] && !cfg.isNumURL) cfg.isNumURL = /[_\W]\d+(\/|\.[a-z]{3,8})?$/.test(path);
+
+    // ==================== 倍速控制 UI ====================
+    setTimeout(() => {
+        if (!by) return;
+
+        let speedPanel, speedSlider, speedValue;
+        let isVisible = false, hideTimer = null;
+
+        // 注入样式
+        GM_addStyle(`
+            #h5-speed-ui{position:fixed;bottom:80px;right:20px;background:rgba(28,28,30,.96);backdrop-filter:blur(12px);border-radius:12px;padding:16px 20px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:2147483645;font-family:-apple-system,sans-serif;user-select:none;opacity:0;transform:translateY(20px);transition:all .3s ease;pointer-events:none;min-width:240px;color:#fff}
+            #h5-speed-ui.show{opacity:1;transform:translateY(0);pointer-events:all}
+            .h5-sp-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+            .h5-sp-tit{font-size:13px;opacity:.7}
+            .h5-sp-val{font-size:16px;font-weight:600}
+            .h5-sp-sl{width:100%;height:6px;background:rgba(255,255,255,.2);border-radius:3px;position:relative;cursor:pointer;margin:12px 0}
+            .h5-sp-pg{height:100%;background:linear-gradient(90deg,#0a84ff,#5ac8fa);border-radius:3px;position:relative}
+            .h5-sp-th{position:absolute;right:-8px;top:50%;transform:translateY(-50%);width:16px;height:16px;background:#fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:grab}
+            .h5-sp-th:active{cursor:grabbing}
+            .h5-sp-ps{display:flex;gap:6px;flex-wrap:wrap}
+            .h5-sp-pb{flex:1;min-width:48px;padding:6px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;text-align:center;font-size:12px;cursor:pointer;transition:all .2s}
+            .h5-sp-pb:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.4)}
+            .h5-sp-pb.active{background:#0a84ff;border-color:#0a84ff}
+            .h5-sp-tip{font-size:11px;opacity:.6;margin-top:10px;text-align:center}
+        `);
+
+        // 创建UI
+        speedPanel = d.createElement('div');
+        speedPanel.id = 'h5-speed-ui';
+        speedPanel.innerHTML = `
+            <div class="h5-sp-hd">
+                <span class="h5-sp-tit">播放速度</span>
+                <span class="h5-sp-val">1.0x</span>
+            </div>
+            <div class="h5-sp-sl">
+                <div class="h5-sp-pg" style="width:20%">
+                    <div class="h5-sp-th"></div>
+                </div>
+            </div>
+            <div class="h5-sp-ps">
+                <button class="h5-sp-pb" data-speed="0.5">0.5x</button>
+                <button class="h5-sp-pb" data-speed="0.75">0.75x</button>
+                <button class="h5-sp-pb active" data-speed="1">1.0x</button>
+                <button class="h5-sp-pb" data-speed="1.25">1.25x</button>
+                <button class="h5-sp-pb" data-speed="1.5">1.5x</button>
+                <button class="h5-sp-pb" data-speed="2">2.0x</button>
+            </div>
+            <div class="h5-sp-tip">拖动滑块或点击预设 | Q显示/隐藏 | E键±0.1</div>
+        `;
+        by.appendChild(speedPanel);
+
+        speedSlider = speedPanel.querySelector('.h5-sp-sl');
+        speedValue = speedPanel.querySelector('.h5-sp-val');
+        const progress = speedPanel.querySelector('.h5-sp-pg');
+        const thumb = speedPanel.querySelector('.h5-sp-th');
+
+        // 设置速度
+        function setSpeed(s) {
+            if (!v) return;
+            s = Math.max(0.25, Math.min(4, s));
+            v.playbackRate = s;
+            const pct = (s - 0.25) / 3.75 * 100;
+            progress.style.width = pct + '%';
+            speedValue.textContent = s.toFixed(2) + 'x';
+            speedPanel.querySelectorAll('.h5-sp-pb').forEach(b => {
+                b.classList.toggle('active', Math.abs(parseFloat(b.dataset.speed) - s) < 0.05);
+            });
+        }
+
+        // 显示/隐藏
+        function show() {
+            if (!v) return;
+            speedPanel.classList.add('show');
+            isVisible = true;
+            setSpeed(v.playbackRate);
+            autoHide();
+        }
+        function hide() {
+            speedPanel.classList.remove('show');
+            isVisible = false;
+        }
+        function autoHide() {
+            clearTimeout(hideTimer);
+            hideTimer = setTimeout(hide, 3000);
+        }
+
+        // 事件
+        speedPanel.querySelectorAll('.h5-sp-pb').forEach(btn => {
+            btn.onclick = () => setSpeed(parseFloat(btn.dataset.speed));
+        });
+
+        speedSlider.onclick = e => {
+            const rect = speedSlider.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            setSpeed(0.25 + pct * 3.75);
+        };
+
+        let dragging = false;
+        thumb.onmousedown = e => { dragging = true; e.stopPropagation(); };
+        d.addEventListener('mousemove', e => {
+            if (!dragging) return;
+            const rect = speedSlider.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            setSpeed(0.25 + pct * 3.75);
+            e.preventDefault();
+        });
+        d.addEventListener('mouseup', () => dragging = false);
+
+        speedPanel.onmouseenter = () => clearTimeout(hideTimer);
+        speedPanel.onmouseleave = autoHide;
+
+        // Q键显示/隐藏
+        actList.set(81, () => isVisible ? hide() : show());
+
+        // E键加速(仅非Shift)
+        const oldE = actList.get(69);
+        actList.set(69, ev => {
+            if (ev && ev.shiftKey && oldE) return oldE(ev);
+            if (!v) return;
+            setSpeed(Math.min(4, v.playbackRate + 0.1));
+            show();
+        });
+
+    }, 1000);
+
 })();
