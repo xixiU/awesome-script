@@ -181,18 +181,20 @@ def test_fz_sign():
 if __name__ == "__main__":
     device_id = gen_nonce()  # 生成设备 UUID
     trial_code = "TEST123"   # 替换为真实庭审码
+    # 湖南
+    # HOST_PREFIX = 'https://zhft.iflysec.com/hnfy'
     # 吉林
-    HOST_PREFIX = 'https://xfrh-jlfy.e-court.gov.cn:8866/'
+    # HOST_PREFIX = 'https://xfrh-jlfy.e-court.gov.cn:8866/'
     
     # 成都
     # HOST_PREFIX = 'https://zhft.iflysec.com/scdy'
 
-    # 湖北
+    # 武汉高新
     # HOST_PREFIX = 'http://zhft.iflysec.com/whdx'
     # 湖南长沙
     # HOST_PREFIX = 'http://zhft.iflysec.com/hncs'
-    # 武清
-    # HOST_PREFIX= 'https://wqzyserver.iflysec.com'
+    # 天津武清
+    HOST_PREFIX= 'https://wqzyserver.iflysec.com'
     # 研发环境
     # HOST_PREFIX = 'https://hktestservice.iflysec.com'
 
@@ -218,8 +220,19 @@ if __name__ == "__main__":
 
     # ============== 其他接口测试示例 ==============
     # 测试获取会议类型（GET 请求）
+    # test_api_sign(
+    #     url=f"{HOST_PREFIX}/ts-service/internet/meet/getMeetingType",
+    #     method="GET",
+    #     token="your_token_here",
+    #     extra_headers={
+    #         "terminalType": "4",
+    #         "roleId": "TEST123",
+    #         "deviceType": "wechat_applet",
+    #     }
+    # )
+
     test_api_sign(
-        url=f"{HOST_PREFIX}/ts-service/internet/meet/getMeetingType",
+        url=f"{HOST_PREFIX}/ts-service/internet/voice/info/612429",
         method="GET",
         token="your_token_here",
         extra_headers={
