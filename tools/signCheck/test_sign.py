@@ -187,18 +187,51 @@ if __name__ == "__main__":
     # HOST_PREFIX = 'https://xfrh-jlfy.e-court.gov.cn:8866/'
     
     # 成都
-    # HOST_PREFIX = 'https://zhft.iflysec.com/scdy'
+    # HOST_PREFIX = 'https://zhft.iflysec.com/scmz'
 
     # 武汉高新
     # HOST_PREFIX = 'http://zhft.iflysec.com/whdx'
     # 湖南长沙
     # HOST_PREFIX = 'http://zhft.iflysec.com/hncs'
     # 天津武清
-    HOST_PREFIX= 'https://wqzyserver.iflysec.com'
+    # HOST_PREFIX= 'https://wqzyserver.iflysec.com'
     # 研发环境
-    # HOST_PREFIX = 'https://hktestservice.iflysec.com'
+    HOST_PREFIX = 'https://hktestservice.iflysec.com'
 
-    test_fz_sign()
+    TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMzExMTExMTExMSIsImlzcyI6IklGTFlURUstWkZCRyIsImV4cCI6MTc4MzEwNjk3NywiaWF0IjoxNzgzMDYzNzc3LCJ1c2VySWQiOiIxMzExMTExMTExMSJ9.Ijctmn-vMlUAU3B4b_kxS1sSnKUPRYQOIZvMBNQgBhk'
+    # test_fz_sign()
+ 
+    
+    # test_api_sign(
+    #     url=f"{HOST_PREFIX}/ts-service/internet/sign/qrcodeAuth/55910306/646206/2",
+    #     method="GET",
+    #     token=HOST_PREFIX
+    # )
+    # test_api_sign(
+    #     url=f"{HOST_PREFIX}/ts-service/internet/asyncMessage/sendMessage",
+    #     method="POST",
+    #     body={"asyncPqxxId":338,"message":"1111","userId":"13111111112"},
+    #     token=HOST_PREFIX
+    # )
+    test_api_sign(
+        url=f"{HOST_PREFIX}/ts-service/internet/asyncMessage/uploadCross",
+        method="POST",
+        body={"type":"1","userId":"13111111112","asyncPqxxId":'aaa',"fileList":[{"fdfsUrl":"https://hktestservice.iflysec.com/","fileName":"jackMa.jpg","fileUrl":"group1/M00/91/6B/rB1kimpCbISAKM-nAAEZs-FCseg263.jpg"}],"evidenceSources":"111","evidencePurpose":"1111"},
+        token=TOKEN
+    )
+
+    
+    # test_api_sign(
+    #     url=f"{HOST_PREFIX}/ts-service/internet/mobile/list",
+    #     method="POST",
+    #     body={"pageNumber":1,"pageSize":10,"mobile":"13111111112"},
+    #     token=HOST_PREFIX
+    # )
+    # test_api_sign(
+    #     url=f"{HOST_PREFIX}/ts-service/internet/async/case/intoAsyncCross/338/13111111112",
+    #     method="GET",
+    #     token=HOST_PREFIX
+    # )
     # ============== 测试 /av/network/status 接口（模拟小程序请求）==============
     # test_api_sign(
     #     url="/ts-service/internet/av/network/status",
@@ -208,7 +241,7 @@ if __name__ == "__main__":
     #         "trialCode": trial_code,
     #         "deviceId": device_id,
     #     },
-    #     token="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMzUzODI2NDI1MyIsImlzcyI6IklGTFlURUstWkZCRyIsImV4cCI6MTc3OTg4ODM5MywiaWF0IjoxNzc5ODQ1MTkzLCJ1c2VySWQiOiIxMzUzODI2NDI1MyJ9.ap5k8VkkPgCTn_i6a2JEYVk8xc3mFb0U-_0DW25msWE",
+    #     token=HOST_PREFIX,
     #     extra_headers={
     #         "terminalType": "4",
     #         "roleId": trial_code.upper(),
@@ -231,16 +264,16 @@ if __name__ == "__main__":
     #     }
     # )
 
-    test_api_sign(
-        url=f"{HOST_PREFIX}/ts-service/internet/voice/info/612429",
-        method="GET",
-        token="your_token_here",
-        extra_headers={
-            "terminalType": "4",
-            "roleId": "TEST123",
-            "deviceType": "wechat_applet",
-        }
-    )
+    # test_api_sign(
+    #     url=f"{HOST_PREFIX}/ts-service/internet/voice/info/612429",
+    #     method="GET",
+    #     token="your_token_here",
+    #     extra_headers={
+    #         "terminalType": "4",
+    #         "roleId": "TEST123",
+    #         "deviceType": "wechat_applet",
+    #     }
+    # )
 
     # 测试短信发送
     # test_api_sign(
