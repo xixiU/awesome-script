@@ -1562,38 +1562,51 @@ ${comments.map((c, i) => {
         container.appendChild(mainButton);
         container.appendChild(actionsContainer);
 
-        // Hover to expand
-        let hoverTimeout;
-        container.addEventListener('mouseenter', () => {
-            clearTimeout(hoverTimeout);
-            actionsContainer.style.opacity = '1';
-            actionsContainer.style.transform = 'translateY(0)';
-            actionsContainer.style.pointerEvents = 'auto';
+        // Click to toggle expand (点击主按钮展开/收起，不再随鼠标滑过自动弹出)
+        let isExpanded = false;
+        function setExpanded(expanded) {
+            isExpanded = expanded;
+            actionsContainer.style.opacity = expanded ? '1' : '0';
+            actionsContainer.style.transform = expanded ? 'translateY(0)' : 'translateY(10px)';
+            actionsContainer.style.pointerEvents = expanded ? 'auto' : 'none';
+        }
+
+        // 点击工具栏之外的区域时收起菜单
+        document.addEventListener('click', (e) => {
+            if (isExpanded && !container.contains(e.target)) {
+                setExpanded(false);
+            }
         });
 
-        container.addEventListener('mouseleave', () => {
-            hoverTimeout = setTimeout(() => {
-                actionsContainer.style.opacity = '0';
-                actionsContainer.style.transform = 'translateY(10px)';
-                actionsContainer.style.pointerEvents = 'none';
-            }, 300);
-        });
-
-        // Dragging functionality
-        let isDragging = false;
+        // Dragging functionality（区分「点击」与「拖拽」：移动超过阈值才算拖拽）
+        const DRAG_THRESHOLD = 5; // px，小于此位移视为点击
+        let isMouseDown = false;
+        let hasDragged = false;
         let dragOffset = { x: 0, y: 0 };
+        let dragStart = { x: 0, y: 0 };
 
         mainButton.addEventListener('mousedown', (e) => {
-            isDragging = true;
+            isMouseDown = true;
+            hasDragged = false;
+            dragStart.x = e.clientX;
+            dragStart.y = e.clientY;
             dragOffset.x = e.clientX - container.offsetLeft;
             dragOffset.y = e.clientY - container.offsetTop;
-            mainButton.style.cursor = 'grabbing';
-            container.style.transition = 'none';
             e.preventDefault();
         });
 
         document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
+            if (!isMouseDown) return;
+
+            // 仅当位移超过阈值时才进入拖拽状态
+            if (!hasDragged) {
+                const dx = Math.abs(e.clientX - dragStart.x);
+                const dy = Math.abs(e.clientY - dragStart.y);
+                if (dx < DRAG_THRESHOLD && dy < DRAG_THRESHOLD) return;
+                hasDragged = true;
+                mainButton.style.cursor = 'grabbing';
+                container.style.transition = 'none';
+            }
 
             let newX = e.clientX - dragOffset.x;
             let newY = e.clientY - dragOffset.y;
@@ -1609,26 +1622,30 @@ ${comments.map((c, i) => {
         });
 
         document.addEventListener('mouseup', () => {
-            if (isDragging) {
-                isDragging = false;
+            if (!isMouseDown) return;
+            isMouseDown = false;
+
+            if (hasDragged) {
+                // 拖拽结束：恢复样式并保存位置
                 mainButton.style.cursor = 'move';
                 container.style.transition = '';
-
-                // Save position with edge anchoring (resize-friendly)
                 saveToolbarPosition(parseInt(container.style.left), parseInt(container.style.top));
+            } else {
+                // 未拖拽 = 点击：切换菜单展开状态
+                setExpanded(!isExpanded);
             }
         });
 
         // Main button hover effect
         mainButton.addEventListener('mouseenter', function () {
-            if (!isDragging) {
+            if (!hasDragged) {
                 this.style.transform = 'scale(1.1)';
                 this.style.boxShadow = '0 3px 12px rgba(29, 161, 242, 0.55)';
             }
         });
 
         mainButton.addEventListener('mouseleave', function () {
-            if (!isDragging) {
+            if (!hasDragged) {
                 this.style.transform = 'scale(1)';
                 this.style.boxShadow = '0 2px 8px rgba(29, 161, 242, 0.35)';
             }
