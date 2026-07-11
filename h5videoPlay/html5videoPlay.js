@@ -6,7 +6,7 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.1.2
+// @version    2.1.3
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -118,6 +118,32 @@
 
     const FLAG = '__gmH5ForceControls';
 
+    // 判断视频是否已被站点自定义播放器接管（已有自定义进度条/控制条）。
+    // 若是，则不再强制开启原生 controls，避免出现两条进度条。
+    const hasCustomControls = (video) => {
+        try {
+            const CTRL_RE = /(control|progress|scrubber|seek|playbar|play-bar|toolbar|timeline)/i;
+            let el = video, depth = 0;
+            while (el && el !== document.body && depth < 5) {
+                const scope = el.parentElement || el;
+                // 常见的自定义进度条/拖动条元素
+                if (scope.querySelector(
+                    'input[type="range"], [role="slider"], progress, ' +
+                    '[class*="progress"], [class*="scrubber"], [class*="seek"], ' +
+                    '[class*="control-bar"], [class*="controlbar"], [class*="ControlBar"]'
+                )) {
+                    return true;
+                }
+                if (el.className && typeof el.className === 'string' && CTRL_RE.test(el.className)) {
+                    return true;
+                }
+                el = el.parentElement;
+                depth++;
+            }
+        } catch (e) { /* ignore */ }
+        return false;
+    };
+
     const enforce = (video) => {
         if (!video || !(video instanceof HTMLMediaElement) || video[FLAG]) return;
         try {
@@ -126,16 +152,27 @@
 
         const apply = () => {
             try {
-                if (!video.controls) video.controls = true;
+                // 始终解除限制类属性（不影响站点自身控制条），只放开单击/拖动能力
                 if (video.hasAttribute('controlslist')) video.removeAttribute('controlslist');
-                // 清掉常见禁用属性，便于单击/拖动
                 ['disableRemotePlayback', 'disablePictureInPicture'].forEach(attr => {
                     if (video.hasAttribute(attr)) video.removeAttribute(attr);
                 });
+                // 仅当站点没有自己的播放器 UI 时，才强制开启原生 controls，
+                // 否则会与站点自带进度条重叠形成两条进度条。
+                if (!video.controls && !hasCustomControls(video)) {
+                    video.controls = true;
+                }
             } catch (e) { /* ignore */ }
         };
 
         apply();
+        // 站点的自定义控制条可能在视频出现后才异步构建，稍后复核一次，
+        // 若发现已接管则撤销我们强加的原生 controls。
+        [800, 2500].forEach(delay => setTimeout(() => {
+            try {
+                if (video.controls && hasCustomControls(video)) video.controls = false;
+            } catch (e) { /* ignore */ }
+        }, delay));
         try {
             new MutationObserver(apply).observe(video, {
                 attributes: true,
@@ -150,7 +187,9 @@
         root.querySelectorAll && root.querySelectorAll('video').forEach(enforce);
     };
 
-    // 拦截 HTMLMediaElement.prototype.controls 的 setter，防止站点再次关闭
+    // 拦截 HTMLMediaElement.prototype.controls 的 setter。
+    // 仅当站点没有自定义播放器 UI 时才强制保持 true；否则尊重站点的取值，
+    // 避免与站点自带进度条重叠形成两条进度条。
     try {
         const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'controls');
         if (desc && desc.set) {
@@ -159,7 +198,9 @@
                 configurable: true,
                 enumerable: desc.enumerable,
                 get: desc.get,
-                set: function (val) { rawSet.call(this, true); }
+                set: function (val) {
+                    rawSet.call(this, (!val && !hasCustomControls(this)) ? true : val);
+                }
             });
         }
     } catch (e) { /* ignore */ }
@@ -171,7 +212,6 @@
             if (this instanceof HTMLMediaElement && typeof name === 'string') {
                 const lower = name.toLowerCase();
                 if (lower === 'controlslist' || lower === 'disableremoteplayback' || lower === 'disablepictureinpicture') return;
-                if (lower === 'controls') return rawSetAttr.call(this, name, '');
             }
             return rawSetAttr.call(this, name, value);
         };
@@ -574,6 +614,9 @@ const adjustVolume = n => {
         }
     }
 };
+// 获取当前处于原生全屏状态的元素（top layer 只渲染全屏元素子树，
+// 挂在 body 上的提示会被全屏元素盖住，因此需要把提示挂到全屏元素内）。
+const getFsElement = () => d.fullscreenElement || d.webkitFullscreenElement || d.mozFullScreenElement || null;
 let _tipTimer = null;
 const tip = (msg) => {
     if (!msg?.length) return;
@@ -583,6 +626,10 @@ const tip = (msg) => {
         by.appendChild(tipEl);
         $msg = tipEl;
     }
+    // 全屏时把提示挂到全屏元素下，退出全屏则挂回 body，保证任何状态都可见。
+    const fsEl = getFsElement();
+    const target = (fsEl && fsEl.appendChild) ? fsEl : by;
+    if ($msg.parentNode !== target) target.appendChild($msg);
     clearTimeout(_tipTimer);
     $msg.textContent = msg;
     $msg.style.top = '190px';
@@ -623,12 +670,28 @@ if (window.onurlchange === void 0) {
     });
 };
 
+let _fsFillCSSAdded = !1;
 class FullScreen {
     constructor(e) {
+        // 优先对包裹视频的容器全屏，而非裸 <video>。
+        // 因为 <video> 是替换元素、无法渲染子节点，全屏后倍速提示/面板无法叠加显示。
+        // 对容器全屏则可让提示进入 top layer 正常展示。
+        let target = e;
+        if (e instanceof HTMLVideoElement) {
+            const p = e.parentElement;
+            if (p && p !== d.body && p !== d.documentElement && p.requestFullscreen) {
+                target = p;
+                if (!_fsFillCSSAdded) {
+                    _fsFillCSSAdded = !0;
+                    // 容器全屏时让视频填满，避免视频保持原始尺寸
+                    GM_addStyle(':fullscreen video,:-webkit-full-screen video{width:100%!important;height:100%!important;max-height:100%!important;object-fit:contain!important;margin:auto!important}');
+                }
+            }
+        }
         let fn = d.exitFullscreen || d.webkitExitFullscreen || d.mozCancelFullScreen || d.msExitFullscreen || noopFn;
         this.exit = fn.bind(d);
-        fn = e.requestFullscreen || e.webkitRequestFullScreen || e.mozRequestFullScreen || e.msRequestFullScreen || noopFn;
-        this.enter = fn.bind(e);
+        fn = target.requestFullscreen || target.webkitRequestFullScreen || target.mozRequestFullScreen || target.msRequestFullScreen || noopFn;
+        this.enter = fn.bind(target);
     }
     static isFull() {
         return !!(d.fullscreen || d.webkitIsFullScreen || d.mozFullScreen ||
@@ -1565,6 +1628,10 @@ Native controls are forced on for all H5 videos so the timeline can be clicked o
         // 显示/隐藏
         function show() {
             if (!v) return;
+            // 全屏时把面板挂到全屏元素下，否则会被全屏元素（top layer）盖住看不见。
+            const fsEl = d.fullscreenElement || d.webkitFullscreenElement || d.mozFullScreenElement;
+            const target = (fsEl && fsEl.appendChild) ? fsEl : by;
+            if (speedPanel.parentNode !== target) target.appendChild(speedPanel);
             speedPanel.classList.add('show');
             isVisible = true;
             setSpeed(v.playbackRate);

@@ -92,6 +92,10 @@
                 'font-size:15px;transition:top .25s;pointer-events:none;white-space:nowrap';
             d.body.appendChild(el);
         }
+        // 全屏时把提示挂到全屏元素下，否则会被全屏元素（top layer）盖住看不见。
+        const fsEl = d.fullscreenElement || d.webkitFullscreenElement || d.mozFullScreenElement;
+        const target = (fsEl && fsEl.appendChild) ? fsEl : d.body;
+        if (el.parentNode !== target) target.appendChild(el);
         el.textContent = msg;
         clearTimeout(tipTimer);
         el.style.top = '20px';
@@ -103,8 +107,11 @@
         constructor(el) {
             const exit = d.exitFullscreen || d.webkitExitFullscreen || d.mozCancelFullScreen || noopFn;
             this.exit = exit.bind(d);
-            const enter = el.requestFullscreen || el.webkitRequestFullScreen || el.mozRequestFullScreen || noopFn;
-            this.enter = enter.bind(el);
+            // 对包裹视频的容器全屏，而非裸 <video>。<video> 是替换元素无法渲染子节点，
+            // 若对它全屏，倍速提示等挂进去也不会显示；对容器全屏则提示可正常展示。
+            const target = (el && el.tagName === 'VIDEO' && getPlayerContainer(el)) || el;
+            const enter = target.requestFullscreen || target.webkitRequestFullScreen || target.mozRequestFullScreen || noopFn;
+            this.enter = enter.bind(target);
         }
         static isFull() {
             return !!(d.fullscreen || d.webkitIsFullScreen || d.mozFullScreen ||
@@ -800,6 +807,10 @@
         // 显示/隐藏
         function show() {
             if (!v) return;
+            // 全屏时把面板挂到全屏元素下，否则会被全屏元素（top layer）盖住看不见。
+            const fsEl = d.fullscreenElement || d.webkitFullscreenElement || d.mozFullScreenElement;
+            const target = (fsEl && fsEl.appendChild) ? fsEl : d.body;
+            if (speedPanel.parentNode !== target) target.appendChild(speedPanel);
             speedPanel.classList.add('show');
             isVisible = true;
             setSpeed(v.playbackRate);

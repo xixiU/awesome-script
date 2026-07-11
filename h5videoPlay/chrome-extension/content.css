@@ -142,6 +142,16 @@
     z-index: 2147483646 !important;
 }
 
+/* 原生全屏时让容器内视频填满（脚本对容器全屏而非裸 video，避免提示无处叠加）*/
+:fullscreen video,
+:-webkit-full-screen video {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
+    margin: auto !important;
+}
+
 /* 抖音播放器缓存进度条 */
 .xgplayer-progress-cache {
     background-color: green !important;
