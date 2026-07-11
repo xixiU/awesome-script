@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "HTML5视频播放工具",
-    "version": "2.1.3",
+    "version": "2.1.4",
     "description": "视频快捷键控制 + 实时字幕翻译。支持15+主流视频网站，iframe支持，播放器框架自动识别。",
     "permissions": [
         "activeTab",

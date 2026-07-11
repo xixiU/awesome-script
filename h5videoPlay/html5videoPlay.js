@@ -6,7 +6,7 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.1.3
+// @version    2.1.4
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -150,6 +150,12 @@
             Object.defineProperty(video, FLAG, { value: true, configurable: false, enumerable: false, writable: false });
         } catch (e) { video[FLAG] = true; }
 
+        // 记录站点主动关闭 controls 的次数。
+        // 若超过阈值，说明站点在自主管理控制条显示/隐藏（如鼠标离开自动隐藏），
+        // 此时停止强制恢复，避免进度条永远无法隐藏。
+        let disableAttempts = 0;
+        const MAX_DISABLE = 3;
+
         const apply = () => {
             try {
                 // 始终解除限制类属性（不影响站点自身控制条），只放开单击/拖动能力
@@ -157,9 +163,10 @@
                 ['disableRemotePlayback', 'disablePictureInPicture'].forEach(attr => {
                     if (video.hasAttribute(attr)) video.removeAttribute(attr);
                 });
-                // 仅当站点没有自己的播放器 UI 时，才强制开启原生 controls，
-                // 否则会与站点自带进度条重叠形成两条进度条。
+                // 仅当站点没有自己的播放器 UI 且站点未反复关闭 controls 时，才强制开启。
                 if (!video.controls && !hasCustomControls(video)) {
+                    if (disableAttempts >= MAX_DISABLE) return; // 站点在自主管理，放手
+                    disableAttempts++;
                     video.controls = true;
                 }
             } catch (e) { /* ignore */ }
@@ -186,24 +193,6 @@
         if (root.tagName === 'VIDEO') enforce(root);
         root.querySelectorAll && root.querySelectorAll('video').forEach(enforce);
     };
-
-    // 拦截 HTMLMediaElement.prototype.controls 的 setter。
-    // 仅当站点没有自定义播放器 UI 时才强制保持 true；否则尊重站点的取值，
-    // 避免与站点自带进度条重叠形成两条进度条。
-    try {
-        const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'controls');
-        if (desc && desc.set) {
-            const rawSet = desc.set;
-            Object.defineProperty(HTMLMediaElement.prototype, 'controls', {
-                configurable: true,
-                enumerable: desc.enumerable,
-                get: desc.get,
-                set: function (val) {
-                    rawSet.call(this, (!val && !hasCustomControls(this)) ? true : val);
-                }
-            });
-        }
-    } catch (e) { /* ignore */ }
 
     // 拦截 setAttribute，过滤 controlslist 类属性
     try {
