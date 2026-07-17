@@ -329,7 +329,7 @@
                     return;
                 }
 
-                const { prompt, temperature = 0.7, maxTokens = 4096 } = opts;
+                const { prompt, temperature = 0.7, maxTokens = 8182 } = opts;
                 // system 优先级：调用时传入 > 配置中的 aiSystemPrompt
                 let system = opts.system;
                 if (system === undefined) {
