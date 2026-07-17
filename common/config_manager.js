@@ -2,7 +2,7 @@
 // @name        Common Configuration Manager
 // @name:zh-CN  通用配置管理模块
 // @namespace    http://tampermonkey.net/
-// @version      1.2.0
+// @version      1.2.1
 // @description  Provides common configuration management with i18n support, dynamic config items, visual config panel, and built-in LLM integration (OpenAI/Anthropic/Ollama)
 // @description:zh-CN  提供通用的配置管理功能，支持国际化、动态配置项、可视化配置界面，以及内置的 LLM 集成（OpenAI/Anthropic/Ollama）
 // @author       xixiu
@@ -118,25 +118,25 @@
         static DEFAULT_LLM_I18N = {
             en: {
                 llmApiFormatLabel: 'API Format',
-                llmApiFormatHelp: 'Choose API protocol: OpenAI, Anthropic, or Ollama',
+                llmApiFormatHelp: 'Choose API protocol: OpenAI, Anthropic, Ollama, or Chrome Gemini (built-in)',
                 llmBaseUrlLabel: 'LLM API Base URL',
-                llmBaseUrlHelp: 'LLM API base URL. OpenAI: https://api.openai.com/v1, Anthropic: https://api.anthropic.com, Ollama: http://localhost:11434',
+                llmBaseUrlHelp: 'LLM API base URL. OpenAI: https://api.openai.com/v1, Anthropic: https://api.anthropic.com, Ollama: http://localhost:11434, Chrome Gemini: not required',
                 llmApiKeyLabel: 'API Key',
-                llmApiKeyHelp: 'Your LLM API Key (not required for Ollama)',
+                llmApiKeyHelp: 'Your LLM API Key (not required for Ollama and Chrome Gemini)',
                 llmModelLabel: 'AI Model',
-                llmModelHelp: 'Model name (e.g., gpt-4, claude-sonnet-4-5, llama3)',
+                llmModelHelp: 'Model name (e.g., gpt-4, claude-sonnet-4-5, llama3, gemini-nano)',
                 llmSystemPromptLabel: 'System Prompt',
                 llmSystemPromptHelp: 'Default system prompt sent to the model (can be overridden per call). Leave empty to disable.'
             },
             zh: {
                 llmApiFormatLabel: '消息API格式',
-                llmApiFormatHelp: '选择API协议格式：OpenAI、Anthropic 或 Ollama',
+                llmApiFormatHelp: '选择API协议格式：OpenAI、Anthropic、Ollama 或 Chrome Gemini（浏览器内置）',
                 llmBaseUrlLabel: 'LLM API地址',
-                llmBaseUrlHelp: 'LLM API基础地址。OpenAI：https://api.openai.com/v1，Anthropic：https://api.anthropic.com，Ollama：http://localhost:11434',
+                llmBaseUrlHelp: 'LLM API基础地址。OpenAI：https://api.openai.com/v1，Anthropic：https://api.anthropic.com，Ollama：http://localhost:11434，Chrome Gemini：无需配置',
                 llmApiKeyLabel: 'API密钥',
-                llmApiKeyHelp: '你的LLM API Key（Ollama 不需要）',
+                llmApiKeyHelp: '你的LLM API Key（Ollama 和 Chrome Gemini 不需要）',
                 llmModelLabel: 'AI模型',
-                llmModelHelp: '模型名称（如：gpt-4, claude-sonnet-4-5, llama3）',
+                llmModelHelp: '模型名称（如：gpt-4, claude-sonnet-4-5, llama3, gemini-nano）',
                 llmSystemPromptLabel: '系统提示词',
                 llmSystemPromptHelp: '默认发送给模型的系统提示词（可在调用时覆盖）。留空则不使用。'
             }
@@ -198,7 +198,8 @@
                     options: [
                         { value: 'openai', label: 'OpenAI' },
                         { value: 'anthropic', label: 'Anthropic' },
-                        { value: 'ollama', label: 'Ollama' }
+                        { value: 'ollama', label: 'Ollama' },
+                        { value: 'chrome-gemini', label: 'Chrome Gemini' }
                     ],
                     help: getText('llmApiFormatHelp')
                 },
@@ -286,13 +287,13 @@
         isLLMReady() {
             const apiFormat = (this.get('aiApiFormat') || 'openai').toLowerCase();
             const apiKey = this.get('aiApiKey');
-            // Ollama 不需要 API Key
-            if (apiFormat === 'ollama') return true;
+            // Ollama 和 Chrome Gemini 不需要 API Key
+            if (apiFormat === 'ollama' || apiFormat === 'chrome-gemini') return true;
             return !!apiKey;
         }
 
         /**
-         * 统一的 LLM 聊天请求方法，支持 OpenAI、Anthropic、Ollama 三种格式
+         * 统一的 LLM 聊天请求方法，支持 OpenAI、Anthropic、Ollama、Chrome Gemini 四种格式
          * @param {Object} opts
          * @param {string} opts.prompt - 用户消息内容
          * @param {string} [opts.system] - 系统提示词（可选，覆盖 aiSystemPrompt 配置）
@@ -301,17 +302,29 @@
          * @returns {Promise<string>} - 返回模型生成的文本内容
          */
         callLLM(opts) {
-            return new Promise((resolve, reject) => {
+            return new Promise(async (resolve, reject) => {
                 const apiFormat = (this.get('aiApiFormat') || 'openai').toLowerCase();
                 const baseUrl = (this.get('aiBaseUrl') || '').replace(/\/+$/, '');
                 const apiKey = this.get('aiApiKey');
-                const model = this.get('aiModel') || (apiFormat === 'anthropic' ? 'claude-sonnet-4-5' : apiFormat === 'ollama' ? 'llama3' : 'gpt-3.5-turbo');
+                const model = this.get('aiModel') || (apiFormat === 'anthropic' ? 'claude-sonnet-4-5' : apiFormat === 'ollama' ? 'llama3' : apiFormat === 'chrome-gemini' ? 'gemini-nano' : 'gpt-3.5-turbo');
+
+                // Chrome Gemini 特殊处理
+                if (apiFormat === 'chrome-gemini') {
+                    try {
+                        const result = await this._callChromeGemini(opts);
+                        resolve(result);
+                        return;
+                    } catch (e) {
+                        reject(e);
+                        return;
+                    }
+                }
 
                 if (!baseUrl) {
                     reject(new Error('LLM API base URL is not configured'));
                     return;
                 }
-                if (apiFormat !== 'ollama' && !apiKey) {
+                if (apiFormat !== 'ollama' && apiFormat !== 'chrome-gemini' && !apiKey) {
                     reject(new Error('LLM API Key is not configured'));
                     return;
                 }
@@ -422,6 +435,67 @@
                     }
                 });
             });
+        }
+
+        /**
+         * Chrome Gemini API 调用（浏览器内置 AI）
+         * @private
+         * @param {Object} opts - 调用参数
+         * @returns {Promise<string>} - 返回生成的文本
+         */
+        async _callChromeGemini(opts) {
+            const { prompt, temperature = 0.7, maxTokens = 4096 } = opts;
+
+            // system 优先级：调用时传入 > 配置中的 aiSystemPrompt
+            let system = opts.system;
+            if (system === undefined) {
+                const configuredPrompt = this.get('aiSystemPrompt');
+                if (configuredPrompt && typeof configuredPrompt === 'string' && configuredPrompt.trim()) {
+                    system = configuredPrompt;
+                }
+            }
+
+            try {
+                // 检查 Chrome AI API 是否可用
+                if (!window.ai || !window.ai.languageModel) {
+                    throw new Error('Chrome AI API 不可用。请确保使用 Chrome Canary 127+ 并启用 Prompt API 实验性功能。\n启用方法：chrome://flags/#prompt-api-for-gemini-nano');
+                }
+
+                // 检查 Gemini Nano 是否可用
+                const capabilities = await window.ai.languageModel.capabilities();
+                console.log('[ConfigManager] Chrome Gemini capabilities:', capabilities);
+
+                if (capabilities.available === 'no') {
+                    throw new Error('Gemini Nano 模型不可用。请在 chrome://components/ 中下载 "Optimization Guide On Device Model"');
+                }
+
+                // 如果模型需要下载，提示用户
+                if (capabilities.available === 'after-download') {
+                    console.warn('[ConfigManager] Gemini Nano 需要下载，正在创建会话以触发下载...');
+                }
+
+                // 创建会话
+                const session = await window.ai.languageModel.create({
+                    temperature: temperature,
+                    topK: Math.min(Math.floor(maxTokens / 100), 40), // Chrome AI 使用 topK 而非 maxTokens
+                    systemPrompt: system || undefined
+                });
+
+                console.log('[ConfigManager] Chrome Gemini session created');
+
+                // 调用模型生成文本
+                const result = await session.prompt(prompt);
+
+                // 清理会话
+                session.destroy();
+
+                console.log('[ConfigManager] Chrome Gemini response:', result);
+                return result || '';
+
+            } catch (error) {
+                console.error('[ConfigManager] Chrome Gemini 调用失败:', error);
+                throw new Error(`Chrome Gemini 调用失败: ${error.message}`);
+            }
         }
 
         // 初始化配置界面
