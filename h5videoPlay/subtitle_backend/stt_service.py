@@ -79,8 +79,9 @@ class STTService:
         # 自动检测设备
         if "device" not in model_config or model_config["device"] == "auto":
             if system == "Darwin":
-                logger.info("💻 系统: macOS (Apple Silicon)")
-                model_config["device"] = "mps"
+                # faster-whisper 基于 CTranslate2，不支持 mps，macOS 只能用 cpu
+                logger.info("💻 系统: macOS (CPU，faster-whisper 不支持 mps)")
+                model_config["device"] = "cpu"
                 model_config["compute_type"] = "int8"
                 model_config["cpu_threads"] = 4
             elif system == "Windows":

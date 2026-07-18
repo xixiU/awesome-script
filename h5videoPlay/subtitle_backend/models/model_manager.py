@@ -14,12 +14,20 @@ logger = logging.getLogger(__name__)
 
 class ModelManager:
     """模型管理器"""
-    
+
     # 注册的模型类
     _model_classes: Dict[str, Type[BaseSpeechToTextModel]] = {
         'whisper': WhisperSTTModel,
         'siliconflow': SiliconFlowSTTModel,
     }
+
+    # mlx_whisper 依赖 Apple MLX（仅 Apple Silicon 可用），非 Mac 环境导入会失败，
+    # 故延迟按需注册，避免在其它平台上 import 直接崩溃。
+    try:
+        from .mlx_whisper_model import MLXWhisperSTTModel
+        _model_classes['mlx_whisper'] = MLXWhisperSTTModel
+    except Exception as _e:  # pragma: no cover
+        logger.info(f"ℹ️ mlx_whisper 不可用（非 Apple Silicon 或未安装 mlx-whisper）: {_e}")
     
     @classmethod
     def register_model(cls, name: str, model_class: Type[BaseSpeechToTextModel]):

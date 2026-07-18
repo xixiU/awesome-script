@@ -11,4 +11,6 @@ aiofiles
 sounddevice
 soundfile
 requests
+# Apple Silicon (macOS arm64) GPU 加速可选依赖，其它平台可忽略
+mlx-whisper; sys_platform == "darwin" and platform_machine == "arm64"
 

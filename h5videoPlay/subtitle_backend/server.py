@@ -64,11 +64,12 @@ class SubtitleService:
         """初始化 Whisper 模型"""
         try:
             logger.info(f"正在加载 Whisper 模型: {self.model_size}")
-            # 使用 CPU，如果有 GPU 可以改为 "cuda"
+            # device="auto" 自动选择 CPU/GPU；compute_type="int8" 在 CPU 上更快且省内存，
+            # 同时避免 float16 在不支持的设备上被回退时的告警。
             self.model = WhisperModel(
                 self.model_size,
-                # device="cpu",
-                #compute_type="int8"  # 使用 int8 量化以提高速度
+                device="auto",
+                compute_type="int8"
             )
             logger.info("Whisper 模型加载成功")
         except Exception as e:
@@ -209,6 +210,10 @@ class SubtitleService:
 
 
 # 初始化服务
+# 经实测（macOS CPU 场景）：distil-large-v3 在英语/日语/俄语上均明显优于
+# large-v3-turbo（后者层数少+贪心解码，常几乎转写不出内容）。故采用 distil-large-v3。
+# 说明：distil-large-v3 官方标注英语优化，但保留多语言 tokenizer，实测俄语等也可用。
+# 备选：deepdml/faster-whisper-large-v3-turbo-ct2 / large-v3（多语言，但本场景实测更差）。
 subtitle_service = SubtitleService(model_size="distil-large-v3")
 
 

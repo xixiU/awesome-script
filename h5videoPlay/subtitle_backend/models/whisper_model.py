@@ -32,6 +32,9 @@ class WhisperSTTModel(BaseSpeechToTextModel):
             # 自动检测设备配置
             system = platform.system()
             if system == "Darwin":
+                # faster-whisper(CTranslate2) 不支持 mps，macOS 一律回退 cpu，防止上游误传 mps 导致加载失败
+                if self.device == "mps":
+                    self.device = "cpu"
                 if self.model_size == "auto":
                     self.model_size = "small"
             elif system == "Windows":
