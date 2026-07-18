@@ -66,6 +66,34 @@
     const u = getMainDomain(host);
     let v = null;
 
+    // 设置播放速率并锁定，抵御部分站点（如 pornhub）的 ratechange 拉回逻辑。
+    // 这些站点会在外部修改 playbackRate 后约 300ms 内把它强制改回内部记录值，
+    // 导致"倍速只能按一次、按多次不变"。这里在 video 实例上安装守卫 getter/setter：
+    // 脚本设定的期望值记录在 _gmDesiredRate，站点写入的其它值都会被改回期望值。
+    const RATE_DESC = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
+    function setPlaybackRate(video, rate) {
+        if (!video) return;
+        rate = +rate.toFixed(2);
+        if (!video._gmRateGuard && RATE_DESC && RATE_DESC.get && RATE_DESC.set) {
+            try {
+                Object.defineProperty(video, '_gmRateGuard', { value: true, writable: false, enumerable: false });
+                Object.defineProperty(video, 'playbackRate', {
+                    configurable: true,
+                    enumerable: true,
+                    get() { return RATE_DESC.get.call(this); },
+                    set(val) {
+                        const target = (this._gmDesiredRate != null && +val.toFixed(2) !== this._gmDesiredRate)
+                            ? this._gmDesiredRate : val;
+                        RATE_DESC.set.call(this, target);
+                    }
+                });
+            } catch (e) { /* ignore，退回普通赋值 */ }
+        }
+        video._gmDesiredRate = rate;
+        if (RATE_DESC && RATE_DESC.set) RATE_DESC.set.call(video, rate);
+        else video.playbackRate = rate;
+    }
+
     // 配置对象
     const cfg = {
         isLive: false,
@@ -206,7 +234,7 @@
     // ===== 速度 / 音量 =====
     function adjustRate(n) {
         if (!v) return;
-        v.playbackRate = Math.min(16, Math.max(0.1, +(v.playbackRate + n).toFixed(2)));
+        setPlaybackRate(v, Math.min(16, Math.max(0.1, +(v.playbackRate + n).toFixed(2))));
         showTip('速度 ' + v.playbackRate + 'x');
     }
 
@@ -342,8 +370,8 @@
     const actList = new Map([
         [90, () => {
             if (!v) return;
-            v.playbackRate = (v.playbackRate === 1 || v.playbackRate === 0)
-                ? (+localStorage.mvPlayRate || 1.3) : 1;
+            setPlaybackRate(v, (v.playbackRate === 1 || v.playbackRate === 0)
+                ? (+localStorage.mvPlayRate || 1.3) : 1);
             showTip('速度 ' + v.playbackRate + 'x');
         }],
         [88, () => adjustRate(-0.1)],
@@ -645,7 +673,7 @@
 
         // 记忆播放速度
         const savedRate = +localStorage.mvPlayRate;
-        if (savedRate && savedRate !== 1) v.playbackRate = savedRate;
+        if (savedRate && savedRate !== 1) setPlaybackRate(v, savedRate);
         v.addEventListener('ratechange', () => {
             if (v.playbackRate && v.playbackRate !== 1) localStorage.mvPlayRate = v.playbackRate;
         });
@@ -841,7 +869,7 @@
         function setSpeed(s) {
             if (!v) return;
             s = Math.max(0.25, Math.min(4, s));
-            v.playbackRate = s;
+            setPlaybackRate(v, s);
             const pct = (s - 0.25) / 3.75 * 100;
             progress.style.width = pct + '%';
             speedValue.textContent = s.toFixed(2) + 'x';

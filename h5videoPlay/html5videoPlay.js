@@ -6,7 +6,7 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.1.5
+// @version    2.1.6
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -654,11 +654,44 @@ const getMainDomain = host => {
     return a[i];
 };
 const inRange = (n, min, max) => Math.max(min, n) == Math.min(n, max);
+
+// 设置播放速率并锁定，抵御部分站点（如 pornhub）的 ratechange 拉回逻辑。
+// 这些站点会在外部修改 playbackRate 后约 300ms 内把它强制改回内部记录值，
+// 导致"倍速只能按一次、按多次不变"。这里在 video 实例上安装守卫 getter/setter：
+// - 脚本设定的期望值记录在 _gmDesiredRate
+// - 站点写入的任何其它值都会被改回期望值
+// 期望值本身仍走原生 setter 生效，且触发 ratechange 让站点 UI 同步。
+const RATE_DESC = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
+const setPlaybackRate = (video, rate) => {
+    rate = +rate.toFixed(2);
+    if (!video) return;
+    // 首次对该元素设速时安装守卫
+    if (!video._gmRateGuard && RATE_DESC && RATE_DESC.get && RATE_DESC.set) {
+        try {
+            Object.defineProperty(video, '_gmRateGuard', { value: true, writable: false, enumerable: false });
+            Object.defineProperty(video, 'playbackRate', {
+                configurable: true,
+                enumerable: true,
+                get() { return RATE_DESC.get.call(this); },
+                set(val) {
+                    // 站点拉回：写入值与期望值不一致时，强制改回期望值
+                    const target = (this._gmDesiredRate != null && +val.toFixed(2) !== this._gmDesiredRate)
+                        ? this._gmDesiredRate : val;
+                    RATE_DESC.set.call(this, target);
+                }
+            });
+        } catch (e) { /* ignore，退回普通赋值 */ }
+    }
+    video._gmDesiredRate = rate;
+    if (RATE_DESC && RATE_DESC.set) RATE_DESC.set.call(video, rate);
+    else video.playbackRate = rate;
+};
+
 const adjustRate = n => {
     n += v.playbackRate;
-    if (n < 0.1) v.playbackRate = .1;
-    else if (n > 16) v.playbackRate = 16;
-    else v.playbackRate = +n.toFixed(2);
+    if (n < 0.1) n = .1;
+    else if (n > 16) n = 16;
+    setPlaybackRate(v, n);
 };
 const adjustVolume = n => {
     n += v.volume;
@@ -910,10 +943,9 @@ async function toggleSystemAudioSubtitle() {
 const actList = new Map();
 actList.set(90, _ => { //按键Z: 切换加速状态
     if (v.playbackRate == 1 || v.playbackRate == 0) {
-        v.playbackRate = +localStorage.mvPlayRate || 1.3;
+        setPlaybackRate(v, +localStorage.mvPlayRate || 1.3);
     } else {
-        // localStorage.mvPlayRate = v.playbackRate;
-        v.playbackRate = 1;
+        setPlaybackRate(v, 1);
     }
 })
     .set(88, adjustRate.bind(null, -0.1)) //按键X
@@ -1032,7 +1064,7 @@ const app = {
                 v = e;
                 cfg.btnPlay = cfg.btnNext = cfg.btnFP = cfg.btnFS = _fs = _fp = null;
                 if (!cfg.isLive && videoConfigManager.get('remberRate')) {
-                    v.playbackRate = +localStorage.mvPlayRate || 1;
+                    setPlaybackRate(v, +localStorage.mvPlayRate || 1);
                     v.addEventListener('ratechange', ev => {
                         if (v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
                     });
@@ -1146,7 +1178,7 @@ const app = {
         window.addEventListener('urlchange', async (info) => { //TM event: info.url
             await sleep(990);
             this.checkMV();
-            if (videoConfigManager.get('remberRate')) v.playbackRate = +localStorage.mvPlayRate || 1;
+            if (videoConfigManager.get('remberRate')) setPlaybackRate(v, +localStorage.mvPlayRate || 1);
             bus.$emit('urlchange');
         });
         if (top != self) {
@@ -1163,7 +1195,7 @@ const app = {
         v.addEventListener('canplay', ev => {
             if (cfg.isLive) for (const k of [37, 1061, 39, 1063, 67, 77, 78, 88, 90]) actList.delete(k);
             else {
-                if (videoConfigManager.get('remberRate')) v.playbackRate = +localStorage.mvPlayRate || 1;
+                if (videoConfigManager.get('remberRate')) setPlaybackRate(v, +localStorage.mvPlayRate || 1);
                 v.addEventListener('ratechange', ev => {
                     if (videoConfigManager.get('remberRate') && v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
                 });
@@ -1680,7 +1712,7 @@ Native controls are forced on for all H5 videos so the timeline can be clicked o
         function setSpeed(s) {
             if (!v) return;
             s = Math.max(0.25, Math.min(4, s));
-            v.playbackRate = s;
+            setPlaybackRate(v, s);
             const pct = (s - 0.25) / 3.75 * 100;
             progress.style.width = pct + '%';
             speedValue.textContent = s.toFixed(2) + 'x';
