@@ -546,7 +546,6 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="系统音频实时字幕服务")
     parser.add_argument("--model", type=str, default="auto", help="模型大小（已废弃，使用配置文件）")
-    parser.add_argument("--device", type=str, default="cpu", help="设备（已废弃，使用配置文件）")
     parser.add_argument("--source-lang", type=str, default=None, help="源语言")
     parser.add_argument("--target-lang", type=str, default="zh-CN", help="目标语言")
     parser.add_argument("--chunk-duration", type=float, default=2.0, help="音频块时长（秒）")
