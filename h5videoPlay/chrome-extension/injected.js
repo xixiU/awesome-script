@@ -183,9 +183,17 @@
             this.exit = exit.bind(d);
             // 对包裹视频的容器全屏，而非裸 <video>。<video> 是替换元素无法渲染子节点，
             // 若对它全屏，倍速提示等挂进去也不会显示；对容器全屏则提示可正常展示。
-            const target = (el && el.tagName === 'VIDEO' && getPlayerContainer(el)) || el;
-            const enter = target.requestFullscreen || target.webkitRequestFullScreen || target.mozRequestFullScreen || noopFn;
-            this.enter = enter.bind(target);
+            // 仅当目标是"我们找的容器"（而非 video 本身）时才需要填充样式，
+            // 且用 gm-fs-scope 类把填充样式限定在本容器内，避免污染站点自身的原生全屏（如 YouTube 用 JS 精确定位视频）。
+            const container = (el && el.tagName === 'VIDEO' && getPlayerContainer(el)) || el;
+            this._target = container;
+            this._needFill = !!(el && el.tagName === 'VIDEO' && container && container !== el);
+            const enter = container.requestFullscreen || container.webkitRequestFullScreen || container.mozRequestFullScreen || noopFn;
+            this._enterRaw = enter.bind(container);
+        }
+        enter() {
+            if (this._needFill && this._target) this._target.classList.add('gm-fs-scope');
+            this._enterRaw();
         }
         static isFull() {
             return !!(d.fullscreen || d.webkitIsFullScreen || d.mozFullScreen ||
@@ -230,6 +238,13 @@
     }
 
     let _fs = null, _fp = null;
+
+    // 退出原生全屏时清理填充作用域类，避免残留影响非全屏布局
+    d.addEventListener('fullscreenchange', () => {
+        if (!(d.fullscreenElement || d.webkitFullscreenElement)) {
+            d.querySelectorAll('.gm-fs-scope').forEach(el => el.classList.remove('gm-fs-scope'));
+        }
+    });
 
     // ===== 速度 / 音量 =====
     function adjustRate(n) {

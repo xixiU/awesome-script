@@ -773,22 +773,31 @@ class FullScreen {
         // 优先对包裹视频的容器全屏，而非裸 <video>。
         // 因为 <video> 是替换元素、无法渲染子节点，全屏后倍速提示/面板无法叠加显示。
         // 对容器全屏则可让提示进入 top layer 正常展示。
-        let target = e;
+        let target = e, needFill = !1;
         if (e instanceof HTMLVideoElement) {
             const p = e.parentElement;
             if (p && p !== d.body && p !== d.documentElement && p.requestFullscreen) {
                 target = p;
+                needFill = !0;
                 if (!_fsFillCSSAdded) {
                     _fsFillCSSAdded = !0;
-                    // 容器全屏时让视频填满，避免视频保持原始尺寸
-                    GM_addStyle(':fullscreen video,:-webkit-full-screen video{width:100%!important;height:100%!important;max-height:100%!important;object-fit:contain!important;margin:auto!important}');
+                    // 容器全屏时让视频填满。仅作用于我们打了 gm-fs-scope 标记的容器，
+                    // 绝不影响站点自身的原生全屏（如 YouTube 用 JS 精确定位 video，
+                    // 若被强制改写 width/height/left/top 会导致全屏画面变黑）。
+                    GM_addStyle(':fullscreen.gm-fs-scope>video,:-webkit-full-screen.gm-fs-scope>video,:fullscreen .gm-fs-scope>video{width:100%!important;height:100%!important;max-height:100%!important;object-fit:contain!important;margin:auto!important}');
                 }
             }
         }
+        this._target = target;
+        this._needFill = needFill;
         let fn = d.exitFullscreen || d.webkitExitFullscreen || d.mozCancelFullScreen || d.msExitFullscreen || noopFn;
         this.exit = fn.bind(d);
         fn = target.requestFullscreen || target.webkitRequestFullScreen || target.mozRequestFullScreen || target.msRequestFullScreen || noopFn;
-        this.enter = fn.bind(target);
+        this._enterRaw = fn.bind(target);
+    }
+    enter() {
+        if (this._needFill && this._target) this._target.classList.add('gm-fs-scope');
+        this._enterRaw();
     }
     static isFull() {
         return !!(d.fullscreen || d.webkitIsFullScreen || d.mozFullScreen ||
@@ -798,6 +807,13 @@ class FullScreen {
         FullScreen.isFull() ? this.exit() : this.enter();
     }
 }
+
+// 退出原生全屏时清理填充作用域类，避免残留影响非全屏布局
+d.addEventListener('fullscreenchange', () => {
+    if (!(d.fullscreenElement || d.webkitFullscreenElement || d.mozFullScreenElement)) {
+        d.querySelectorAll('.gm-fs-scope').forEach(el => el.classList.remove('gm-fs-scope'));
+    }
+});
 
 //万能网页全屏, 参考了：https://github.com/gooyie/ykh5p
 class FullPage {
