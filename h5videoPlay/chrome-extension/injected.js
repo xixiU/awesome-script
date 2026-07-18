@@ -6,6 +6,52 @@
     if (window.__h5videoInjected) return;
     window.__h5videoInjected = true;
 
+    // ===== 反失焦暂停 =====
+    // 部分网站监听 visibilitychange / blur / pagehide 等事件，在页面失焦
+    // （鼠标移出窗口、切到其他标签/应用）时强制暂停视频。此保护层伪装页面
+    // 始终可见，并拦截失焦类事件的监听注册。可通过 localStorage 针对站点关闭：
+    // localStorage.h5video_antiPause_off = '1'
+    (function () {
+        try {
+            if (localStorage.getItem('h5video_antiPause_off') === '1') return;
+        } catch (e) { /* ignore */ }
+
+        const forceVisible = (obj, prop, value) => {
+            try {
+                Object.defineProperty(obj, prop, { configurable: true, get: () => value });
+            } catch (e) { /* ignore */ }
+        };
+        forceVisible(Document.prototype, 'hidden', false);
+        forceVisible(Document.prototype, 'webkitHidden', false);
+        forceVisible(Document.prototype, 'visibilityState', 'visible');
+        forceVisible(Document.prototype, 'webkitVisibilityState', 'visible');
+        forceVisible(document, 'hidden', false);
+        forceVisible(document, 'visibilityState', 'visible');
+
+        const BLOCKED = new Set(['visibilitychange', 'webkitvisibilitychange', 'mozvisibilitychange', 'msvisibilitychange', 'blur', 'pagehide', 'freeze']);
+        const shouldBlock = (target, type) => {
+            const t = typeof type === 'string' ? type.toLowerCase() : '';
+            if (!BLOCKED.has(t)) return false;
+            return target === document || target === window;
+        };
+        try {
+            const rawAdd = EventTarget.prototype.addEventListener;
+            EventTarget.prototype.addEventListener = function (type, listener, opts) {
+                if (shouldBlock(this, type)) return;
+                return rawAdd.call(this, type, listener, opts);
+            };
+        } catch (e) { /* ignore */ }
+
+        ['onvisibilitychange', 'onwebkitvisibilitychange', 'onblur', 'onpagehide', 'onfreeze'].forEach(prop => {
+            try {
+                Object.defineProperty(document, prop, { configurable: true, get: () => null, set: () => {} });
+            } catch (e) { /* ignore */ }
+            try {
+                Object.defineProperty(window, prop, { configurable: true, get: () => null, set: () => {} });
+            } catch (e) { /* ignore */ }
+        });
+    })();
+
     const d = document;
     const host = location.host;
     const path = location.pathname;

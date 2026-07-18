@@ -6,7 +6,7 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.1.4
+// @version    2.1.5
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -222,6 +222,81 @@
     };
     if (document.documentElement) startObserve();
     else document.addEventListener('DOMContentLoaded', startObserve, { once: true });
+})();
+
+// ===== 反失焦暂停（早期注入）=====
+// 部分网站监听 visibilitychange / blur / pagehide 等事件，在页面失焦
+// （鼠标移出窗口、切到其他标签/应用）时强制暂停视频。此保护层：
+// 1. 伪装 document.hidden=false、visibilityState='visible'，让站点以为页面始终可见
+// 2. 拦截 visibilitychange / webkitvisibilitychange / blur / pagehide / freeze 事件监听，
+//    不把这些事件派发给站点脚本（避免其失焦暂停回调被触发）
+// 默认开启，可通过油猴菜单针对个别网站关闭。
+(function () {
+    'use strict';
+    if (typeof window === 'undefined' || window.__html5VideoAntiPauseProtected) return;
+    window.__html5VideoAntiPauseProtected = true;
+
+    const STORE_KEY = 'gm_h5_antiPauseDisabled';
+    let disabled = false;
+    try {
+        disabled = (typeof GM_getValue === 'function') && GM_getValue(STORE_KEY, {})[location.hostname] === true;
+    } catch (e) { /* ignore */ }
+    if (disabled) return;
+
+    // 1) 伪装页面可见性状态
+    const forceVisible = (obj, prop, value) => {
+        try {
+            Object.defineProperty(obj, prop, { configurable: true, get: () => value });
+        } catch (e) { /* ignore */ }
+    };
+    forceVisible(Document.prototype, 'hidden', false);
+    forceVisible(Document.prototype, 'webkitHidden', false);
+    forceVisible(Document.prototype, 'visibilityState', 'visible');
+    forceVisible(Document.prototype, 'webkitVisibilityState', 'visible');
+    // 有些实现属性挂在实例上，覆盖到 document 自身
+    forceVisible(document, 'hidden', false);
+    forceVisible(document, 'visibilityState', 'visible');
+
+    // 2) 拦截失焦类事件的监听注册，阻断站点的失焦暂停回调
+    const BLOCKED = new Set(['visibilitychange', 'webkitvisibilitychange', 'mozvisibilitychange', 'msvisibilitychange', 'blur', 'pagehide', 'freeze']);
+    // window 上的 blur 需拦截；但 video/元素自身的 blur 是无害的 UI 焦点事件，故仅拦 document/window。
+    const shouldBlock = (target, type) => {
+        const t = typeof type === 'string' ? type.toLowerCase() : '';
+        if (!BLOCKED.has(t)) return false;
+        // 仅拦截挂在 document / window 上的（站点通常在此监听失焦）
+        return target === document || target === window;
+    };
+    try {
+        const rawAdd = EventTarget.prototype.addEventListener;
+        EventTarget.prototype.addEventListener = function (type, listener, opts) {
+            if (shouldBlock(this, type)) return; // 吞掉注册
+            return rawAdd.call(this, type, listener, opts);
+        };
+    } catch (e) { /* ignore */ }
+
+    // 3) 拦截 onvisibilitychange / onblur / onpagehide 属性赋值
+    ['onvisibilitychange', 'onwebkitvisibilitychange', 'onblur', 'onpagehide', 'onfreeze'].forEach(prop => {
+        try {
+            Object.defineProperty(document, prop, { configurable: true, get: () => null, set: () => {} });
+        } catch (e) { /* ignore */ }
+        try {
+            Object.defineProperty(window, prop, { configurable: true, get: () => null, set: () => {} });
+        } catch (e) { /* ignore */ }
+    });
+
+    // 4) 提供菜单开关：针对当前站点关闭本保护（刷新后生效）
+    try {
+        if (typeof GM_registerMenuCommand === 'function') {
+            GM_registerMenuCommand('❌ 本站关闭"反失焦暂停"（刷新生效）', () => {
+                try {
+                    const map = GM_getValue(STORE_KEY, {});
+                    map[location.hostname] = true;
+                    GM_setValue(STORE_KEY, map);
+                    location.reload();
+                } catch (e) { /* ignore */ }
+            });
+        }
+    } catch (e) { /* ignore */ }
 })();
 
 // ===== Trusted Types 辅助函数 =====
