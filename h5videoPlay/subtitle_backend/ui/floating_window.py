@@ -204,9 +204,11 @@ class FloatingWindow:
                       activebackground="#1a1a1a", activeforeground="#ffffff").pack(side=tk.LEFT, padx=10)
         
         self.is_running = True
-        
+
         # 启动 UI 轮询循环
         self._process_ui_queue()
+        # 启动置顶保持循环（独立定时器，避免和 UI 更新绑在一起）
+        self._ensure_topmost()
 
     # --- 边缘拖拽调整大小逻辑 ---
     def _on_root_motion(self, event):
@@ -288,7 +290,7 @@ class FloatingWindow:
                 latest = self.ui_queue.get_nowait()
         except queue.Empty:
             pass
-        
+
         if latest:
             # 兼容旧的队列数据格式 (org, trans) 或 (org, trans, latencies)
             if len(latest) == 3:
@@ -297,20 +299,26 @@ class FloatingWindow:
                 org, trans = latest
                 latencies = {}
             self._update_ui(org, trans, latencies)
-        
-        # 周期性强制置顶 (解决全屏下被覆盖的问题)
+
+        # 每 100ms 轮询一次 UI 队列
+        if self.is_running and self.root:
+            self.root.after(100, self._process_ui_queue)
+
+    def _ensure_topmost(self):
+        """
+        周期性确保窗口置顶（解决全屏应用下被覆盖的问题）。
+        从 UI 队列处理中分离出来，降低调用频率，避免频繁 lift/attributes
+        打断用户操作控件（如下拉框展开时会被打断导致闪烁）。
+        """
         if self.root:
             try:
                 self.root.lift()
                 self.root.attributes('-topmost', True)
-                # macOS 特殊处理：对于全屏应用，可能需要强制聚焦一次（慎用，可能会抢焦点）
-                # self.root.call('wm', 'attributes', '.', '-topmost', '1')
             except Exception:
                 pass
-
-        # 每 100ms 轮询一次
+        # 每 2 秒检查一次（原 100ms 太频繁，会导致下拉框闪烁）
         if self.is_running and self.root:
-            self.root.after(100, self._process_ui_queue)
+            self.root.after(2000, self._ensure_topmost)
 
     def on_model_change(self, event):
         """模型切换回调"""
