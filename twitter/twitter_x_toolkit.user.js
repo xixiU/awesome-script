@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.4.7
+// @version      2.4.7.pre
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -324,6 +324,99 @@
             placeholder: '已入驻约p平台',
             help: t('configBioBlacklistPrefixesHelp')
         },
+        // 启发式黑名单配置（自定义渲染）
+        {
+            key: 'heuristicSection',
+            type: 'custom',
+            render: () => {
+                const section = document.createElement('div');
+                section.className = 'config-form-group';
+                section.style.cssText = 'border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-top: 16px;';
+
+                const title = document.createElement('div');
+                title.style.cssText = 'font-weight: 600; font-size: 14px; color: #111827; margin-bottom: 12px;';
+                title.textContent = currentLang === 'zh' ? '🎯 启发式黑名单（自动学习）' : '🎯 Heuristic Blacklist';
+                section.appendChild(title);
+
+                const historyInfo = document.createElement('div');
+                historyInfo.style.cssText = 'font-size: 12px; color: #6b7280; margin-bottom: 12px;';
+                const history = config.get('blockHistory') || [];
+                historyInfo.textContent = currentLang === 'zh'
+                    ? `已拉黑 ${history.length} 条历史记录`
+                    : `${history.length} blocked records`;
+                section.appendChild(historyInfo);
+
+                // 自动发现的规则
+                const learnedTitle = document.createElement('div');
+                learnedTitle.style.cssText = 'font-size: 13px; font-weight: 500; color: #374151; margin-top: 12px; margin-bottom: 8px;';
+                learnedTitle.textContent = currentLang === 'zh' ? '自动发现的规则：' : 'Learned Rules:';
+                section.appendChild(learnedTitle);
+
+                const learnedList = document.createElement('div');
+                learnedList.id = 'heuristic-learned-list';
+                const learned = config.get('heuristicPatterns') || [];
+                if (learned.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.style.cssText = 'font-size: 12px; color: #9ca3af; padding: 8px 0;';
+                    empty.textContent = currentLang === 'zh' ? '暂无规则（至少10条历史后开始学习）' : 'No rules yet';
+                    learnedList.appendChild(empty);
+                } else {
+                    learned.forEach(p => {
+                        const item = createPatternItem(p, 'learned');
+                        learnedList.appendChild(item);
+                    });
+                }
+                section.appendChild(learnedList);
+
+                // 手动添加的规则
+                const customTitle = document.createElement('div');
+                customTitle.style.cssText = 'font-size: 13px; font-weight: 500; color: #374151; margin-top: 16px; margin-bottom: 8px;';
+                customTitle.textContent = currentLang === 'zh' ? '手动添加的规则：' : 'Custom Rules:';
+                section.appendChild(customTitle);
+
+                const customList = document.createElement('div');
+                customList.id = 'heuristic-custom-list';
+                const custom = config.get('userCustomPatterns') || [];
+                if (custom.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.style.cssText = 'font-size: 12px; color: #9ca3af; padding: 8px 0;';
+                    empty.textContent = currentLang === 'zh' ? '暂无规则' : 'No custom rules';
+                    customList.appendChild(empty);
+                } else {
+                    custom.forEach(p => {
+                        const item = createPatternItem(p, 'custom');
+                        customList.appendChild(item);
+                    });
+                }
+                section.appendChild(customList);
+
+                // 操作按钮
+                const btnRow = document.createElement('div');
+                btnRow.style.cssText = 'display: flex; gap: 8px; margin-top: 12px;';
+
+                const addBtn = document.createElement('button');
+                addBtn.textContent = currentLang === 'zh' ? '➕ 添加新规则' : '➕ Add Rule';
+                addBtn.style.cssText = 'padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;';
+                addBtn.onclick = () => addCustomPattern();
+                btnRow.appendChild(addBtn);
+
+                const clearBtn = document.createElement('button');
+                clearBtn.textContent = currentLang === 'zh' ? '🗑️ 清空学习历史' : '🗑️ Clear History';
+                clearBtn.style.cssText = 'padding: 6px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;';
+                clearBtn.onclick = () => clearBlockHistory();
+                btnRow.appendChild(clearBtn);
+
+                const relearnBtn = document.createElement('button');
+                relearnBtn.textContent = currentLang === 'zh' ? '🔄 重新学习' : '🔄 Relearn';
+                relearnBtn.style.cssText = 'padding: 6px 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;';
+                relearnBtn.onclick = () => { learnHeuristicPatterns(); location.reload(); };
+                btnRow.appendChild(relearnBtn);
+
+                section.appendChild(btnRow);
+
+                return section;
+            }
+        },
         // 通知配置项
         {
             key: 'enableNotifications',
@@ -332,6 +425,89 @@
             help: t('configEnableNotificationsHelp')
         }
     ]);
+
+    // 启发式规则管理辅助函数
+    function createPatternItem(pattern, type) {
+        const item = document.createElement('div');
+        item.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #f9fafb; border-radius: 4px; margin-bottom: 4px;';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = pattern.enabled !== false;
+        checkbox.style.cssText = 'cursor: pointer;';
+        checkbox.onchange = (e) => {
+            pattern.enabled = e.target.checked;
+            if (type === 'learned') {
+                const patterns = config.get('heuristicPatterns') || [];
+                config.set('heuristicPatterns', patterns);
+            } else {
+                const patterns = config.get('userCustomPatterns') || [];
+                config.set('userCustomPatterns', patterns);
+            }
+        };
+        item.appendChild(checkbox);
+
+        const text = document.createElement('span');
+        text.style.cssText = 'flex: 1; font-size: 13px; color: #374151;';
+        text.textContent = pattern.text;
+        if (pattern.count) {
+            text.textContent += ` (${pattern.count}次, ${(pattern.ratio * 100).toFixed(0)}%)`;
+        }
+        item.appendChild(text);
+
+        if (type === 'custom') {
+            const editBtn = document.createElement('button');
+            editBtn.textContent = currentLang === 'zh' ? '编辑' : 'Edit';
+            editBtn.style.cssText = 'padding: 2px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;';
+            editBtn.onclick = () => editCustomPattern(pattern);
+            item.appendChild(editBtn);
+        }
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = currentLang === 'zh' ? '删除' : 'Delete';
+        deleteBtn.style.cssText = 'padding: 2px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;';
+        deleteBtn.onclick = () => deletePattern(pattern, type);
+        item.appendChild(deleteBtn);
+
+        return item;
+    }
+
+    function addCustomPattern() {
+        const text = prompt(currentLang === 'zh' ? '请输入要拉黑的关键词（3-6字）：' : 'Enter keyword (3-6 chars):');
+        if (!text || text.trim().length < 3) {
+            alert(currentLang === 'zh' ? '关键词至少3个字符' : 'At least 3 characters');
+            return;
+        }
+        const patterns = config.get('userCustomPatterns') || [];
+        patterns.push({ text: text.trim(), enabled: true });
+        config.set('userCustomPatterns', patterns);
+        location.reload();
+    }
+
+    function editCustomPattern(pattern) {
+        const text = prompt(currentLang === 'zh' ? '修改关键词：' : 'Edit keyword:', pattern.text);
+        if (!text || text.trim().length < 3) return;
+        pattern.text = text.trim();
+        const patterns = config.get('userCustomPatterns') || [];
+        config.set('userCustomPatterns', patterns);
+        location.reload();
+    }
+
+    function deletePattern(pattern, type) {
+        if (!confirm(currentLang === 'zh' ? `确定删除规则「${pattern.text}」？` : `Delete rule "${pattern.text}"?`)) return;
+        const key = type === 'learned' ? 'heuristicPatterns' : 'userCustomPatterns';
+        const patterns = (config.get(key) || []).filter(p => p.text !== pattern.text);
+        config.set(key, patterns);
+        location.reload();
+    }
+
+    function clearBlockHistory() {
+        if (!confirm(currentLang === 'zh' ? '确定清空所有学习历史和自动规则？手动添加的规则不会被清空。' : 'Clear all history and learned rules?')) return;
+        config.set('blockHistory', []);
+        config.set('heuristicPatterns', []);
+        alert(currentLang === 'zh' ? '已清空' : 'Cleared');
+        location.reload();
+    }
 
     // Restructure config panel: group checkbox items by feature, 2-column grid per group
     function restructureConfigPanel() {
@@ -931,6 +1107,113 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         return null;
     }
 
+    // ==================== 启发式学习 ====================
+
+    /**
+     * 记录拉黑历史（用于启发式学习）
+     * @param {string} username - 用户名
+     * @param {string} displayName - 昵称
+     */
+    function recordBlockHistory(username, displayName) {
+        const history = config.get('blockHistory') || [];
+        history.push({
+            displayName: displayName || username,
+            timestamp: Date.now()
+        });
+
+        // FIFO，保留最近100条
+        if (history.length > 100) history.shift();
+        config.set('blockHistory', history);
+
+        // 每 20 条触发一次学习
+        if (history.length % 20 === 0) {
+            learnHeuristicPatterns();
+        }
+    }
+
+    /**
+     * 从拉黑历史中提取常见子串模式
+     * @param {string[]} displayNames - 昵称列表
+     * @returns {Array<{text: string, count: number, ratio: number}>}
+     */
+    function extractCommonSubstrings(displayNames) {
+        const substringCount = new Map();
+        const total = displayNames.length;
+
+        // 只提取 3-6 字的子串
+        for (const name of displayNames) {
+            for (let len = 3; len <= 6; len++) {
+                for (let i = 0; i <= name.length - len; i++) {
+                    const sub = name.substring(i, i + len);
+                    // 过滤纯数字、纯符号、纯空格
+                    if (!/^[\d\s\W]+$/.test(sub)) {
+                        substringCount.set(sub, (substringCount.get(sub) || 0) + 1);
+                    }
+                }
+            }
+        }
+
+        // 动态阈值：至少5次，或15%
+        const MIN_COUNT = Math.max(5, Math.floor(total * 0.15));
+        const MIN_RATIO = 0.15;
+
+        const patterns = [];
+        for (const [sub, count] of substringCount) {
+            const ratio = count / total;
+            if (count >= MIN_COUNT && ratio >= MIN_RATIO) {
+                patterns.push({ text: sub, count, ratio });
+            }
+        }
+
+        // 去重：如果长串包含短串且出现次数接近，只保留长串
+        const filtered = patterns.filter(p1 => {
+            return !patterns.some(p2 =>
+                p2.text.length > p1.text.length &&
+                p2.text.includes(p1.text) &&
+                p2.count >= p1.count * 0.9
+            );
+        });
+
+        return filtered.sort((a, b) => b.count - a.count).slice(0, 10);
+    }
+
+    /**
+     * 触发启发式学习，更新规则
+     */
+    function learnHeuristicPatterns() {
+        const history = config.get('blockHistory') || [];
+        if (history.length < 10) return; // 至少10条才学习
+
+        const displayNames = history.map(h => h.displayName);
+        const newPatterns = extractCommonSubstrings(displayNames);
+
+        // 合并旧规则（保留用户的启用/禁用状态）
+        const oldPatterns = config.get('heuristicPatterns') || [];
+        const merged = newPatterns.map(np => {
+            const old = oldPatterns.find(op => op.text === np.text);
+            return {
+                text: np.text,
+                count: np.count,
+                ratio: np.ratio,
+                enabled: old ? old.enabled : (np.ratio >= 0.15), // 15%以上默认启用
+                createdAt: old ? old.createdAt : Date.now()
+            };
+        });
+
+        config.set('heuristicPatterns', merged);
+        console.log(`🎓 启发式学习完成：发现 ${merged.length} 条规则`, merged);
+    }
+
+    /**
+     * 获取所有启用的启发式规则（自动学习 + 手动添加）
+     * @returns {Array<{text: string, enabled: boolean}>}
+     */
+    function getEnabledHeuristicPatterns() {
+        const learned = (config.get('heuristicPatterns') || []).filter(p => p.enabled);
+        const custom = (config.get('userCustomPatterns') || []).filter(p => p.enabled);
+        return [...learned, ...custom];
+    }
+
     // 批量检查一组 username 的简介，返回命中用户的 Set 和命中的前缀 Map
     // 控制并发（每批 2 个）和批次间延迟（800ms + jitter），避免触发 Twitter rate limit
     // 限流感知：剩余配额 < RATE_LIMIT_THRESHOLD 时主动暂停到窗口重置
@@ -1211,6 +1494,13 @@ ${comments.map((c, i) => {
             return data.displayName || u;
         };
 
+        // ✅ 判定为 blacklist 后立即记录到学习历史
+        for (const username of blacklistSet) {
+            const displayName = getDisplayName(username);
+            recordBlockHistory(username, displayName);
+        }
+
+        // 标记 UI 和加入已拉黑集合
         for (const username of blacklistSet) {
             console.log(t('consoleAiFilterBlacklist', {
                 displayName: getDisplayName(username),
@@ -2485,9 +2775,11 @@ ${comments.map((c, i) => {
             //   规则 1 broken-word：英文单词被符号/emoji 硬拆开 >= WORD_SPLIT_THRESHOLD 次
             //   规则 2 bot-decor：评论中包含机器人装饰字符 >= WORD_SPLIT_THRESHOLD 次（冷僻 Unicode，普通输入法打不出）
             //   规则 3 displayName-prefix：昵称包含简介黑名单前缀（直接可见，无需 API）
+            //   规则 4 heuristic：昵称匹配启发式学习的规则
             // 任一命中直接判黑名单，不送 AI，节省 token 也更稳定
             const bioPrefixesRaw = config.get('bioBlacklistPrefixes') || '';
             const bioPrefixes = bioPrefixesRaw.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+            const heuristicPatterns = getEnabledHeuristicPatterns();
 
             const preFilterBlacklist = [];
             const preFilterReason = new Map(); // username -> label
@@ -2504,6 +2796,7 @@ ${comments.map((c, i) => {
                         : `机器人装饰字符 ≥${WORD_SPLIT_THRESHOLD}`;
                     preFilterReason.set(c.username, ruleLabel);
                     console.log(`🎯 前置命中（${ruleLabel}）@${c.username}: ${c.text.substring(0, 80)}`);
+                    recordBlockHistory(c.username, c.displayName); // ✅ 记录学习
                     matched = true;
                 }
 
@@ -2514,7 +2807,23 @@ ${comments.map((c, i) => {
                         preFilterBlacklist.push(c.username);
                         preFilterReason.set(c.username, `昵称前缀「${matchedPrefix}」`);
                         console.log(`🎯 前置命中（昵称前缀「${matchedPrefix}」）@${c.username}（${c.displayName}）`);
+                        recordBlockHistory(c.username, c.displayName); // ✅ 记录学习
                         matched = true;
+                    }
+                }
+
+                // 检查启发式规则
+                if (!matched && heuristicPatterns.length > 0 && c.displayName) {
+                    for (const pattern of heuristicPatterns) {
+                        if (c.displayName.includes(pattern.text)) {
+                            preFilterBlacklist.push(c.username);
+                            const source = pattern.count ? `启发式·${(pattern.ratio * 100).toFixed(0)}%` : '手动添加';
+                            preFilterReason.set(c.username, `启发式规则「${pattern.text}」`);
+                            console.log(`🎯 前置命中（启发式规则「${pattern.text}」，${source}）@${c.username}（${c.displayName}）`);
+                            recordBlockHistory(c.username, c.displayName); // ✅ 记录学习
+                            matched = true;
+                            break;
+                        }
                     }
                 }
 
@@ -2523,7 +2832,7 @@ ${comments.map((c, i) => {
                 }
             }
 
-            // 规则 4 bio-prefix：后台查询用户简介，命中配置前缀的直接判黑名单
+            // 规则 5 bio-prefix：后台查询用户简介，命中配置前缀的直接判黑名单
             // 与 AI 调用并行执行，不阻塞主流程
             let bioPromise = Promise.resolve(new Map());
             if (bioPrefixes.length > 0 && comments.length > 0) {
