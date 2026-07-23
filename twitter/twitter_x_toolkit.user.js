@@ -435,35 +435,6 @@
         }
     ]);
 
-    // ==================== UI 美化：隐藏右侧栏 ====================
-    if (config.get('hideSidebar')) {
-        GM_addStyle(`
-            [data-testid="sidebarColumn"] {
-                display: none !important;
-            }
-            header[role="banner"] {
-                flex-grow: 0 !important;
-            }
-            main[role="main"] > div {
-                max-width: 900px !important;
-                margin: 0 auto !important;
-                flex: 0 0 auto !important;
-            }
-            main[role="main"] > div > div,
-            main[role="main"] > div > div > div {
-                max-width: none !important;
-                width: 100% !important;
-            }
-            [data-testid="primaryColumn"] {
-                max-width: none !important;
-                width: 100% !important;
-            }
-            [data-testid="primaryColumn"] .r-f8sm7e {
-                max-width: none !important;
-            }
-        `);
-    }
-
     // 启发式规则管理辅助函数
     function createPatternItem(pattern, type) {
         const item = document.createElement('div');
