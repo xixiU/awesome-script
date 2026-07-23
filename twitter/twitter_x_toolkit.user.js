@@ -449,10 +449,25 @@
 
         const text = document.createElement('span');
         text.style.cssText = 'flex: 1; font-size: 13px; color: #374151;';
-        text.textContent = pattern.text;
-        if (pattern.count) {
-            text.textContent += ` (${pattern.count}次, ${(pattern.ratio * 100).toFixed(0)}%)`;
+
+        // 显示维度标签
+        let dimensionLabel = '';
+        if (pattern.source === 'displayName') {
+            dimensionLabel = currentLang === 'zh' ? '昵称' : 'Name';
+        } else if (pattern.source === 'commentText') {
+            dimensionLabel = currentLang === 'zh' ? '评论' : 'Comment';
         }
+
+        text.textContent = `"${pattern.text}"`;
+        if (dimensionLabel) {
+            text.textContent += ` (${dimensionLabel}`;
+        }
+        if (pattern.count) {
+            text.textContent += dimensionLabel ? `, ${pattern.count}次, ${(pattern.ratio * 100).toFixed(0)}%)` : ` (${pattern.count}次, ${(pattern.ratio * 100).toFixed(0)}%)`;
+        } else if (dimensionLabel) {
+            text.textContent += ')';
+        }
+
         item.appendChild(text);
 
         if (type === 'custom') {
@@ -473,13 +488,18 @@
     }
 
     function addCustomPattern() {
-        const text = prompt(currentLang === 'zh' ? '请输入要拉黑的关键词（3-6字）：' : 'Enter keyword (3-6 chars):');
+        const text = prompt(currentLang === 'zh' ? '请输入要拉黑的关键词（3-8字）：' : 'Enter keyword (3-8 chars):');
         if (!text || text.trim().length < 3) {
             alert(currentLang === 'zh' ? '关键词至少3个字符' : 'At least 3 characters');
             return;
         }
+        const source = confirm(currentLang === 'zh'
+            ? '匹配维度：\n确定 = 昵称匹配\n取消 = 评论匹配'
+            : 'Match dimension:\nOK = displayName\nCancel = comment')
+            ? 'displayName'
+            : 'commentText';
         const patterns = config.get('userCustomPatterns') || [];
-        patterns.push({ text: text.trim(), enabled: true });
+        patterns.push({ text: text.trim(), enabled: true, source });
         config.set('userCustomPatterns', patterns);
         location.reload();
     }
@@ -488,6 +508,12 @@
         const text = prompt(currentLang === 'zh' ? '修改关键词：' : 'Edit keyword:', pattern.text);
         if (!text || text.trim().length < 3) return;
         pattern.text = text.trim();
+        const source = confirm(currentLang === 'zh'
+            ? '匹配维度：\n确定 = 昵称匹配\n取消 = 评论匹配'
+            : 'Match dimension:\nOK = displayName\nCancel = comment')
+            ? 'displayName'
+            : 'commentText';
+        pattern.source = source;
         const patterns = config.get('userCustomPatterns') || [];
         config.set('userCustomPatterns', patterns);
         location.reload();
@@ -496,7 +522,7 @@
     function deletePattern(pattern, type) {
         if (!confirm(currentLang === 'zh' ? `确定删除规则「${pattern.text}」？` : `Delete rule "${pattern.text}"?`)) return;
         const key = type === 'learned' ? 'heuristicPatterns' : 'userCustomPatterns';
-        const patterns = (config.get(key) || []).filter(p => p.text !== pattern.text);
+        const patterns = (config.get(key) || []).filter(p => p.text !== pattern.text || p.source !== pattern.source);
         config.set(key, patterns);
         location.reload();
     }
@@ -1113,11 +1139,13 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
      * 记录拉黑历史（用于启发式学习）
      * @param {string} username - 用户名
      * @param {string} displayName - 昵称
+     * @param {string} commentText - 评论文本
      */
-    function recordBlockHistory(username, displayName) {
+    function recordBlockHistory(username, displayName, commentText = '') {
         const history = config.get('blockHistory') || [];
         history.push({
             displayName: displayName || username,
+            commentText: commentText || '',
             timestamp: Date.now()
         });
 
@@ -1133,35 +1161,46 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
     /**
      * 从拉黑历史中提取常见子串模式
-     * @param {string[]} displayNames - 昵称列表
-     * @returns {Array<{text: string, count: number, ratio: number}>}
+     * @param {string[]} texts - 文本列表
+     * @param {Object} options - 配置选项
+     * @returns {Array<{text: string, count: number, ratio: number, source: string}>}
      */
-    function extractCommonSubstrings(displayNames) {
-        const substringCount = new Map();
-        const total = displayNames.length;
+    function extractCommonSubstrings(texts, options = {}) {
+        const {
+            minLen = 3,
+            maxLen = 6,
+            minRatio = 0.15,
+            minCount = 5,
+            source = 'displayName',
+            stopWords = []
+        } = options;
 
-        // 只提取 3-6 字的子串
-        for (const name of displayNames) {
-            for (let len = 3; len <= 6; len++) {
-                for (let i = 0; i <= name.length - len; i++) {
-                    const sub = name.substring(i, i + len);
+        const substringCount = new Map();
+        const total = texts.length;
+
+        // 提取子串
+        for (const text of texts) {
+            if (!text) continue;
+            for (let len = minLen; len <= maxLen; len++) {
+                for (let i = 0; i <= text.length - len; i++) {
+                    const sub = text.substring(i, i + len);
                     // 过滤纯数字、纯符号、纯空格
-                    if (!/^[\d\s\W]+$/.test(sub)) {
+                    if (!/^[\d\s\W]+$/.test(sub) && !stopWords.includes(sub)) {
                         substringCount.set(sub, (substringCount.get(sub) || 0) + 1);
                     }
                 }
             }
         }
 
-        // 动态阈值：至少5次，或15%
-        const MIN_COUNT = Math.max(5, Math.floor(total * 0.15));
-        const MIN_RATIO = 0.15;
+        // 动态阈值
+        const MIN_COUNT = Math.max(minCount, Math.floor(total * minRatio));
+        const MIN_RATIO = minRatio;
 
         const patterns = [];
         for (const [sub, count] of substringCount) {
             const ratio = count / total;
             if (count >= MIN_COUNT && ratio >= MIN_RATIO) {
-                patterns.push({ text: sub, count, ratio });
+                patterns.push({ text: sub, count, ratio, source });
             }
         }
 
@@ -1184,18 +1223,45 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const history = config.get('blockHistory') || [];
         if (history.length < 10) return; // 至少10条才学习
 
-        const displayNames = history.map(h => h.displayName);
-        const newPatterns = extractCommonSubstrings(displayNames);
+        // 评论文本停用词（常见无意义词）
+        const commentStopWords = [
+            '哈哈', '哈哈哈', '笑死', '确实', '真的', '这个', '什么', '怎么',
+            '可以', '不是', '就是', '还是', '已经', '应该', '觉得', '感觉'
+        ];
+
+        // 从昵称学习（3-6字，≥20%）
+        const displayNames = history.map(h => h.displayName).filter(n => n);
+        const displayNamePatterns = extractCommonSubstrings(displayNames, {
+            minLen: 3,
+            maxLen: 6,
+            minRatio: 0.20,
+            minCount: 5,
+            source: 'displayName'
+        });
+
+        // 从评论学习（4-8字，≥15%，过滤停用词）
+        const commentTexts = history.map(h => h.commentText).filter(t => t);
+        const commentPatterns = extractCommonSubstrings(commentTexts, {
+            minLen: 4,
+            maxLen: 8,
+            minRatio: 0.15,
+            minCount: 5,
+            source: 'commentText',
+            stopWords: commentStopWords
+        });
+
+        const newPatterns = [...displayNamePatterns, ...commentPatterns];
 
         // 合并旧规则（保留用户的启用/禁用状态）
         const oldPatterns = config.get('heuristicPatterns') || [];
         const merged = newPatterns.map(np => {
-            const old = oldPatterns.find(op => op.text === np.text);
+            const old = oldPatterns.find(op => op.text === np.text && op.source === np.source);
             return {
                 text: np.text,
                 count: np.count,
                 ratio: np.ratio,
-                enabled: old ? old.enabled : (np.ratio >= 0.15), // 15%以上默认启用
+                source: np.source,
+                enabled: old ? old.enabled : true, // 默认启用
                 createdAt: old ? old.createdAt : Date.now()
             };
         });
@@ -1497,7 +1563,8 @@ ${comments.map((c, i) => {
         // ✅ 判定为 blacklist 后立即记录到学习历史
         for (const username of blacklistSet) {
             const displayName = getDisplayName(username);
-            recordBlockHistory(username, displayName);
+            const commentText = previewText(username);
+            recordBlockHistory(username, displayName, commentText);
         }
 
         // 标记 UI 和加入已拉黑集合
@@ -2796,7 +2863,7 @@ ${comments.map((c, i) => {
                         : `机器人装饰字符 ≥${WORD_SPLIT_THRESHOLD}`;
                     preFilterReason.set(c.username, ruleLabel);
                     console.log(`🎯 前置命中（${ruleLabel}）@${c.username}: ${c.text.substring(0, 80)}`);
-                    recordBlockHistory(c.username, c.displayName); // ✅ 记录学习
+                    recordBlockHistory(c.username, c.displayName, c.text); // ✅ 记录学习
                     matched = true;
                 }
 
@@ -2807,20 +2874,34 @@ ${comments.map((c, i) => {
                         preFilterBlacklist.push(c.username);
                         preFilterReason.set(c.username, `昵称前缀「${matchedPrefix}」`);
                         console.log(`🎯 前置命中（昵称前缀「${matchedPrefix}」）@${c.username}（${c.displayName}）`);
-                        recordBlockHistory(c.username, c.displayName); // ✅ 记录学习
+                        recordBlockHistory(c.username, c.displayName, c.text); // ✅ 记录学习
                         matched = true;
                     }
                 }
 
-                // 检查启发式规则
-                if (!matched && heuristicPatterns.length > 0 && c.displayName) {
+                // 检查启发式规则（昵称 + 评论）
+                if (!matched && heuristicPatterns.length > 0) {
                     for (const pattern of heuristicPatterns) {
-                        if (c.displayName.includes(pattern.text)) {
+                        let hit = false;
+                        let dimension = '';
+
+                        // 昵称维度
+                        if (pattern.source === 'displayName' && c.displayName && c.displayName.includes(pattern.text)) {
+                            hit = true;
+                            dimension = '昵称';
+                        }
+                        // 评论维度
+                        else if (pattern.source === 'commentText' && c.text && c.text.includes(pattern.text)) {
+                            hit = true;
+                            dimension = '评论';
+                        }
+
+                        if (hit) {
                             preFilterBlacklist.push(c.username);
-                            const source = pattern.count ? `启发式·${(pattern.ratio * 100).toFixed(0)}%` : '手动添加';
+                            const source = pattern.count ? `启发式·${dimension}·${(pattern.ratio * 100).toFixed(0)}%` : '手动添加';
                             preFilterReason.set(c.username, `启发式规则「${pattern.text}」`);
                             console.log(`🎯 前置命中（启发式规则「${pattern.text}」，${source}）@${c.username}（${c.displayName}）`);
-                            recordBlockHistory(c.username, c.displayName); // ✅ 记录学习
+                            recordBlockHistory(c.username, c.displayName, c.text); // ✅ 记录学习（包含评论）
                             matched = true;
                             break;
                         }
