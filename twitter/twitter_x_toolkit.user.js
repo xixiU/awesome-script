@@ -2484,11 +2484,18 @@ ${comments.map((c, i) => {
             // 前置规则检测：
             //   规则 1 broken-word：英文单词被符号/emoji 硬拆开 >= WORD_SPLIT_THRESHOLD 次
             //   规则 2 bot-decor：评论中包含机器人装饰字符 >= WORD_SPLIT_THRESHOLD 次（冷僻 Unicode，普通输入法打不出）
+            //   规则 3 displayName-prefix：昵称包含简介黑名单前缀（直接可见，无需 API）
             // 任一命中直接判黑名单，不送 AI，节省 token 也更稳定
+            const bioPrefixesRaw = config.get('bioBlacklistPrefixes') || '';
+            const bioPrefixes = bioPrefixesRaw.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+
             const preFilterBlacklist = [];
             const preFilterReason = new Map(); // username -> label
             const comments = [];
             for (const c of allComments) {
+                let matched = false;
+
+                // 检查评论文本规则
                 const rule = detectSpamRule(c.text);
                 if (rule) {
                     preFilterBlacklist.push(c.username);
@@ -2497,15 +2504,27 @@ ${comments.map((c, i) => {
                         : `机器人装饰字符 ≥${WORD_SPLIT_THRESHOLD}`;
                     preFilterReason.set(c.username, ruleLabel);
                     console.log(`🎯 前置命中（${ruleLabel}）@${c.username}: ${c.text.substring(0, 80)}`);
-                } else {
+                    matched = true;
+                }
+
+                // 检查昵称是否包含简介黑名单前缀
+                if (!matched && bioPrefixes.length > 0 && c.displayName) {
+                    const matchedPrefix = matchBioPrefix(c.displayName, bioPrefixes);
+                    if (matchedPrefix) {
+                        preFilterBlacklist.push(c.username);
+                        preFilterReason.set(c.username, `昵称前缀「${matchedPrefix}」`);
+                        console.log(`🎯 前置命中（昵称前缀「${matchedPrefix}」）@${c.username}（${c.displayName}）`);
+                        matched = true;
+                    }
+                }
+
+                if (!matched) {
                     comments.push(c);
                 }
             }
 
-            // 规则 3 bio-prefix：后台查询用户简介，命中配置前缀的直接判黑名单
+            // 规则 4 bio-prefix：后台查询用户简介，命中配置前缀的直接判黑名单
             // 与 AI 调用并行执行，不阻塞主流程
-            const bioPrefixesRaw = config.get('bioBlacklistPrefixes') || '';
-            const bioPrefixes = bioPrefixesRaw.split('\n').map(p => p.trim()).filter(p => p.length > 0);
             let bioPromise = Promise.resolve(new Map());
             if (bioPrefixes.length > 0 && comments.length > 0) {
                 const COMMENT_LENGTH_THRESHOLD = 50;
