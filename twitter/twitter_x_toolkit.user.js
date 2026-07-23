@@ -255,7 +255,9 @@
         // 个人简介前缀黑名单（每行一个前缀，命中前缀的用户直接拉黑）
         bioBlacklistPrefixes: '已入驻约p平台\n已入驻曰泡平台',
         // 通知配置
-        enableNotifications: false
+        enableNotifications: false,
+        // UI 美化
+        hideSidebar: true
     }, {
         i18n: i18n,
         lang: currentLang
@@ -423,8 +425,27 @@
             label: t('configEnableNotificationsLabel'),
             type: 'checkbox',
             help: t('configEnableNotificationsHelp')
+        },
+        // UI 美化
+        {
+            key: 'hideSidebar',
+            label: currentLang === 'zh' ? '隐藏右侧栏（宽屏模式）' : 'Hide Sidebar (Wide Mode)',
+            type: 'checkbox',
+            help: currentLang === 'zh' ? '隐藏右侧推荐/趋势栏，主内容区自动拉宽。修改后刷新页面生效。' : 'Hide the right sidebar and expand main content. Refresh to apply.'
         }
     ]);
+
+    // ==================== UI 美化：隐藏右侧栏 ====================
+    if (config.get('hideSidebar')) {
+        GM_addStyle(`
+            [data-testid="sidebarColumn"] {
+                display: none !important;
+            }
+            [data-testid="primaryColumn"] {
+                max-width: 900px !important;
+            }
+        `);
+    }
 
     // 启发式规则管理辅助函数
     function createPatternItem(pattern, type) {
