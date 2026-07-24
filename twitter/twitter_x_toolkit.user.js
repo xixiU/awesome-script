@@ -357,6 +357,7 @@
 
                 const learnedList = document.createElement('div');
                 learnedList.id = 'heuristic-learned-list';
+                learnedList.style.cssText = 'max-height: 160px; overflow-y: auto; padding-right: 4px;';
                 const learned = config.get('heuristicPatterns') || [];
                 if (learned.length === 0) {
                     const empty = document.createElement('div');
@@ -379,6 +380,7 @@
 
                 const customList = document.createElement('div');
                 customList.id = 'heuristic-custom-list';
+                customList.style.cssText = 'max-height: 160px; overflow-y: auto; padding-right: 4px;';
                 const custom = config.get('userCustomPatterns') || [];
                 if (custom.length === 0) {
                     const empty = document.createElement('div');
@@ -1209,8 +1211,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
      */
     function extractCommonSubstrings(texts, options = {}) {
         const {
-            minLen = 3,
-            maxLen = 6,
+            minLen = 5,
+            maxLen = 8,
             minRatio = 0.15,
             minCount = 5,
             source = 'displayName',
@@ -1271,21 +1273,21 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             '可以', '不是', '就是', '还是', '已经', '应该', '觉得', '感觉'
         ];
 
-        // 从昵称学习（3-6字，≥20%）
+        // 从昵称学习（5-8字，≥20%）
         const displayNames = history.map(h => h.displayName).filter(n => n);
         const displayNamePatterns = extractCommonSubstrings(displayNames, {
-            minLen: 3,
-            maxLen: 6,
+            minLen: 5,
+            maxLen: 8,
             minRatio: 0.20,
             minCount: 5,
             source: 'displayName'
         });
 
-        // 从评论学习（4-8字，≥15%，过滤停用词）
+        // 从评论学习（5-10字，≥15%，过滤停用词）
         const commentTexts = history.map(h => h.commentText).filter(t => t);
         const commentPatterns = extractCommonSubstrings(commentTexts, {
-            minLen: 4,
-            maxLen: 8,
+            minLen: 5,
+            maxLen: 10,
             minRatio: 0.15,
             minCount: 5,
             source: 'commentText',
