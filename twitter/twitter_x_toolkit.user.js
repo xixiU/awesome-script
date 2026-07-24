@@ -317,7 +317,8 @@
             label: t('configAiFilterPromptLabel'),
             type: 'textarea',
             placeholder: '',
-            help: t('configAiFilterPromptHelp')
+            help: t('configAiFilterPromptHelp'),
+            collapsed: true
         },
         {
             key: 'bioBlacklistPrefixes',
@@ -648,8 +649,11 @@
             const input = g.querySelector('input[type="checkbox"]');
             if (!input) return;
             const key = input.id.replace(/^TwitterXToolkit-/, '');
+            if (!key) return;
             // aiMultimodal 已经被搬到 aiBaseUrl 同行了，跳过它
             if (key === 'aiMultimodal') return;
+            // 只处理有标准 label 的 form group（跳过 custom render 的 section）
+            if (!g.querySelector('.config-label')) return;
             checkboxGroupByKey.set(key, g);
         });
 
@@ -1222,8 +1226,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             for (let len = minLen; len <= maxLen; len++) {
                 for (let i = 0; i <= text.length - len; i++) {
                     const sub = text.substring(i, i + len);
-                    // 过滤纯数字、纯符号、纯空格
-                    if (!/^[\d\s\W]+$/.test(sub) && !stopWords.includes(sub)) {
+                    // 只过滤纯数字和纯空格的子串
+                    if (!/^[\d\s]+$/.test(sub) && !stopWords.includes(sub)) {
                         substringCount.set(sub, (substringCount.get(sub) || 0) + 1);
                     }
                 }
@@ -1306,6 +1310,30 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         config.set('heuristicPatterns', merged);
         console.log(`🎓 启发式学习完成：发现 ${merged.length} 条规则`, merged);
+
+        // 新规则学习后，扫描页面上已经过AI但被判为normal的评论，用新规则追杀
+        if (merged.length > 0 && isOnTweetDetailPage()) {
+            const commentersMap = getAllCommentersWithText();
+            let retroCount = 0;
+            for (const [username, data] of commentersMap) {
+                if (blockedUsersSet.has(username)) continue;
+                for (const p of merged) {
+                    if (!p.enabled) continue;
+                    let hit = false;
+                    if (p.source === 'displayName' && data.displayName && data.displayName.includes(p.text)) hit = true;
+                    else if (p.source === 'commentText' && data.text && data.text.includes(p.text)) hit = true;
+                    if (hit) {
+                        console.log(`🎯 启发式追杀「${p.text}」@${username}（${data.displayName}）`);
+                        blockedUsersSet.add(username);
+                        markCommentByCategory(username, 'blacklist');
+                        blockUserByAPI(username);
+                        retroCount++;
+                        break;
+                    }
+                }
+            }
+            if (retroCount > 0) console.log(`🎓 启发式追杀完成：${retroCount} 人`);
+        }
     }
 
     /**

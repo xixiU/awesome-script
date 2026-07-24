@@ -965,6 +965,10 @@
 
             // 动态创建表单
             this.configItems.forEach(item => {
+                if (item.type === 'custom' && typeof item.render === 'function') {
+                    content.appendChild(item.render());
+                    return;
+                }
                 const group = this.createFormGroup(item);
                 content.appendChild(group);
             });
@@ -1075,6 +1079,21 @@
             group.appendChild(label);
             group.appendChild(input);
             group.appendChild(help);
+
+            // 支持默认折叠
+            if (item.collapsed) {
+                input.style.display = 'none';
+                help.style.display = 'none';
+                label.style.cursor = 'pointer';
+                label.textContent = item.label + ' ▶';
+                label.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const hidden = input.style.display === 'none';
+                    input.style.display = hidden ? '' : 'none';
+                    help.style.display = hidden ? '' : 'none';
+                    label.textContent = item.label + (hidden ? ' ▼' : ' ▶');
+                });
+            }
 
             return group;
         }
