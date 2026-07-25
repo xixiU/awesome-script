@@ -350,9 +350,34 @@
             align-items: center;
             justify-content: center;
         }
-        
+
         #dify-fullscreen-btn:hover {
             background: rgba(255, 255, 255, 0.3);
+        }
+
+        #dify-minimize-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #dify-minimize-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* 最小化状态 */
+        #dify-result-panel.minimized {
+            display: none !important;
         }
         
         #dify-panel-header.draggable {
@@ -1632,6 +1657,12 @@ ${newsContent}`;
             fullscreenBtn.textContent = '⤢';
             fullscreenBtn.title = '全屏显示';
 
+            // 创建最小化按钮
+            const minimizeBtn = document.createElement('button');
+            minimizeBtn.id = 'dify-minimize-btn';
+            minimizeBtn.textContent = '−';
+            minimizeBtn.title = '最小化（不中断总结）';
+
             // 创建关闭按钮
             const closeBtn = document.createElement('button');
             closeBtn.id = 'dify-close-btn';
@@ -1640,6 +1671,7 @@ ${newsContent}`;
             // 组装元素
             actionsDiv.appendChild(copyBtn);
             actionsDiv.appendChild(fullscreenBtn);
+            actionsDiv.appendChild(minimizeBtn);
             actionsDiv.appendChild(closeBtn);
 
             header.appendChild(title);
@@ -1655,7 +1687,9 @@ ${newsContent}`;
             this.panel = panel;
             this.panelHeader = header;
             this.fullscreenBtn = fullscreenBtn;
+            this.minimizeBtn = minimizeBtn;
             this.isFullscreen = false;
+            this.isMinimized = false;
 
             // 关闭按钮事件
             closeBtn.addEventListener('click', (e) => {
@@ -1673,6 +1707,12 @@ ${newsContent}`;
             fullscreenBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.toggleFullscreen();
+            });
+
+            // 最小化按钮事件
+            minimizeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleMinimize();
             });
 
             // 添加拖拽功能（非全屏状态下）
@@ -1930,6 +1970,11 @@ ${newsContent}`;
             overlay.className = 'config-overlay';
             overlay.id = 'dify-overlay';
             overlay.addEventListener('click', (e) => {
+                // 如果面板被最小化，点击遮罩层恢复显示
+                if (this.isMinimized) {
+                    this.toggleMinimize();
+                    return;
+                }
                 // 只有点击遮罩层本身才关闭，不影响面板内的点击
                 if (e.target === overlay) {
                     this.hidePanel();
@@ -1943,6 +1988,12 @@ ${newsContent}`;
         async handleSummarize() {
             // 防止重复点击
             if (this.button.classList.contains('loading')) return;
+
+            // 如果面板被最小化，恢复显示而不是重新总结
+            if (this.isMinimized) {
+                this.toggleMinimize();
+                return;
+            }
 
             try {
                 // 显示加载状态
@@ -2011,6 +2062,34 @@ ${newsContent}`;
             } finally {
                 // 恢复按钮状态
                 this.button.classList.remove('loading');
+
+                // 修复：确保按钮恢复贴边状态
+                // 如果按钮之前被拖拽过，inline style 会阻止 CSS 的 edge-mode 生效
+                // 需要检查按钮是否真的贴边（通过检查 inline style）
+                const hasInlineLeft = this.button.style.left && this.button.style.left !== 'auto';
+                const hasInlineRight = this.button.style.right && this.button.style.right !== 'auto';
+
+                // 如果按钮有 edge-mode 类但 inline style 不正确，重新应用贴边
+                if (this.button.classList.contains('edge-mode')) {
+                    // 根据按钮位置判断应该贴哪边
+                    const buttonCenterX = this.button.offsetLeft + this.button.offsetWidth / 2;
+                    const windowCenterX = window.innerWidth / 2;
+
+                    if (buttonCenterX < windowCenterX) {
+                        // 应该贴左边
+                        this.button.style.left = '0px';
+                        this.button.style.right = 'auto';
+                    } else {
+                        // 应该贴右边
+                        this.button.style.left = 'auto';
+                        this.button.style.right = '0px';
+                    }
+                } else if (!this.button.classList.contains('free-mode')) {
+                    // 如果既没有 edge-mode 也没有 free-mode，添加 edge-mode 并贴右边
+                    this.button.classList.add('edge-mode');
+                    this.button.style.left = 'auto';
+                    this.button.style.right = '0px';
+                }
 
                 // 清除文本选择（如果是选中文本总结的话）
                 if (this.currentSummaryMode === 'selection') {
@@ -2126,6 +2205,11 @@ ${newsContent}`;
             if (this.isFullscreen) {
                 this.toggleFullscreen();
             }
+            // 退出最小化模式
+            if (this.isMinimized) {
+                this.isMinimized = false;
+                this.panel.classList.remove('minimized');
+            }
             this.panel.classList.remove('show');
             this.overlay.classList.remove('show');
         }
@@ -2140,6 +2224,8 @@ ${newsContent}`;
                 this.panelHeader.classList.remove('draggable');
                 this.fullscreenBtn.textContent = '⤓';
                 this.fullscreenBtn.title = '退出全屏';
+                // 全屏时隐藏最小化按钮
+                this.minimizeBtn.style.display = 'none';
             } else {
                 // 退出全屏
                 this.panel.classList.remove('fullscreen');
@@ -2147,10 +2233,25 @@ ${newsContent}`;
                 this.panelHeader.classList.add('draggable');
                 this.fullscreenBtn.textContent = '⤢';
                 this.fullscreenBtn.title = '全屏显示';
+                // 恢复最小化按钮
+                this.minimizeBtn.style.display = 'flex';
                 // 恢复居中位置
                 this.panel.style.top = '50%';
                 this.panel.style.left = '50%';
                 this.panel.style.transform = 'translate(-50%, -50%)';
+            }
+        }
+
+        toggleMinimize() {
+            this.isMinimized = !this.isMinimized;
+
+            if (this.isMinimized) {
+                // 最小化：隐藏面板但保留遮罩层（半透明，可点击恢复）
+                this.panel.classList.add('minimized');
+                // 遮罩层保持显示，以便点击恢复
+            } else {
+                // 恢复显示
+                this.panel.classList.remove('minimized');
             }
         }
 
