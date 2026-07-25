@@ -105,8 +105,8 @@
             configAiFilterEnabledHelp: 'Use AI to automatically filter spam and blacklist comments',
             configAiFilterPromptLabel: 'AI Filter Prompt',
             configAiFilterPromptHelp: 'Custom prompt for AI comment classification (leave empty for default)',
-            configBioBlacklistPrefixesLabel: 'Bio Blacklist Prefixes',
-            configBioBlacklistPrefixesHelp: 'Users whose profile bio starts with any of these prefixes are blacklisted directly. One prefix per line. Runs in the background via the user info API, no browser tabs opened.',
+            configDisplayNameKeywordsLabel: 'Display Name Keywords Blacklist',
+            configDisplayNameKeywordsHelp: 'Users whose display name contains any of these keywords are blacklisted directly. One keyword per line. No API calls, instant filtering.',
             consoleAiFilterStart: 'AI comment filtering started...',
             consoleAiFilterProgress: 'AI filtering: {current}/{total} comments processed',
             consoleAiFilterComplete: 'AI filtering completed: {blacklist} blacklisted, {spam} spam, {normal} normal',
@@ -194,8 +194,8 @@
             configAiFilterEnabledHelp: '使用AI自动过滤垃圾评论和黑名单评论',
             configAiFilterPromptLabel: 'AI过滤提示词',
             configAiFilterPromptHelp: '自定义AI评论分类的提示词（留空使用默认）',
-            configBioBlacklistPrefixesLabel: '个人简介前缀黑名单',
-            configBioBlacklistPrefixesHelp: '个人简介以这些前缀开头的用户直接拉黑，每行一个。后台通过用户信息接口异步检查，不会打开浏览器标签页。',
+            configDisplayNameKeywordsLabel: '昵称关键词黑名单',
+            configDisplayNameKeywordsHelp: '昵称包含这些关键词的用户直接拉黑，每行一个。无需API调用，即时过滤。',
             consoleAiFilterStart: 'AI评论过滤已启动...',
             consoleAiFilterProgress: 'AI过滤中：已处理 {current}/{total} 条评论',
             consoleAiFilterComplete: 'AI过滤完成：黑名单 {blacklist} 条，垃圾 {spam} 条，正常 {normal} 条',
@@ -252,8 +252,8 @@
         // AI过滤功能配置
         aiFilterEnabled: false,
         aiFilterPrompt: '',
-        // 个人简介前缀黑名单（每行一个前缀，命中前缀的用户直接拉黑）
-        bioBlacklistPrefixes: '已入驻约p平台\n已入驻曰泡平台',
+        // 昵称关键词黑名单（每行一个关键词，昵称包含这些关键词的用户直接拉黑）
+        displayNameKeywords: '已入驻约p平台\n已入驻曰泡平台\n同城上门\n外围\n约炮',
         // 通知配置
         enableNotifications: false,
         // UI 美化
@@ -321,11 +321,11 @@
             collapsed: true
         },
         {
-            key: 'bioBlacklistPrefixes',
-            label: t('configBioBlacklistPrefixesLabel'),
+            key: 'displayNameKeywords',
+            label: t('configDisplayNameKeywordsLabel'),
             type: 'textarea',
-            placeholder: '已入驻约p平台',
-            help: t('configBioBlacklistPrefixesHelp')
+            placeholder: '同城上门\n外围\n约炮',
+            help: t('configDisplayNameKeywordsHelp')
         },
         // 启发式黑名单配置（自定义渲染）
         {
@@ -1087,92 +1087,11 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     // 存储最新的 rate limit 信息
     let lastRateLimit = { remaining: 150, reset: 0 };
 
-    async function fetchUserBio(username) {
-        if (userInfoCache.has(username)) {
-            const cached = userInfoCache.get(username);
-            return { bio: cached?.bio ?? null, rateLimit: lastRateLimit };
-        }
-
-        try {
-            const csrfToken = document.cookie.match(/ct0=([^;]+)/)?.[1];
-            if (!csrfToken) {
-                userInfoCache.set(username, null);
-                return { bio: null, rateLimit: lastRateLimit };
-            }
-
-            const variables = encodeURIComponent(JSON.stringify({
-                screen_name: username,
-                withSafetyModeUserFields: true
-            }));
-            const features = encodeURIComponent(JSON.stringify({
-                hidden_profile_subscriptions_enabled: true,
-                rweb_tipjar_consumption_enabled: true,
-                responsive_web_graphql_exclude_directive_enabled: true,
-                verified_phone_label_enabled: false,
-                subscriptions_verification_info_is_identity_verified_enabled: true,
-                subscriptions_verification_info_verified_since_enabled: true,
-                highlights_tweets_tab_ui_enabled: true,
-                responsive_web_twitter_article_notes_tab_enabled: true,
-                subscriptions_feature_can_gift_premium: true,
-                creator_subscriptions_tweet_preview_api_enabled: true,
-                responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
-                responsive_web_graphql_timeline_navigation_enabled: true
-            }));
-
-            const response = await fetch(
-                `https://x.com/i/api/graphql/G3KGOASz96M-Qu0nwmGXNg/UserByScreenName?variables=${variables}&features=${features}`,
-                {
-                    method: 'GET',
-                    headers: {
-                        'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
-                        'x-csrf-token': csrfToken,
-                        'x-twitter-auth-type': 'OAuth2Session',
-                        'x-twitter-active-user': 'yes',
-                        'x-twitter-client-language': 'en'
-                    },
-                    credentials: 'include'
-                }
-            );
-
-            // 更新 rate limit 信息
-            const remaining = parseInt(response.headers.get('x-rate-limit-remaining') || '150');
-            const reset = parseInt(response.headers.get('x-rate-limit-reset') || '0');
-            lastRateLimit = { remaining, reset };
-
-            // 处理 429
-            if (response.status === 429) {
-                const retryAfter = parseInt(response.headers.get('retry-after') || '0');
-                const waitUntil = retryAfter > 0 ? Date.now() + retryAfter * 1000 : reset * 1000;
-                console.warn(`⚠️ 触发限流 (429)，等待到 ${new Date(waitUntil).toLocaleTimeString()}`);
-                userInfoCache.set(username, null);
-                return { bio: null, rateLimit: lastRateLimit, waitUntil };
-            }
-
-            if (!response.ok) {
-                userInfoCache.set(username, null);
-                return { bio: null, rateLimit: lastRateLimit };
-            }
-
-            const data = await response.json();
-            const userResult = data?.data?.user?.result;
-            const bio = userResult?.legacy?.description || '';
-            const restId = userResult?.rest_id || null;
-            const following = !!userResult?.legacy?.following;
-            userInfoCache.set(username, { bio, restId, following });
-            return { bio, rateLimit: lastRateLimit };
-        } catch (error) {
-            console.warn(`拉取 @${username} 简介失败:`, error.message);
-            userInfoCache.set(username, null);
-            return { bio: null, rateLimit: lastRateLimit };
-        }
-    }
-
-    // 简介前缀匹配检查：简介去掉前导空白后以任一前缀开头就算命中
-    function matchBioPrefix(bio, prefixes) {
-        if (!bio || !Array.isArray(prefixes) || prefixes.length === 0) return null;
-        const trimmed = bio.replace(/^\s+/, '');
-        for (const prefix of prefixes) {
-            if (trimmed.startsWith(prefix)) return prefix;
+    // 昵称关键词匹配检查：昵称包含任一关键词就算命中
+    function matchDisplayNameKeyword(displayName, keywords) {
+        if (!displayName || !Array.isArray(keywords) || keywords.length === 0) return null;
+        for (const keyword of keywords) {
+            if (displayName.includes(keyword)) return keyword;
         }
         return null;
     }
@@ -1346,64 +1265,6 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const learned = (config.get('heuristicPatterns') || []).filter(p => p.enabled);
         const custom = (config.get('userCustomPatterns') || []).filter(p => p.enabled);
         return [...learned, ...custom];
-    }
-
-    // 批量检查一组 username 的简介，返回命中用户的 Set 和命中的前缀 Map
-    // 控制并发（每批 2 个）和批次间延迟（800ms + jitter），避免触发 Twitter rate limit
-    // 限流感知：剩余配额 < RATE_LIMIT_THRESHOLD 时主动暂停到窗口重置
-    async function checkBiosInBackground(usernames, prefixes) {
-        const hits = new Map(); // username -> matched prefix
-        if (!prefixes || prefixes.length === 0 || usernames.length === 0) {
-            return hits;
-        }
-
-        const BATCH_SIZE = 2;
-        const BATCH_DELAY_MS = 800;
-        const RATE_LIMIT_THRESHOLD = 10; // 剩余配额低于此值时暂停
-
-        for (let i = 0; i < usernames.length; i += BATCH_SIZE) {
-            const batch = usernames.slice(i, i + BATCH_SIZE);
-            const results = await Promise.all(batch.map(u => fetchUserBio(u)));
-
-            batch.forEach((username, idx) => {
-                const result = results[idx];
-                const bio = result.bio;
-                const matched = matchBioPrefix(bio, prefixes);
-                if (matched) hits.set(username, matched);
-            });
-
-            // 检查 rate limit
-            const lastResult = results[results.length - 1];
-            if (lastResult.rateLimit) {
-                const { remaining, reset } = lastResult.rateLimit;
-
-                // 如果遇到 429，等待到重置时间
-                if (lastResult.waitUntil) {
-                    const waitMs = lastResult.waitUntil - Date.now();
-                    if (waitMs > 0) {
-                        console.log(`⏸️ 等待限流窗口重置（${Math.ceil(waitMs / 1000)}秒）...`);
-                        await sleep(waitMs);
-                    }
-                }
-                // 如果剩余配额不足，主动暂停
-                else if (remaining < RATE_LIMIT_THRESHOLD && reset > 0) {
-                    const now = Math.floor(Date.now() / 1000);
-                    const waitSeconds = reset - now;
-                    if (waitSeconds > 0 && waitSeconds < 900) { // 最多等 15 分钟
-                        console.log(`⏸️ 配额不足（剩余 ${remaining}），等待窗口重置（${waitSeconds}秒）...`);
-                        await sleep(waitSeconds * 1000);
-                    }
-                }
-            }
-
-            // 批次间延迟 + 随机 jitter
-            if (i + BATCH_SIZE < usernames.length) {
-                const jitter = Math.floor(Math.random() * 400) - 200; // ±200ms
-                await sleep(BATCH_DELAY_MS + jitter);
-            }
-        }
-
-        return hits;
     }
 
     // 前置 spam 检测：命中两条规则中的任一条就判黑名单
@@ -2492,7 +2353,7 @@ ${comments.map((c, i) => {
             let userId = null;
             let isFollowing = false;
 
-            // 优先从缓存中获取 userId（fetchUserBio 已缓存完整用户信息）
+            // 优先从缓存中获取 userId
             const cached = userInfoCache.get(username);
             if (cached && cached.restId) {
                 userId = cached.restId;
@@ -2909,11 +2770,11 @@ ${comments.map((c, i) => {
             // 前置规则检测：
             //   规则 1 broken-word：英文单词被符号/emoji 硬拆开 >= WORD_SPLIT_THRESHOLD 次
             //   规则 2 bot-decor：评论中包含机器人装饰字符 >= WORD_SPLIT_THRESHOLD 次（冷僻 Unicode，普通输入法打不出）
-            //   规则 3 displayName-prefix：昵称包含简介黑名单前缀（直接可见，无需 API）
-            //   规则 4 heuristic：昵称匹配启发式学习的规则
+            //   规则 3 displayName-keyword：昵称包含关键词黑名单（直接可见，无需 API）
+            //   规则 4 heuristic：昵称/评论匹配启发式学习的规则
             // 任一命中直接判黑名单，不送 AI，节省 token 也更稳定
-            const bioPrefixesRaw = config.get('bioBlacklistPrefixes') || '';
-            const bioPrefixes = bioPrefixesRaw.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+            const displayNameKeywordsRaw = config.get('displayNameKeywords') || '';
+            const displayNameKeywords = displayNameKeywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
             const heuristicPatterns = getEnabledHeuristicPatterns();
 
             const preFilterBlacklist = [];
@@ -2935,13 +2796,13 @@ ${comments.map((c, i) => {
                     matched = true;
                 }
 
-                // 检查昵称是否包含简介黑名单前缀
-                if (!matched && bioPrefixes.length > 0 && c.displayName) {
-                    const matchedPrefix = matchBioPrefix(c.displayName, bioPrefixes);
-                    if (matchedPrefix) {
+                // 检查昵称是否包含关键词黑名单
+                if (!matched && displayNameKeywords.length > 0 && c.displayName) {
+                    const matchedKeyword = matchDisplayNameKeyword(c.displayName, displayNameKeywords);
+                    if (matchedKeyword) {
                         preFilterBlacklist.push(c.username);
-                        preFilterReason.set(c.username, `昵称前缀「${matchedPrefix}」`);
-                        console.log(`🎯 前置命中（昵称前缀「${matchedPrefix}」）@${c.username}（${c.displayName}）`);
+                        preFilterReason.set(c.username, `昵称关键词「${matchedKeyword}」`);
+                        console.log(`🎯 前置命中（昵称关键词「${matchedKeyword}」）@${c.username}（${c.displayName}）`);
                         recordBlockHistory(c.username, c.displayName, c.text); // ✅ 记录学习
                         matched = true;
                     }
@@ -2978,19 +2839,6 @@ ${comments.map((c, i) => {
 
                 if (!matched) {
                     comments.push(c);
-                }
-            }
-
-            // 规则 5 bio-prefix：后台查询用户简介，命中配置前缀的直接判黑名单
-            // 与 AI 调用并行执行，不阻塞主流程
-            let bioPromise = Promise.resolve(new Map());
-            if (bioPrefixes.length > 0 && comments.length > 0) {
-                const COMMENT_LENGTH_THRESHOLD = 50;
-                const candidateNames = comments
-                    .filter(c => c.text.length <= COMMENT_LENGTH_THRESHOLD)
-                    .map(c => c.username);
-                if (candidateNames.length > 0) {
-                    bioPromise = checkBiosInBackground(candidateNames, bioPrefixes);
                 }
             }
 
@@ -3060,20 +2908,6 @@ ${comments.map((c, i) => {
                     current: processedCount,
                     total: comments.length
                 }));
-            }
-
-            // 等待并行的简介检查完成，处理 AI 未覆盖到的 bio 命中
-            const bioHits = await bioPromise;
-            if (!stillOnDetail()) return;
-            if (bioHits.size > 0) {
-                const bioBL = [...bioHits.keys()].filter(u => !aiFilterProcessed.has(u) && !blockedUsersSet.has(u));
-                if (bioBL.length > 0) {
-                    const bioMap = new Map(allComments
-                        .filter(c => bioBL.includes(c.username))
-                        .map(c => [c.username, { text: c.text, displayName: c.displayName, avatarUrl: c.avatarUrl }]));
-                    await processAIFilterResults({ blacklist: bioBL, spam: [] }, bioMap);
-                    bioBL.forEach(u => aiFilterProcessed.add(u));
-                }
             }
 
             // 完成
