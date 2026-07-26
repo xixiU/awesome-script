@@ -1215,22 +1215,46 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         const newPatterns = [...displayNamePatterns, ...commentPatterns];
 
-        // 合并旧规则（保留用户的启用/禁用状态）
+        // 合并规则：保留所有旧规则 + 添加新规则，更新重复规则的统计数据
         const oldPatterns = config.get('heuristicPatterns') || [];
-        const merged = newPatterns.map(np => {
-            const old = oldPatterns.find(op => op.text === np.text && op.source === np.source);
-            return {
-                text: np.text,
-                count: np.count,
-                ratio: np.ratio,
-                source: np.source,
-                enabled: old ? old.enabled : true, // 默认启用
-                createdAt: old ? old.createdAt : Date.now()
-            };
+        const mergedMap = new Map();
+
+        // 先添加所有旧规则
+        oldPatterns.forEach(op => {
+            const key = `${op.text}|${op.source}`;
+            mergedMap.set(key, op);
         });
 
+        // 再添加或更新新规则
+        newPatterns.forEach(np => {
+            const key = `${np.text}|${np.source}`;
+            const existing = mergedMap.get(key);
+            if (existing) {
+                // 更新已存在规则的统计数据，保留用户的启用/禁用状态
+                mergedMap.set(key, {
+                    text: np.text,
+                    count: np.count,
+                    ratio: np.ratio,
+                    source: np.source,
+                    enabled: existing.enabled,
+                    createdAt: existing.createdAt
+                });
+            } else {
+                // 添加新规则
+                mergedMap.set(key, {
+                    text: np.text,
+                    count: np.count,
+                    ratio: np.ratio,
+                    source: np.source,
+                    enabled: true, // 默认启用
+                    createdAt: Date.now()
+                });
+            }
+        });
+
+        const merged = Array.from(mergedMap.values());
         config.set('heuristicPatterns', merged);
-        console.log(`🎓 启发式学习完成：发现 ${merged.length} 条规则`, merged);
+        console.log(`🎓 启发式学习完成：保留 ${oldPatterns.length} 条旧规则，发现 ${newPatterns.length} 条新规则，总计 ${merged.length} 条`, merged);
 
         // 新规则学习后，扫描页面上已经过AI但被判为normal的评论，用新规则追杀
         if (merged.length > 0 && isOnTweetDetailPage()) {
