@@ -809,6 +809,7 @@
     async function extractTweetsWithScroll(options = {}) {
         const {
             waitTime = 800,
+            retryWait = 400,
             maxPages = 10,
             skipFirst = false,
             idLength = 30,
@@ -822,10 +823,13 @@
 
         console.log(`Loading ${logPrefix} (max ${maxPages} pages)...`);
 
-        while (pagesLoaded < maxPages && scrollAttempts < 1) {
+        // scrollAttempts 保留 2 次容错：Twitter 懒加载偶尔慢一拍，
+        // 高度暂时不变不代表到底了。重试等待用较短的 retryWait，
+        // 这样到底时的额外开销是 retryWait*2 而不是 waitTime*2。
+        while (pagesLoaded < maxPages && scrollAttempts < 2) {
             // Scroll to bottom
             window.scrollTo(0, document.body.scrollHeight);
-            await sleep(scrollAttempts === 0 ? waitTime : 500);
+            await sleep(scrollAttempts === 0 ? waitTime : retryWait);
 
             // Extract current visible tweets
             const articles = document.querySelectorAll('article[data-testid="tweet"]');
@@ -893,7 +897,7 @@
     // Extract user tweets with scrolling
     async function extractUserTweetsWithScroll(maxPages = 10) {
         return extractTweetsWithScroll({
-            waitTime: 1500,
+            waitTime: 700,
             maxPages,
             skipFirst: false,
             idLength: 30,
@@ -2125,24 +2129,10 @@ ${comments.map((c, i) => {
         }
     }
 
-    // Update button status
+    // 屏蔽进度反馈。手动屏蔽已从工具栏移到油猴菜单，没有按钮可更新，
+    // 进度只输出到控制台。
     function updateButtonStatus(text, isProcessing = false) {
-        const button = document.getElementById('block-all-commenters-btn');
-        if (button) {
-            if (isProcessing) {
-                button.innerHTML = '🔄';
-                button.title = text;
-                button.style.background = 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)';
-                button.style.cursor = 'not-allowed';
-                button.disabled = true;
-            } else {
-                button.innerHTML = '🚫';
-                button.title = t('buttonText');
-                button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-                button.style.cursor = 'pointer';
-                button.disabled = false;
-            }
-        }
+        if (isProcessing) console.log(`🚫 ${text}`);
     }
 
     // ==================== AI总结主处理函数 ====================
@@ -3003,14 +2993,6 @@ ${comments.map((c, i) => {
             return;
         }
 
-        // 更新按钮状态
-        const button = document.getElementById('ai-filter-btn');
-        if (button) {
-            button.innerHTML = '🔄';
-            button.style.background = 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)';
-            button.style.cursor = 'not-allowed';
-        }
-
         try {
             // 先滚动加载更多评论
             console.log(t('consoleLoading'));
@@ -3021,7 +3003,8 @@ ${comments.map((c, i) => {
 
             while (stableCount < 2 && totalScrolls < maxScrollAttempts) {
                 window.scrollTo(0, document.body.scrollHeight);
-                await sleep(800);
+                // 高度已稳定时只做短暂确认，不再整轮干等
+                await sleep(stableCount === 0 ? 700 : 400);
                 totalScrolls++;
 
                 const currentHeight = document.body.scrollHeight;
@@ -3041,11 +3024,7 @@ ${comments.map((c, i) => {
             await autoAIFilterComments();
 
         } finally {
-            if (button) {
-                button.innerHTML = '🔍';
-                button.style.background = 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)';
-                button.style.cursor = 'pointer';
-            }
+            console.log('🔍 手动 AI 过滤结束');
         }
     }
 
@@ -3079,8 +3058,21 @@ ${comments.map((c, i) => {
 
     // ==================== 初始化 ====================
 
+    // 手动屏蔽 / 手动 AI 过滤已从工具栏移除，改为油猴菜单入口（低频操作，
+    // 不占用页面空间）。只注册一次，避免 SPA 路由切换时重复注册。
+    let menuCommandsRegistered = false;
+    function registerManualMenuCommands() {
+        if (menuCommandsRegistered) return;
+        menuCommandsRegistered = true;
+        // i18n 文本自带 emoji，不再传 icon 以免重复
+        config.registerMenuCommand('buttonText', handleBlockAllCommenters);
+        config.registerMenuCommand('aiFilterButtonText', handleManualAIFilter);
+    }
+
     // Initialize
     function init() {
+        registerManualMenuCommands();
+
         // Create floating toolbar (only once, contains all action buttons)
         if (!document.getElementById('x-toolkit-toolbar')) {
             createFloatingToolbar();
