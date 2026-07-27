@@ -808,7 +808,7 @@
     // Generic function to extract tweets/comments with scrolling
     async function extractTweetsWithScroll(options = {}) {
         const {
-            waitTime = 1500,
+            waitTime = 800,
             maxPages = 10,
             skipFirst = false,
             idLength = 30,
@@ -822,10 +822,10 @@
 
         console.log(`Loading ${logPrefix} (max ${maxPages} pages)...`);
 
-        while (pagesLoaded < maxPages && scrollAttempts < 2) {
+        while (pagesLoaded < maxPages && scrollAttempts < 1) {
             // Scroll to bottom
             window.scrollTo(0, document.body.scrollHeight);
-            await sleep(waitTime);
+            await sleep(scrollAttempts === 0 ? waitTime : 500);
 
             // Extract current visible tweets
             const articles = document.querySelectorAll('article[data-testid="tweet"]');
