@@ -1772,27 +1772,6 @@ ${comments.map((c, i) => {
         const isOnTweetPage = isOnTweetDetailPage();
         const isOnUserPage = isOnUserProfilePage();
 
-        if (isOnTweetPage) {
-            // Block commenters button (only on tweet page)
-            const blockButton = document.createElement('button');
-            blockButton.id = 'block-all-commenters-btn';
-            blockButton.innerHTML = '🚫';
-            blockButton.title = t('buttonText');
-            blockButton.style.cssText = getActionButtonStyle('#667eea', '#764ba2');
-            blockButton.addEventListener('click', handleBlockAllCommenters);
-            blockButton.addEventListener('mouseenter', function () {
-                if (!isBlocking) {
-                    this.style.transform = 'scale(1.12)';
-                    this.style.boxShadow = '0 3px 10px rgba(102, 126, 234, 0.5)';
-                }
-            });
-            blockButton.addEventListener('mouseleave', function () {
-                this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 2px 6px rgba(102, 126, 234, 0.35)';
-            });
-            actionsContainer.appendChild(blockButton);
-        }
-
         if (isOnTweetPage || isOnUserPage) {
             // AI summarize button
             const summarizeButton = document.createElement('button');
@@ -1815,25 +1794,6 @@ ${comments.map((c, i) => {
         }
 
         if (isOnTweetPage) {
-            // AI filter button (only on tweet page)
-            const aiFilterButton = document.createElement('button');
-            aiFilterButton.id = 'ai-filter-btn';
-            aiFilterButton.innerHTML = '🔍';
-            aiFilterButton.title = t('aiFilterButtonText');
-            aiFilterButton.style.cssText = getActionButtonStyle('#11998e', '#38ef7d');
-            aiFilterButton.addEventListener('click', handleManualAIFilter);
-            aiFilterButton.addEventListener('mouseenter', function () {
-                if (!aiFilterInProgress) {
-                    this.style.transform = 'scale(1.12)';
-                    this.style.boxShadow = '0 3px 10px rgba(17, 153, 142, 0.5)';
-                }
-            });
-            aiFilterButton.addEventListener('mouseleave', function () {
-                this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 2px 6px rgba(17, 153, 142, 0.35)';
-            });
-            actionsContainer.appendChild(aiFilterButton);
-
             // Show all spam button
             const showSpamButton = document.createElement('button');
             showSpamButton.id = 'show-all-spam-btn';
