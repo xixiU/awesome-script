@@ -1,20 +1,25 @@
 /**
  * ============================================================
- * 21tb增强脚本 Chrome扩展版
+ * iFlytek Toolkit Chrome扩展版
  *
  * 功能概述：
- * 1. 视频控制增强
+ * 1. 自动登录 (讯飞域名专属)
+ *    - 场景1: Coremail 邮件系统自动登录
+ *    - 场景2: 中间页自动点击"使用集团账号登录"
+ *    - 场景3: 集团统一认证自动登录(无验证码时)
+ *
+ * 2. 视频控制增强 (21tb 专属)
  *    - 键盘快捷键控制：左右箭头快进/回退，数字键调速
  *    - 滑块速度控制（1-5倍速，默认2倍）
  *
- * 2. 考试自动答题
+ * 3. 考试自动答题 (21tb 专属)
  *    - 直接调用 Dify API 进行智能答题
  *    - 无需本地代理服务，所有配置存储在浏览器中
  *    - 支持暂停/继续控制
  *    - 配置通过扩展弹窗管理
  *    - 失败题目重试功能
  *
- * 3. 解除网页限制（v2.1 新增）
+ * 4. 解除网页限制 (全站通用)
  *    - 解除网页禁止复制限制（包括多层 iframe）
  *    - 解除网页禁止粘贴限制
  *    - 解除右键菜单禁用
@@ -26,8 +31,15 @@
 (function () {
     'use strict';
 
+    // 域名判断：隔离 21tb 专属功能和讯飞专属功能
+    const IS_21TB = location.hostname.includes('21tb.com');
+    const IS_IFLYTEK = location.hostname.includes('iflytek.');
+
+    console.log('[iFlytek Toolkit Extension] 脚本已加载, 域名类型:',
+                IS_21TB ? '21tb' : (IS_IFLYTEK ? 'iflytek' : 'other'));
+
     /******************************************************************
-     * 配置管理模块
+     * 配置管理模块 (21tb 专属)
      ******************************************************************/
 
     // 默认配置
@@ -575,11 +587,78 @@
         });
     }
 
-    // --- 脚本入口 ---
+    /******************************************************************
+     * 自动登录模块 (讯飞域名专属)
+     ******************************************************************/
+
+    const LOGIN_CHECK_INTERVAL = 1000;
+
+    function autoLogin() {
+        try {
+            // --- 场景 1: Coremail 风格登录窗口 ---
+            const form1 = document.querySelector('form.j-login-form');
+            if (form1) {
+                const uidInput = form1.querySelector('input[name="uid"]');
+                const pwdInput = form1.querySelector('input[name="password"]');
+                const loginBtn = form1.querySelector('.j-submit');
+
+                if (uidInput && uidInput.value && pwdInput && pwdInput.value && loginBtn) {
+                    console.log('[iFlytek Toolkit] 场景1 (Coremail): 账号密码已填充，执行登录');
+                    loginBtn.click();
+                    return;
+                }
+            }
+
+            // --- 场景 2: 中间页 "使用集团账号登录" ---
+            const buttons = document.querySelectorAll('button.el-button');
+            for (let btn of buttons) {
+                if (btn.textContent.includes('使用集团账号登录')) {
+                    console.log('[iFlytek Toolkit] 场景2 (中间页): 点击[使用集团账号登录]');
+                    btn.click();
+                    return;
+                }
+            }
+
+            // --- 场景 3: 集团统一认证登录窗口 ---
+            const loginBox3 = document.querySelector('#userInput');
+            if (loginBox3 && (loginBox3.style.display !== 'none' && getComputedStyle(loginBox3).display !== 'none')) {
+                const userInput = document.getElementById('username');
+                const pwdInput = document.getElementById('password');
+                const submitBtn = document.querySelector('input.user-btn[type="submit"]');
+                const vercodeInput = document.querySelector('li.vercode');
+                const isVercodeVisible = vercodeInput && getComputedStyle(vercodeInput).display !== 'none';
+
+                if (userInput && userInput.value && pwdInput && pwdInput.value && submitBtn) {
+                    if (!isVercodeVisible) {
+                        console.log('[iFlytek Toolkit] 场景3 (集团认证): 账号密码已填充且无验证码，执行登录');
+                        submitBtn.click();
+                    }
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error('[iFlytek Toolkit] 自动登录错误:', e);
+        }
+    }
+
+    /******************************************************************
+     * 脚本入口
+     ******************************************************************/
+
     window.addEventListener('load', () => {
-        initializeExamModule();
-        initializeVideoModule();
-        removeWebRestrictions();  // 解除复制限制
+        // 全站通用：解除复制限制
+        removeWebRestrictions();
+
+        // 21tb 专属：考试答题 + 视频控制
+        if (IS_21TB) {
+            initializeExamModule();
+            initializeVideoModule();
+        }
+
+        // 讯飞域名专属：自动登录
+        if (IS_IFLYTEK) {
+            setInterval(autoLogin, LOGIN_CHECK_INTERVAL);
+        }
     });
 
 })();
