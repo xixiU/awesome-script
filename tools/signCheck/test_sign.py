@@ -355,7 +355,9 @@ if __name__ == "__main__":
     # HOST_PREFIX = 'https://zhft.iflysec.com/hnfy'
     # 吉林
     # HOST_PREFIX = 'https://xfrh-jlfy.e-court.gov.cn:8866/'
-    
+    # 安徽
+    HOST_PREFIX = 'http://zhft.iflysec.com/ahcz'
+
     # 成都
     # HOST_PREFIX = 'https://zhft.iflysec.com/scmz'
 
@@ -364,13 +366,19 @@ if __name__ == "__main__":
     # 湖南长沙
     # HOST_PREFIX = 'http://zhft.iflysec.com/hncs'
     # 天津武清
-    HOST_PREFIX= 'https://wqzyserver.iflysec.com'
+    # HOST_PREFIX= 'https://wqzyserver.iflysec.com'
     # 研发环境
     # HOST_PREFIX = 'https://hktestservice.iflysec.com'
     # 测试环境
     # HOST_PREFIX = 'https://ys-slfdfs.iflysec.com'
 
     TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxNTgyNjc5Nzg1NSIsImlzcyI6IklGTFlURUstWkZCRyIsImV4cCI6MTc4Mzk1NjU5MywiaWF0IjoxNzgzOTEzMzkzLCJ1c2VySWQiOiIxNTgyNjc5Nzg1NSJ9.E3CX6dbW6qNzbTm5cCdGwCeBYo8Rd_-LU3by-e7I3UA'
+    # test_api_sign(
+    #     url=f"{HOST_PREFIX}/ts-service/internet/user/checkId",
+    #     method="POST",
+    #     body={"trialCode":"8610000","telephone":"13111111111"},
+    #     token=TOKEN
+    # )
     # test_api_sign(
     #     url=f"{HOST_PREFIX}/ts-service/internet/matreial/sign/info?ah=(2025)川0703民初7897979号&trialNum=1",
     #     method="GET",
@@ -388,11 +396,11 @@ if __name__ == "__main__":
     #     token=TOKEN
     # )
     
-    # test_fz_sign()
+    test_fz_sign()
 
     # ============== 内外网文件传递测试 ==============
     # 方式一：上传本地文件
-    test_transfer_file(file_path=r"C:\Users\rjyuan2\Downloads\二维码.png")
+    # test_transfer_file(file_path=r"C:\Users\rjyuan2\Downloads\二维码.png")
     #
     # 方式二：直接构造字节（会自动分块，构造大于 chunk_size 的数据可测试多块场景）
     # test_transfer_file(
