@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         iFlytek Unified Login Assistant
+// @name         iFlytek Unified Login Assistant & Copy Enabler
 // @namespace    http://tampermonkey.net/
-// @version      0.1
-// @description  自动处理 iFlytek 各种登录场景：自动点击登录、跳转集团账号
+// @version      0.2
+// @description  自动处理 iFlytek 各种登录场景：自动点击登录、跳转集团账号、解除复制限制
 // @author       You
 // @match        *://*.iflytek.*/*
 // @match        *://*.iflytek.com/*
@@ -20,6 +20,64 @@
 
     // 定义检测间隔 (毫秒)
     const CHECK_INTERVAL = 1000;
+
+    // ==================== 功能 1: 解除复制限制 ====================
+    function enableCopy() {
+        try {
+            // 恢复页面的文本选择功能
+            document.body.style.userSelect = 'text';
+            document.documentElement.style.userSelect = 'text';
+            document.body.style.webkitUserSelect = 'text';
+            document.documentElement.style.webkitUserSelect = 'text';
+
+            // 注入全局 CSS 强制覆盖所有禁用选择的样式
+            if (!document.getElementById('iflytek-enable-copy-style')) {
+                const style = document.createElement('style');
+                style.id = 'iflytek-enable-copy-style';
+                style.textContent = `
+                    * {
+                        user-select: text !important;
+                        -webkit-user-select: text !important;
+                        -moz-user-select: text !important;
+                        -ms-user-select: text !important;
+                    }
+                `;
+                document.head.appendChild(style);
+                console.log('✅ 已解除复制限制');
+            }
+
+            // 移除可能阻止复制的事件监听器
+            const events = ['copy', 'cut', 'selectstart', 'contextmenu'];
+            events.forEach(eventType => {
+                // 清除直接绑定的事件处理器
+                document[`on${eventType}`] = null;
+                if (document.body) {
+                    document.body[`on${eventType}`] = null;
+                }
+
+                // 在捕获阶段拦截并停止传播,防止页面脚本阻止复制
+                document.addEventListener(eventType, (e) => {
+                    e.stopPropagation();
+                }, true);
+            });
+        } catch (e) {
+            console.error('解除复制限制失败:', e);
+        }
+    }
+
+    // 立即执行一次解除复制限制
+    enableCopy();
+
+    // 监听 DOM 变化,应对动态加载的内容
+    const observer = new MutationObserver(() => {
+        enableCopy();
+    });
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+
+    // ==================== 功能 2: 自动登录 ====================
 
     function autoLogin() {
         try {
