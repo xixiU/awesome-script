@@ -252,8 +252,26 @@ A: 建议：
 
 A: 无论原文使用何种语言，总结都会使用**中文**输出，并采用结构化的Markdown格式，便于阅读。
 
-
 ## 更新日志
+
+### v2.4.8.pre (2026-07-30)
+
+- ⚡ **AI 过滤与 AI 总结卡顿优化**（根因在 DOM 侧的重复工作，与 LLM 请求无关）：
+  - `getAllCommentersWithText` 读取昵称由 `innerText` 改为 `textContent`。`innerText`
+    会强制浏览器同步重排以计算布局，而该函数被 MutationObserver 每 300ms 全量调用一次，
+    对每条评论都触发一次重排。真实页面实测（18 条评论）：**1.98ms → 0.03ms，约 60 倍**
+  - `extractTweetsWithScroll` 原先每轮滚动都重新解析全部已渲染评论（含 emoji 递归提取），
+    约 90% 结果被去重丢弃；去重还使用 `items.find` 线性查找。改为 WeakSet 跳过已解析节点
+    + Set 去重，实测 **0.5ms → 0.07ms**，评论越多差距越大（600 条时 `find` 单项即占 7ms）
+  - 此处用 WeakSet 而非在节点上写标记：Twitter 是 SPA 会复用 DOM 节点，写属性会残留到
+    下次提取导致误跳过（即 `data-ai-filtered` 曾出现过的问题）
+  - `recordBlockHistory` 批量拉黑时逐个全量 `JSON.stringify` 落盘并可能重复触发学习，
+    改为内存累积 + 合并落盘，启发式学习移至 `requestIdleCallback` 执行，不再抢占主线程
+  - `markCommentByCategory` 由每个用户全量遍历一次所有 article，改为整批一次遍历
+- 🔧 **`extractCommonSubstrings` 防退化**：stopWords 改 Set 查找，去重从 O(n²) 全量对比
+  改为按长度降序只比已保留项，同条文本内相同子串只计一次。注：实测该函数在默认阈值下
+  仅约 1ms，**并非卡顿来源**，此改动仅为阈值调低或历史增长后的防退化（候选 628 条时
+  3.6ms → 1.3ms）
 
 ### v2.4.7 (2026-07-25)
 
