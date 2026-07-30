@@ -1,11 +1,18 @@
 {
-    "current_model": "whisper",
+    "current_model": "mlx_whisper",
     "models": {
+        "mlx_whisper": {
+            "type": "mlx_whisper",
+            "enabled": true,
+            "config": {
+                "model_size": "mlx-community/distil-whisper-large-v3"
+            }
+        },
         "whisper": {
             "type": "whisper",
             "enabled": true,
             "config": {
-                "model_size": "small",
+                "model_size": "distil-large-v3",
                 "device": "cpu",
                 "compute_type": "int8",
                 "cpu_threads": 4

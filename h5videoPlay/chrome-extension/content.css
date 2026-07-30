@@ -142,9 +142,12 @@
     z-index: 2147483646 !important;
 }
 
-/* 原生全屏时让容器内视频填满（脚本对容器全屏而非裸 video，避免提示无处叠加）*/
-:fullscreen video,
-:-webkit-full-screen video {
+/* 脚本对"播放器容器"发起原生全屏时，让容器内视频填满。
+   仅作用于我们打了 gm-fs-scope 标记的容器，绝不影响站点自身的原生全屏
+   （如 YouTube 用 JS 精确计算 video 的 width/height/left/top，若被强制改写会导致画面变黑）。 */
+:fullscreen.gm-fs-scope > video,
+:-webkit-full-screen.gm-fs-scope > video,
+:fullscreen .gm-fs-scope > video {
     width: 100% !important;
     height: 100% !important;
     max-height: 100% !important;

@@ -6,7 +6,7 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.1.4
+// @version    2.1.6
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -222,6 +222,81 @@
     };
     if (document.documentElement) startObserve();
     else document.addEventListener('DOMContentLoaded', startObserve, { once: true });
+})();
+
+// ===== 反失焦暂停（早期注入）=====
+// 部分网站监听 visibilitychange / blur / pagehide 等事件，在页面失焦
+// （鼠标移出窗口、切到其他标签/应用）时强制暂停视频。此保护层：
+// 1. 伪装 document.hidden=false、visibilityState='visible'，让站点以为页面始终可见
+// 2. 拦截 visibilitychange / webkitvisibilitychange / blur / pagehide / freeze 事件监听，
+//    不把这些事件派发给站点脚本（避免其失焦暂停回调被触发）
+// 默认开启，可通过油猴菜单针对个别网站关闭。
+(function () {
+    'use strict';
+    if (typeof window === 'undefined' || window.__html5VideoAntiPauseProtected) return;
+    window.__html5VideoAntiPauseProtected = true;
+
+    const STORE_KEY = 'gm_h5_antiPauseDisabled';
+    let disabled = false;
+    try {
+        disabled = (typeof GM_getValue === 'function') && GM_getValue(STORE_KEY, {})[location.hostname] === true;
+    } catch (e) { /* ignore */ }
+    if (disabled) return;
+
+    // 1) 伪装页面可见性状态
+    const forceVisible = (obj, prop, value) => {
+        try {
+            Object.defineProperty(obj, prop, { configurable: true, get: () => value });
+        } catch (e) { /* ignore */ }
+    };
+    forceVisible(Document.prototype, 'hidden', false);
+    forceVisible(Document.prototype, 'webkitHidden', false);
+    forceVisible(Document.prototype, 'visibilityState', 'visible');
+    forceVisible(Document.prototype, 'webkitVisibilityState', 'visible');
+    // 有些实现属性挂在实例上，覆盖到 document 自身
+    forceVisible(document, 'hidden', false);
+    forceVisible(document, 'visibilityState', 'visible');
+
+    // 2) 拦截失焦类事件的监听注册，阻断站点的失焦暂停回调
+    const BLOCKED = new Set(['visibilitychange', 'webkitvisibilitychange', 'mozvisibilitychange', 'msvisibilitychange', 'blur', 'pagehide', 'freeze']);
+    // window 上的 blur 需拦截；但 video/元素自身的 blur 是无害的 UI 焦点事件，故仅拦 document/window。
+    const shouldBlock = (target, type) => {
+        const t = typeof type === 'string' ? type.toLowerCase() : '';
+        if (!BLOCKED.has(t)) return false;
+        // 仅拦截挂在 document / window 上的（站点通常在此监听失焦）
+        return target === document || target === window;
+    };
+    try {
+        const rawAdd = EventTarget.prototype.addEventListener;
+        EventTarget.prototype.addEventListener = function (type, listener, opts) {
+            if (shouldBlock(this, type)) return; // 吞掉注册
+            return rawAdd.call(this, type, listener, opts);
+        };
+    } catch (e) { /* ignore */ }
+
+    // 3) 拦截 onvisibilitychange / onblur / onpagehide 属性赋值
+    ['onvisibilitychange', 'onwebkitvisibilitychange', 'onblur', 'onpagehide', 'onfreeze'].forEach(prop => {
+        try {
+            Object.defineProperty(document, prop, { configurable: true, get: () => null, set: () => {} });
+        } catch (e) { /* ignore */ }
+        try {
+            Object.defineProperty(window, prop, { configurable: true, get: () => null, set: () => {} });
+        } catch (e) { /* ignore */ }
+    });
+
+    // 4) 提供菜单开关：针对当前站点关闭本保护（刷新后生效）
+    try {
+        if (typeof GM_registerMenuCommand === 'function') {
+            GM_registerMenuCommand('❌ 本站关闭"反失焦暂停"（刷新生效）', () => {
+                try {
+                    const map = GM_getValue(STORE_KEY, {});
+                    map[location.hostname] = true;
+                    GM_setValue(STORE_KEY, map);
+                    location.reload();
+                } catch (e) { /* ignore */ }
+            });
+        }
+    } catch (e) { /* ignore */ }
 })();
 
 // ===== Trusted Types 辅助函数 =====
@@ -579,11 +654,44 @@ const getMainDomain = host => {
     return a[i];
 };
 const inRange = (n, min, max) => Math.max(min, n) == Math.min(n, max);
+
+// 设置播放速率并锁定，抵御部分站点（如 pornhub）的 ratechange 拉回逻辑。
+// 这些站点会在外部修改 playbackRate 后约 300ms 内把它强制改回内部记录值，
+// 导致"倍速只能按一次、按多次不变"。这里在 video 实例上安装守卫 getter/setter：
+// - 脚本设定的期望值记录在 _gmDesiredRate
+// - 站点写入的任何其它值都会被改回期望值
+// 期望值本身仍走原生 setter 生效，且触发 ratechange 让站点 UI 同步。
+const RATE_DESC = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
+const setPlaybackRate = (video, rate) => {
+    rate = +rate.toFixed(2);
+    if (!video) return;
+    // 首次对该元素设速时安装守卫
+    if (!video._gmRateGuard && RATE_DESC && RATE_DESC.get && RATE_DESC.set) {
+        try {
+            Object.defineProperty(video, '_gmRateGuard', { value: true, writable: false, enumerable: false });
+            Object.defineProperty(video, 'playbackRate', {
+                configurable: true,
+                enumerable: true,
+                get() { return RATE_DESC.get.call(this); },
+                set(val) {
+                    // 站点拉回：写入值与期望值不一致时，强制改回期望值
+                    const target = (this._gmDesiredRate != null && +val.toFixed(2) !== this._gmDesiredRate)
+                        ? this._gmDesiredRate : val;
+                    RATE_DESC.set.call(this, target);
+                }
+            });
+        } catch (e) { /* ignore，退回普通赋值 */ }
+    }
+    video._gmDesiredRate = rate;
+    if (RATE_DESC && RATE_DESC.set) RATE_DESC.set.call(video, rate);
+    else video.playbackRate = rate;
+};
+
 const adjustRate = n => {
     n += v.playbackRate;
-    if (n < 0.1) v.playbackRate = .1;
-    else if (n > 16) v.playbackRate = 16;
-    else v.playbackRate = +n.toFixed(2);
+    if (n < 0.1) n = .1;
+    else if (n > 16) n = 16;
+    setPlaybackRate(v, n);
 };
 const adjustVolume = n => {
     n += v.volume;
@@ -665,22 +773,31 @@ class FullScreen {
         // 优先对包裹视频的容器全屏，而非裸 <video>。
         // 因为 <video> 是替换元素、无法渲染子节点，全屏后倍速提示/面板无法叠加显示。
         // 对容器全屏则可让提示进入 top layer 正常展示。
-        let target = e;
+        let target = e, needFill = !1;
         if (e instanceof HTMLVideoElement) {
             const p = e.parentElement;
             if (p && p !== d.body && p !== d.documentElement && p.requestFullscreen) {
                 target = p;
+                needFill = !0;
                 if (!_fsFillCSSAdded) {
                     _fsFillCSSAdded = !0;
-                    // 容器全屏时让视频填满，避免视频保持原始尺寸
-                    GM_addStyle(':fullscreen video,:-webkit-full-screen video{width:100%!important;height:100%!important;max-height:100%!important;object-fit:contain!important;margin:auto!important}');
+                    // 容器全屏时让视频填满。仅作用于我们打了 gm-fs-scope 标记的容器，
+                    // 绝不影响站点自身的原生全屏（如 YouTube 用 JS 精确定位 video，
+                    // 若被强制改写 width/height/left/top 会导致全屏画面变黑）。
+                    GM_addStyle(':fullscreen.gm-fs-scope>video,:-webkit-full-screen.gm-fs-scope>video,:fullscreen .gm-fs-scope>video{width:100%!important;height:100%!important;max-height:100%!important;object-fit:contain!important;margin:auto!important}');
                 }
             }
         }
+        this._target = target;
+        this._needFill = needFill;
         let fn = d.exitFullscreen || d.webkitExitFullscreen || d.mozCancelFullScreen || d.msExitFullscreen || noopFn;
         this.exit = fn.bind(d);
         fn = target.requestFullscreen || target.webkitRequestFullScreen || target.mozRequestFullScreen || target.msRequestFullScreen || noopFn;
-        this.enter = fn.bind(target);
+        this._enterRaw = fn.bind(target);
+    }
+    enter() {
+        if (this._needFill && this._target) this._target.classList.add('gm-fs-scope');
+        this._enterRaw();
     }
     static isFull() {
         return !!(d.fullscreen || d.webkitIsFullScreen || d.mozFullScreen ||
@@ -690,6 +807,13 @@ class FullScreen {
         FullScreen.isFull() ? this.exit() : this.enter();
     }
 }
+
+// 退出原生全屏时清理填充作用域类，避免残留影响非全屏布局
+d.addEventListener('fullscreenchange', () => {
+    if (!(d.fullscreenElement || d.webkitFullscreenElement || d.mozFullScreenElement)) {
+        d.querySelectorAll('.gm-fs-scope').forEach(el => el.classList.remove('gm-fs-scope'));
+    }
+});
 
 //万能网页全屏, 参考了：https://github.com/gooyie/ykh5p
 class FullPage {
@@ -835,10 +959,9 @@ async function toggleSystemAudioSubtitle() {
 const actList = new Map();
 actList.set(90, _ => { //按键Z: 切换加速状态
     if (v.playbackRate == 1 || v.playbackRate == 0) {
-        v.playbackRate = +localStorage.mvPlayRate || 1.3;
+        setPlaybackRate(v, +localStorage.mvPlayRate || 1.3);
     } else {
-        // localStorage.mvPlayRate = v.playbackRate;
-        v.playbackRate = 1;
+        setPlaybackRate(v, 1);
     }
 })
     .set(88, adjustRate.bind(null, -0.1)) //按键X
@@ -957,7 +1080,7 @@ const app = {
                 v = e;
                 cfg.btnPlay = cfg.btnNext = cfg.btnFP = cfg.btnFS = _fs = _fp = null;
                 if (!cfg.isLive && videoConfigManager.get('remberRate')) {
-                    v.playbackRate = +localStorage.mvPlayRate || 1;
+                    setPlaybackRate(v, +localStorage.mvPlayRate || 1);
                     v.addEventListener('ratechange', ev => {
                         if (v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
                     });
@@ -1071,7 +1194,7 @@ const app = {
         window.addEventListener('urlchange', async (info) => { //TM event: info.url
             await sleep(990);
             this.checkMV();
-            if (videoConfigManager.get('remberRate')) v.playbackRate = +localStorage.mvPlayRate || 1;
+            if (videoConfigManager.get('remberRate')) setPlaybackRate(v, +localStorage.mvPlayRate || 1);
             bus.$emit('urlchange');
         });
         if (top != self) {
@@ -1088,7 +1211,7 @@ const app = {
         v.addEventListener('canplay', ev => {
             if (cfg.isLive) for (const k of [37, 1061, 39, 1063, 67, 77, 78, 88, 90]) actList.delete(k);
             else {
-                if (videoConfigManager.get('remberRate')) v.playbackRate = +localStorage.mvPlayRate || 1;
+                if (videoConfigManager.get('remberRate')) setPlaybackRate(v, +localStorage.mvPlayRate || 1);
                 v.addEventListener('ratechange', ev => {
                     if (videoConfigManager.get('remberRate') && v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
                 });
@@ -1605,7 +1728,7 @@ Native controls are forced on for all H5 videos so the timeline can be clicked o
         function setSpeed(s) {
             if (!v) return;
             s = Math.max(0.25, Math.min(4, s));
-            v.playbackRate = s;
+            setPlaybackRate(v, s);
             const pct = (s - 0.25) / 3.75 * 100;
             progress.style.width = pct + '%';
             speedValue.textContent = s.toFixed(2) + 'x';

@@ -6,6 +6,52 @@
     if (window.__h5videoInjected) return;
     window.__h5videoInjected = true;
 
+    // ===== 反失焦暂停 =====
+    // 部分网站监听 visibilitychange / blur / pagehide 等事件，在页面失焦
+    // （鼠标移出窗口、切到其他标签/应用）时强制暂停视频。此保护层伪装页面
+    // 始终可见，并拦截失焦类事件的监听注册。可通过 localStorage 针对站点关闭：
+    // localStorage.h5video_antiPause_off = '1'
+    (function () {
+        try {
+            if (localStorage.getItem('h5video_antiPause_off') === '1') return;
+        } catch (e) { /* ignore */ }
+
+        const forceVisible = (obj, prop, value) => {
+            try {
+                Object.defineProperty(obj, prop, { configurable: true, get: () => value });
+            } catch (e) { /* ignore */ }
+        };
+        forceVisible(Document.prototype, 'hidden', false);
+        forceVisible(Document.prototype, 'webkitHidden', false);
+        forceVisible(Document.prototype, 'visibilityState', 'visible');
+        forceVisible(Document.prototype, 'webkitVisibilityState', 'visible');
+        forceVisible(document, 'hidden', false);
+        forceVisible(document, 'visibilityState', 'visible');
+
+        const BLOCKED = new Set(['visibilitychange', 'webkitvisibilitychange', 'mozvisibilitychange', 'msvisibilitychange', 'blur', 'pagehide', 'freeze']);
+        const shouldBlock = (target, type) => {
+            const t = typeof type === 'string' ? type.toLowerCase() : '';
+            if (!BLOCKED.has(t)) return false;
+            return target === document || target === window;
+        };
+        try {
+            const rawAdd = EventTarget.prototype.addEventListener;
+            EventTarget.prototype.addEventListener = function (type, listener, opts) {
+                if (shouldBlock(this, type)) return;
+                return rawAdd.call(this, type, listener, opts);
+            };
+        } catch (e) { /* ignore */ }
+
+        ['onvisibilitychange', 'onwebkitvisibilitychange', 'onblur', 'onpagehide', 'onfreeze'].forEach(prop => {
+            try {
+                Object.defineProperty(document, prop, { configurable: true, get: () => null, set: () => {} });
+            } catch (e) { /* ignore */ }
+            try {
+                Object.defineProperty(window, prop, { configurable: true, get: () => null, set: () => {} });
+            } catch (e) { /* ignore */ }
+        });
+    })();
+
     const d = document;
     const host = location.host;
     const path = location.pathname;
@@ -19,6 +65,34 @@
     };
     const u = getMainDomain(host);
     let v = null;
+
+    // 设置播放速率并锁定，抵御部分站点（如 pornhub）的 ratechange 拉回逻辑。
+    // 这些站点会在外部修改 playbackRate 后约 300ms 内把它强制改回内部记录值，
+    // 导致"倍速只能按一次、按多次不变"。这里在 video 实例上安装守卫 getter/setter：
+    // 脚本设定的期望值记录在 _gmDesiredRate，站点写入的其它值都会被改回期望值。
+    const RATE_DESC = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
+    function setPlaybackRate(video, rate) {
+        if (!video) return;
+        rate = +rate.toFixed(2);
+        if (!video._gmRateGuard && RATE_DESC && RATE_DESC.get && RATE_DESC.set) {
+            try {
+                Object.defineProperty(video, '_gmRateGuard', { value: true, writable: false, enumerable: false });
+                Object.defineProperty(video, 'playbackRate', {
+                    configurable: true,
+                    enumerable: true,
+                    get() { return RATE_DESC.get.call(this); },
+                    set(val) {
+                        const target = (this._gmDesiredRate != null && +val.toFixed(2) !== this._gmDesiredRate)
+                            ? this._gmDesiredRate : val;
+                        RATE_DESC.set.call(this, target);
+                    }
+                });
+            } catch (e) { /* ignore，退回普通赋值 */ }
+        }
+        video._gmDesiredRate = rate;
+        if (RATE_DESC && RATE_DESC.set) RATE_DESC.set.call(video, rate);
+        else video.playbackRate = rate;
+    }
 
     // 配置对象
     const cfg = {
@@ -109,9 +183,17 @@
             this.exit = exit.bind(d);
             // 对包裹视频的容器全屏，而非裸 <video>。<video> 是替换元素无法渲染子节点，
             // 若对它全屏，倍速提示等挂进去也不会显示；对容器全屏则提示可正常展示。
-            const target = (el && el.tagName === 'VIDEO' && getPlayerContainer(el)) || el;
-            const enter = target.requestFullscreen || target.webkitRequestFullScreen || target.mozRequestFullScreen || noopFn;
-            this.enter = enter.bind(target);
+            // 仅当目标是"我们找的容器"（而非 video 本身）时才需要填充样式，
+            // 且用 gm-fs-scope 类把填充样式限定在本容器内，避免污染站点自身的原生全屏（如 YouTube 用 JS 精确定位视频）。
+            const container = (el && el.tagName === 'VIDEO' && getPlayerContainer(el)) || el;
+            this._target = container;
+            this._needFill = !!(el && el.tagName === 'VIDEO' && container && container !== el);
+            const enter = container.requestFullscreen || container.webkitRequestFullScreen || container.mozRequestFullScreen || noopFn;
+            this._enterRaw = enter.bind(container);
+        }
+        enter() {
+            if (this._needFill && this._target) this._target.classList.add('gm-fs-scope');
+            this._enterRaw();
         }
         static isFull() {
             return !!(d.fullscreen || d.webkitIsFullScreen || d.mozFullScreen ||
@@ -157,10 +239,17 @@
 
     let _fs = null, _fp = null;
 
+    // 退出原生全屏时清理填充作用域类，避免残留影响非全屏布局
+    d.addEventListener('fullscreenchange', () => {
+        if (!(d.fullscreenElement || d.webkitFullscreenElement)) {
+            d.querySelectorAll('.gm-fs-scope').forEach(el => el.classList.remove('gm-fs-scope'));
+        }
+    });
+
     // ===== 速度 / 音量 =====
     function adjustRate(n) {
         if (!v) return;
-        v.playbackRate = Math.min(16, Math.max(0.1, +(v.playbackRate + n).toFixed(2)));
+        setPlaybackRate(v, Math.min(16, Math.max(0.1, +(v.playbackRate + n).toFixed(2))));
         showTip('速度 ' + v.playbackRate + 'x');
     }
 
@@ -296,8 +385,8 @@
     const actList = new Map([
         [90, () => {
             if (!v) return;
-            v.playbackRate = (v.playbackRate === 1 || v.playbackRate === 0)
-                ? (+localStorage.mvPlayRate || 1.3) : 1;
+            setPlaybackRate(v, (v.playbackRate === 1 || v.playbackRate === 0)
+                ? (+localStorage.mvPlayRate || 1.3) : 1);
             showTip('速度 ' + v.playbackRate + 'x');
         }],
         [88, () => adjustRate(-0.1)],
@@ -599,7 +688,7 @@
 
         // 记忆播放速度
         const savedRate = +localStorage.mvPlayRate;
-        if (savedRate && savedRate !== 1) v.playbackRate = savedRate;
+        if (savedRate && savedRate !== 1) setPlaybackRate(v, savedRate);
         v.addEventListener('ratechange', () => {
             if (v.playbackRate && v.playbackRate !== 1) localStorage.mvPlayRate = v.playbackRate;
         });
@@ -795,7 +884,7 @@
         function setSpeed(s) {
             if (!v) return;
             s = Math.max(0.25, Math.min(4, s));
-            v.playbackRate = s;
+            setPlaybackRate(v, s);
             const pct = (s - 0.25) / 3.75 * 100;
             progress.style.width = pct + '%';
             speedValue.textContent = s.toFixed(2) + 'x';

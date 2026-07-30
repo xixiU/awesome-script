@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.4.6
+// @version      2.4.7
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -105,8 +105,8 @@
             configAiFilterEnabledHelp: 'Use AI to automatically filter spam and blacklist comments',
             configAiFilterPromptLabel: 'AI Filter Prompt',
             configAiFilterPromptHelp: 'Custom prompt for AI comment classification (leave empty for default)',
-            configBioBlacklistPrefixesLabel: 'Bio Blacklist Prefixes',
-            configBioBlacklistPrefixesHelp: 'Users whose profile bio starts with any of these prefixes are blacklisted directly. One prefix per line. Runs in the background via the user info API, no browser tabs opened.',
+            configDisplayNameKeywordsLabel: 'Display Name Keywords Blacklist',
+            configDisplayNameKeywordsHelp: 'Users whose display name contains any of these keywords are blacklisted directly. One keyword per line. No API calls, instant filtering.',
             consoleAiFilterStart: 'AI comment filtering started...',
             consoleAiFilterProgress: 'AI filtering: {current}/{total} comments processed',
             consoleAiFilterComplete: 'AI filtering completed: {blacklist} blacklisted, {spam} spam, {normal} normal',
@@ -194,8 +194,8 @@
             configAiFilterEnabledHelp: '使用AI自动过滤垃圾评论和黑名单评论',
             configAiFilterPromptLabel: 'AI过滤提示词',
             configAiFilterPromptHelp: '自定义AI评论分类的提示词（留空使用默认）',
-            configBioBlacklistPrefixesLabel: '个人简介前缀黑名单',
-            configBioBlacklistPrefixesHelp: '个人简介以这些前缀开头的用户直接拉黑，每行一个。后台通过用户信息接口异步检查，不会打开浏览器标签页。',
+            configDisplayNameKeywordsLabel: '昵称关键词黑名单',
+            configDisplayNameKeywordsHelp: '昵称包含这些关键词的用户直接拉黑，每行一个。无需API调用，即时过滤。',
             consoleAiFilterStart: 'AI评论过滤已启动...',
             consoleAiFilterProgress: 'AI过滤中：已处理 {current}/{total} 条评论',
             consoleAiFilterComplete: 'AI过滤完成：黑名单 {blacklist} 条，垃圾 {spam} 条，正常 {normal} 条',
@@ -252,10 +252,12 @@
         // AI过滤功能配置
         aiFilterEnabled: false,
         aiFilterPrompt: '',
-        // 个人简介前缀黑名单（每行一个前缀，命中前缀的用户直接拉黑）
-        bioBlacklistPrefixes: '已入驻约p平台\n已入驻曰泡平台',
+        // 昵称关键词黑名单（每行一个关键词，昵称包含这些关键词的用户直接拉黑）
+        displayNameKeywords: '已入驻约p平台\n已入驻曰泡平台\n同城上门\n外围\n约炮',
         // 通知配置
-        enableNotifications: false
+        enableNotifications: false,
+        // UI 美化
+        hideSidebar: true
     }, {
         i18n: i18n,
         lang: currentLang
@@ -315,14 +317,110 @@
             label: t('configAiFilterPromptLabel'),
             type: 'textarea',
             placeholder: '',
-            help: t('configAiFilterPromptHelp')
+            help: t('configAiFilterPromptHelp'),
+            collapsed: true
         },
         {
-            key: 'bioBlacklistPrefixes',
-            label: t('configBioBlacklistPrefixesLabel'),
+            key: 'displayNameKeywords',
+            label: t('configDisplayNameKeywordsLabel'),
             type: 'textarea',
-            placeholder: '已入驻约p平台',
-            help: t('configBioBlacklistPrefixesHelp')
+            placeholder: '同城上门\n外围\n约炮',
+            help: t('configDisplayNameKeywordsHelp')
+        },
+        // 启发式黑名单配置（自定义渲染）
+        {
+            key: 'heuristicSection',
+            type: 'custom',
+            render: () => {
+                const section = document.createElement('div');
+                section.className = 'config-form-group';
+                section.style.cssText = 'border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-top: 16px;';
+
+                const title = document.createElement('div');
+                title.style.cssText = 'font-weight: 600; font-size: 14px; color: #111827; margin-bottom: 12px;';
+                title.textContent = currentLang === 'zh' ? '🎯 启发式黑名单（自动学习）' : '🎯 Heuristic Blacklist';
+                section.appendChild(title);
+
+                const historyInfo = document.createElement('div');
+                historyInfo.style.cssText = 'font-size: 12px; color: #6b7280; margin-bottom: 12px;';
+                const history = config.get('blockHistory') || [];
+                historyInfo.textContent = currentLang === 'zh'
+                    ? `已拉黑 ${history.length} 条历史记录`
+                    : `${history.length} blocked records`;
+                section.appendChild(historyInfo);
+
+                // 自动发现的规则
+                const learnedTitle = document.createElement('div');
+                learnedTitle.style.cssText = 'font-size: 13px; font-weight: 500; color: #374151; margin-top: 12px; margin-bottom: 8px;';
+                learnedTitle.textContent = currentLang === 'zh' ? '自动发现的规则：' : 'Learned Rules:';
+                section.appendChild(learnedTitle);
+
+                const learnedList = document.createElement('div');
+                learnedList.id = 'heuristic-learned-list';
+                learnedList.style.cssText = 'max-height: 160px; overflow-y: auto; padding-right: 4px;';
+                const learned = config.get('heuristicPatterns') || [];
+                if (learned.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.style.cssText = 'font-size: 12px; color: #9ca3af; padding: 8px 0;';
+                    empty.textContent = currentLang === 'zh' ? '暂无规则（至少10条历史后开始学习）' : 'No rules yet';
+                    learnedList.appendChild(empty);
+                } else {
+                    learned.forEach(p => {
+                        const item = createPatternItem(p, 'learned');
+                        learnedList.appendChild(item);
+                    });
+                }
+                section.appendChild(learnedList);
+
+                // 手动添加的规则
+                const customTitle = document.createElement('div');
+                customTitle.style.cssText = 'font-size: 13px; font-weight: 500; color: #374151; margin-top: 16px; margin-bottom: 8px;';
+                customTitle.textContent = currentLang === 'zh' ? '手动添加的规则：' : 'Custom Rules:';
+                section.appendChild(customTitle);
+
+                const customList = document.createElement('div');
+                customList.id = 'heuristic-custom-list';
+                customList.style.cssText = 'max-height: 160px; overflow-y: auto; padding-right: 4px;';
+                const custom = config.get('userCustomPatterns') || [];
+                if (custom.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.style.cssText = 'font-size: 12px; color: #9ca3af; padding: 8px 0;';
+                    empty.textContent = currentLang === 'zh' ? '暂无规则' : 'No custom rules';
+                    customList.appendChild(empty);
+                } else {
+                    custom.forEach(p => {
+                        const item = createPatternItem(p, 'custom');
+                        customList.appendChild(item);
+                    });
+                }
+                section.appendChild(customList);
+
+                // 操作按钮
+                const btnRow = document.createElement('div');
+                btnRow.style.cssText = 'display: flex; gap: 8px; margin-top: 12px;';
+
+                const addBtn = document.createElement('button');
+                addBtn.textContent = currentLang === 'zh' ? '➕ 添加新规则' : '➕ Add Rule';
+                addBtn.style.cssText = 'padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;';
+                addBtn.onclick = () => addCustomPattern();
+                btnRow.appendChild(addBtn);
+
+                const clearBtn = document.createElement('button');
+                clearBtn.textContent = currentLang === 'zh' ? '🗑️ 清空学习历史' : '🗑️ Clear History';
+                clearBtn.style.cssText = 'padding: 6px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;';
+                clearBtn.onclick = () => clearBlockHistory();
+                btnRow.appendChild(clearBtn);
+
+                const relearnBtn = document.createElement('button');
+                relearnBtn.textContent = currentLang === 'zh' ? '🔄 重新学习' : '🔄 Relearn';
+                relearnBtn.style.cssText = 'padding: 6px 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;';
+                relearnBtn.onclick = () => { learnHeuristicPatterns(); location.reload(); };
+                btnRow.appendChild(relearnBtn);
+
+                section.appendChild(btnRow);
+
+                return section;
+            }
         },
         // 通知配置项
         {
@@ -330,8 +428,153 @@
             label: t('configEnableNotificationsLabel'),
             type: 'checkbox',
             help: t('configEnableNotificationsHelp')
+        },
+        // UI 美化
+        {
+            key: 'hideSidebar',
+            label: currentLang === 'zh' ? '隐藏右侧栏（宽屏模式）' : 'Hide Sidebar (Wide Mode)',
+            type: 'checkbox',
+            help: currentLang === 'zh' ? '隐藏右侧推荐/趋势栏，主内容区自动拉宽。修改后刷新页面生效。' : 'Hide the right sidebar and expand main content. Refresh to apply.'
         }
     ]);
+
+    // ==================== UI 美化：隐藏右侧栏 ====================
+    if (config.get('hideSidebar')) {
+        GM_addStyle(`
+            [data-testid="sidebarColumn"] {
+                display: none !important;
+            }
+            header[role="banner"] {
+                flex-grow: 0 !important;
+            }
+            main[role="main"] > div {
+                max-width: 900px !important;
+                margin: 0 auto !important;
+                flex: 0 0 auto !important;
+            }
+            main[role="main"] > div > div,
+            main[role="main"] > div > div > div {
+                max-width: none !important;
+                width: 100% !important;
+            }
+            [data-testid="primaryColumn"] {
+                max-width: none !important;
+                width: 100% !important;
+            }
+            [data-testid="primaryColumn"] .r-f8sm7e {
+                max-width: none !important;
+            }
+        `);
+    }
+
+    // 启发式规则管理辅助函数
+    function createPatternItem(pattern, type) {
+        const item = document.createElement('div');
+        item.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #f9fafb; border-radius: 4px; margin-bottom: 4px;';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = pattern.enabled !== false;
+        checkbox.style.cssText = 'cursor: pointer;';
+        checkbox.onchange = (e) => {
+            pattern.enabled = e.target.checked;
+            if (type === 'learned') {
+                const patterns = config.get('heuristicPatterns') || [];
+                config.set('heuristicPatterns', patterns);
+            } else {
+                const patterns = config.get('userCustomPatterns') || [];
+                config.set('userCustomPatterns', patterns);
+            }
+        };
+        item.appendChild(checkbox);
+
+        const text = document.createElement('span');
+        text.style.cssText = 'flex: 1; font-size: 13px; color: #374151;';
+
+        // 显示维度标签
+        let dimensionLabel = '';
+        if (pattern.source === 'displayName') {
+            dimensionLabel = currentLang === 'zh' ? '昵称' : 'Name';
+        } else if (pattern.source === 'commentText') {
+            dimensionLabel = currentLang === 'zh' ? '评论' : 'Comment';
+        }
+
+        text.textContent = `"${pattern.text}"`;
+        if (dimensionLabel) {
+            text.textContent += ` (${dimensionLabel}`;
+        }
+        if (pattern.count) {
+            text.textContent += dimensionLabel ? `, ${pattern.count}次, ${(pattern.ratio * 100).toFixed(0)}%)` : ` (${pattern.count}次, ${(pattern.ratio * 100).toFixed(0)}%)`;
+        } else if (dimensionLabel) {
+            text.textContent += ')';
+        }
+
+        item.appendChild(text);
+
+        if (type === 'custom') {
+            const editBtn = document.createElement('button');
+            editBtn.textContent = currentLang === 'zh' ? '编辑' : 'Edit';
+            editBtn.style.cssText = 'padding: 2px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;';
+            editBtn.onclick = () => editCustomPattern(pattern);
+            item.appendChild(editBtn);
+        }
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = currentLang === 'zh' ? '删除' : 'Delete';
+        deleteBtn.style.cssText = 'padding: 2px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;';
+        deleteBtn.onclick = () => deletePattern(pattern, type);
+        item.appendChild(deleteBtn);
+
+        return item;
+    }
+
+    function addCustomPattern() {
+        const text = prompt(currentLang === 'zh' ? '请输入要拉黑的关键词（3-8字）：' : 'Enter keyword (3-8 chars):');
+        if (!text || text.trim().length < 3) {
+            alert(currentLang === 'zh' ? '关键词至少3个字符' : 'At least 3 characters');
+            return;
+        }
+        const source = confirm(currentLang === 'zh'
+            ? '匹配维度：\n确定 = 昵称匹配\n取消 = 评论匹配'
+            : 'Match dimension:\nOK = displayName\nCancel = comment')
+            ? 'displayName'
+            : 'commentText';
+        const patterns = config.get('userCustomPatterns') || [];
+        patterns.push({ text: text.trim(), enabled: true, source });
+        config.set('userCustomPatterns', patterns);
+        location.reload();
+    }
+
+    function editCustomPattern(pattern) {
+        const text = prompt(currentLang === 'zh' ? '修改关键词：' : 'Edit keyword:', pattern.text);
+        if (!text || text.trim().length < 3) return;
+        pattern.text = text.trim();
+        const source = confirm(currentLang === 'zh'
+            ? '匹配维度：\n确定 = 昵称匹配\n取消 = 评论匹配'
+            : 'Match dimension:\nOK = displayName\nCancel = comment')
+            ? 'displayName'
+            : 'commentText';
+        pattern.source = source;
+        const patterns = config.get('userCustomPatterns') || [];
+        config.set('userCustomPatterns', patterns);
+        location.reload();
+    }
+
+    function deletePattern(pattern, type) {
+        if (!confirm(currentLang === 'zh' ? `确定删除规则「${pattern.text}」？` : `Delete rule "${pattern.text}"?`)) return;
+        const key = type === 'learned' ? 'heuristicPatterns' : 'userCustomPatterns';
+        const patterns = (config.get(key) || []).filter(p => p.text !== pattern.text || p.source !== pattern.source);
+        config.set(key, patterns);
+        location.reload();
+    }
+
+    function clearBlockHistory() {
+        if (!confirm(currentLang === 'zh' ? '确定清空所有学习历史和自动规则？手动添加的规则不会被清空。' : 'Clear all history and learned rules?')) return;
+        config.set('blockHistory', []);
+        config.set('heuristicPatterns', []);
+        alert(currentLang === 'zh' ? '已清空' : 'Cleared');
+        location.reload();
+    }
 
     // Restructure config panel: group checkbox items by feature, 2-column grid per group
     function restructureConfigPanel() {
@@ -408,8 +651,11 @@
             const input = g.querySelector('input[type="checkbox"]');
             if (!input) return;
             const key = input.id.replace(/^TwitterXToolkit-/, '');
+            if (!key) return;
             // aiMultimodal 已经被搬到 aiBaseUrl 同行了，跳过它
             if (key === 'aiMultimodal') return;
+            // 只处理有标准 label 的 form group（跳过 custom render 的 section）
+            if (!g.querySelector('.config-label')) return;
             checkboxGroupByKey.set(key, g);
         });
 
@@ -562,7 +808,8 @@
     // Generic function to extract tweets/comments with scrolling
     async function extractTweetsWithScroll(options = {}) {
         const {
-            waitTime = 1500,
+            waitTime = 800,
+            retryWait = 400,
             maxPages = 10,
             skipFirst = false,
             idLength = 30,
@@ -576,10 +823,13 @@
 
         console.log(`Loading ${logPrefix} (max ${maxPages} pages)...`);
 
+        // scrollAttempts 保留 2 次容错：Twitter 懒加载偶尔慢一拍，
+        // 高度暂时不变不代表到底了。重试等待用较短的 retryWait，
+        // 这样到底时的额外开销是 retryWait*2 而不是 waitTime*2。
         while (pagesLoaded < maxPages && scrollAttempts < 2) {
             // Scroll to bottom
             window.scrollTo(0, document.body.scrollHeight);
-            await sleep(waitTime);
+            await sleep(scrollAttempts === 0 ? waitTime : retryWait);
 
             // Extract current visible tweets
             const articles = document.querySelectorAll('article[data-testid="tweet"]');
@@ -647,7 +897,7 @@
     // Extract user tweets with scrolling
     async function extractUserTweetsWithScroll(maxPages = 10) {
         return extractTweetsWithScroll({
-            waitTime: 1500,
+            waitTime: 700,
             maxPages,
             skipFirst: false,
             idLength: 30,
@@ -841,152 +1091,208 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     // 存储最新的 rate limit 信息
     let lastRateLimit = { remaining: 150, reset: 0 };
 
-    async function fetchUserBio(username) {
-        if (userInfoCache.has(username)) {
-            const cached = userInfoCache.get(username);
-            return { bio: cached?.bio ?? null, rateLimit: lastRateLimit };
-        }
-
-        try {
-            const csrfToken = document.cookie.match(/ct0=([^;]+)/)?.[1];
-            if (!csrfToken) {
-                userInfoCache.set(username, null);
-                return { bio: null, rateLimit: lastRateLimit };
-            }
-
-            const variables = encodeURIComponent(JSON.stringify({
-                screen_name: username,
-                withSafetyModeUserFields: true
-            }));
-            const features = encodeURIComponent(JSON.stringify({
-                hidden_profile_subscriptions_enabled: true,
-                rweb_tipjar_consumption_enabled: true,
-                responsive_web_graphql_exclude_directive_enabled: true,
-                verified_phone_label_enabled: false,
-                subscriptions_verification_info_is_identity_verified_enabled: true,
-                subscriptions_verification_info_verified_since_enabled: true,
-                highlights_tweets_tab_ui_enabled: true,
-                responsive_web_twitter_article_notes_tab_enabled: true,
-                subscriptions_feature_can_gift_premium: true,
-                creator_subscriptions_tweet_preview_api_enabled: true,
-                responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
-                responsive_web_graphql_timeline_navigation_enabled: true
-            }));
-
-            const response = await fetch(
-                `https://x.com/i/api/graphql/G3KGOASz96M-Qu0nwmGXNg/UserByScreenName?variables=${variables}&features=${features}`,
-                {
-                    method: 'GET',
-                    headers: {
-                        'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
-                        'x-csrf-token': csrfToken,
-                        'x-twitter-auth-type': 'OAuth2Session',
-                        'x-twitter-active-user': 'yes',
-                        'x-twitter-client-language': 'en'
-                    },
-                    credentials: 'include'
-                }
-            );
-
-            // 更新 rate limit 信息
-            const remaining = parseInt(response.headers.get('x-rate-limit-remaining') || '150');
-            const reset = parseInt(response.headers.get('x-rate-limit-reset') || '0');
-            lastRateLimit = { remaining, reset };
-
-            // 处理 429
-            if (response.status === 429) {
-                const retryAfter = parseInt(response.headers.get('retry-after') || '0');
-                const waitUntil = retryAfter > 0 ? Date.now() + retryAfter * 1000 : reset * 1000;
-                console.warn(`⚠️ 触发限流 (429)，等待到 ${new Date(waitUntil).toLocaleTimeString()}`);
-                userInfoCache.set(username, null);
-                return { bio: null, rateLimit: lastRateLimit, waitUntil };
-            }
-
-            if (!response.ok) {
-                userInfoCache.set(username, null);
-                return { bio: null, rateLimit: lastRateLimit };
-            }
-
-            const data = await response.json();
-            const userResult = data?.data?.user?.result;
-            const bio = userResult?.legacy?.description || '';
-            const restId = userResult?.rest_id || null;
-            const following = !!userResult?.legacy?.following;
-            userInfoCache.set(username, { bio, restId, following });
-            return { bio, rateLimit: lastRateLimit };
-        } catch (error) {
-            console.warn(`拉取 @${username} 简介失败:`, error.message);
-            userInfoCache.set(username, null);
-            return { bio: null, rateLimit: lastRateLimit };
-        }
-    }
-
-    // 简介前缀匹配检查：简介去掉前导空白后以任一前缀开头就算命中
-    function matchBioPrefix(bio, prefixes) {
-        if (!bio || !Array.isArray(prefixes) || prefixes.length === 0) return null;
-        const trimmed = bio.replace(/^\s+/, '');
-        for (const prefix of prefixes) {
-            if (trimmed.startsWith(prefix)) return prefix;
+    // 昵称关键词匹配检查：昵称包含任一关键词就算命中
+    function matchDisplayNameKeyword(displayName, keywords) {
+        if (!displayName || !Array.isArray(keywords) || keywords.length === 0) return null;
+        for (const keyword of keywords) {
+            if (displayName.includes(keyword)) return keyword;
         }
         return null;
     }
 
-    // 批量检查一组 username 的简介，返回命中用户的 Set 和命中的前缀 Map
-    // 控制并发（每批 2 个）和批次间延迟（800ms + jitter），避免触发 Twitter rate limit
-    // 限流感知：剩余配额 < RATE_LIMIT_THRESHOLD 时主动暂停到窗口重置
-    async function checkBiosInBackground(usernames, prefixes) {
-        const hits = new Map(); // username -> matched prefix
-        if (!prefixes || prefixes.length === 0 || usernames.length === 0) {
-            return hits;
+    // ==================== 启发式学习 ====================
+
+    /**
+     * 记录拉黑历史（用于启发式学习）
+     * @param {string} username - 用户名
+     * @param {string} displayName - 昵称
+     * @param {string} commentText - 评论文本
+     */
+    function recordBlockHistory(username, displayName, commentText = '') {
+        const history = config.get('blockHistory') || [];
+        history.push({
+            displayName: displayName || username,
+            commentText: commentText || '',
+            timestamp: Date.now()
+        });
+
+        // FIFO，保留最近100条
+        if (history.length > 100) history.shift();
+        config.set('blockHistory', history);
+
+        // 每 20 条触发一次学习
+        if (history.length % 20 === 0) {
+            learnHeuristicPatterns();
         }
+    }
 
-        const BATCH_SIZE = 2;
-        const BATCH_DELAY_MS = 800;
-        const RATE_LIMIT_THRESHOLD = 10; // 剩余配额低于此值时暂停
+    /**
+     * 从拉黑历史中提取常见子串模式
+     * @param {string[]} texts - 文本列表
+     * @param {Object} options - 配置选项
+     * @returns {Array<{text: string, count: number, ratio: number, source: string}>}
+     */
+    function extractCommonSubstrings(texts, options = {}) {
+        const {
+            minLen = 5,
+            maxLen = 8,
+            minRatio = 0.15,
+            minCount = 5,
+            source = 'displayName',
+            stopWords = []
+        } = options;
 
-        for (let i = 0; i < usernames.length; i += BATCH_SIZE) {
-            const batch = usernames.slice(i, i + BATCH_SIZE);
-            const results = await Promise.all(batch.map(u => fetchUserBio(u)));
+        const substringCount = new Map();
+        const total = texts.length;
 
-            batch.forEach((username, idx) => {
-                const result = results[idx];
-                const bio = result.bio;
-                const matched = matchBioPrefix(bio, prefixes);
-                if (matched) hits.set(username, matched);
-            });
-
-            // 检查 rate limit
-            const lastResult = results[results.length - 1];
-            if (lastResult.rateLimit) {
-                const { remaining, reset } = lastResult.rateLimit;
-
-                // 如果遇到 429，等待到重置时间
-                if (lastResult.waitUntil) {
-                    const waitMs = lastResult.waitUntil - Date.now();
-                    if (waitMs > 0) {
-                        console.log(`⏸️ 等待限流窗口重置（${Math.ceil(waitMs / 1000)}秒）...`);
-                        await sleep(waitMs);
-                    }
-                }
-                // 如果剩余配额不足，主动暂停
-                else if (remaining < RATE_LIMIT_THRESHOLD && reset > 0) {
-                    const now = Math.floor(Date.now() / 1000);
-                    const waitSeconds = reset - now;
-                    if (waitSeconds > 0 && waitSeconds < 900) { // 最多等 15 分钟
-                        console.log(`⏸️ 配额不足（剩余 ${remaining}），等待窗口重置（${waitSeconds}秒）...`);
-                        await sleep(waitSeconds * 1000);
+        // 提取子串
+        for (const text of texts) {
+            if (!text) continue;
+            for (let len = minLen; len <= maxLen; len++) {
+                for (let i = 0; i <= text.length - len; i++) {
+                    const sub = text.substring(i, i + len);
+                    // 只过滤纯数字和纯空格的子串
+                    if (!/^[\d\s]+$/.test(sub) && !stopWords.includes(sub)) {
+                        substringCount.set(sub, (substringCount.get(sub) || 0) + 1);
                     }
                 }
             }
+        }
 
-            // 批次间延迟 + 随机 jitter
-            if (i + BATCH_SIZE < usernames.length) {
-                const jitter = Math.floor(Math.random() * 400) - 200; // ±200ms
-                await sleep(BATCH_DELAY_MS + jitter);
+        // 动态阈值
+        const MIN_COUNT = Math.max(minCount, Math.floor(total * minRatio));
+        const MIN_RATIO = minRatio;
+
+        const patterns = [];
+        for (const [sub, count] of substringCount) {
+            const ratio = count / total;
+            if (count >= MIN_COUNT && ratio >= MIN_RATIO) {
+                patterns.push({ text: sub, count, ratio, source });
             }
         }
 
-        return hits;
+        // 去重：如果长串包含短串且出现次数接近，只保留长串
+        const filtered = patterns.filter(p1 => {
+            return !patterns.some(p2 =>
+                p2.text.length > p1.text.length &&
+                p2.text.includes(p1.text) &&
+                p2.count >= p1.count * 0.9
+            );
+        });
+
+        return filtered.sort((a, b) => b.count - a.count).slice(0, 10);
+    }
+
+    /**
+     * 触发启发式学习，更新规则
+     */
+    function learnHeuristicPatterns() {
+        const history = config.get('blockHistory') || [];
+        if (history.length < 10) return; // 至少10条才学习
+
+        // 评论文本停用词（常见无意义词）
+        const commentStopWords = [
+            '哈哈', '哈哈哈', '笑死', '确实', '真的', '这个', '什么', '怎么',
+            '可以', '不是', '就是', '还是', '已经', '应该', '觉得', '感觉'
+        ];
+
+        // 从昵称学习（5-8字，≥20%）
+        const displayNames = history.map(h => h.displayName).filter(n => n);
+        const displayNamePatterns = extractCommonSubstrings(displayNames, {
+            minLen: 5,
+            maxLen: 8,
+            minRatio: 0.20,
+            minCount: 5,
+            source: 'displayName'
+        });
+
+        // 从评论学习（5-10字，≥15%，过滤停用词）
+        const commentTexts = history.map(h => h.commentText).filter(t => t);
+        const commentPatterns = extractCommonSubstrings(commentTexts, {
+            minLen: 5,
+            maxLen: 10,
+            minRatio: 0.15,
+            minCount: 5,
+            source: 'commentText',
+            stopWords: commentStopWords
+        });
+
+        const newPatterns = [...displayNamePatterns, ...commentPatterns];
+
+        // 合并规则：保留所有旧规则 + 添加新规则，更新重复规则的统计数据
+        const oldPatterns = config.get('heuristicPatterns') || [];
+        const mergedMap = new Map();
+
+        // 先添加所有旧规则
+        oldPatterns.forEach(op => {
+            const key = `${op.text}|${op.source}`;
+            mergedMap.set(key, op);
+        });
+
+        // 再添加或更新新规则
+        newPatterns.forEach(np => {
+            const key = `${np.text}|${np.source}`;
+            const existing = mergedMap.get(key);
+            if (existing) {
+                // 更新已存在规则的统计数据，保留用户的启用/禁用状态
+                mergedMap.set(key, {
+                    text: np.text,
+                    count: np.count,
+                    ratio: np.ratio,
+                    source: np.source,
+                    enabled: existing.enabled,
+                    createdAt: existing.createdAt
+                });
+            } else {
+                // 添加新规则
+                mergedMap.set(key, {
+                    text: np.text,
+                    count: np.count,
+                    ratio: np.ratio,
+                    source: np.source,
+                    enabled: true, // 默认启用
+                    createdAt: Date.now()
+                });
+            }
+        });
+
+        const merged = Array.from(mergedMap.values());
+        config.set('heuristicPatterns', merged);
+        console.log(`🎓 启发式学习完成：保留 ${oldPatterns.length} 条旧规则，发现 ${newPatterns.length} 条新规则，总计 ${merged.length} 条`, merged);
+
+        // 新规则学习后，扫描页面上已经过AI但被判为normal的评论，用新规则追杀
+        if (merged.length > 0 && isOnTweetDetailPage()) {
+            const commentersMap = getAllCommentersWithText();
+            let retroCount = 0;
+            for (const [username, data] of commentersMap) {
+                if (blockedUsersSet.has(username)) continue;
+                for (const p of merged) {
+                    if (!p.enabled) continue;
+                    let hit = false;
+                    if (p.source === 'displayName' && data.displayName && data.displayName.includes(p.text)) hit = true;
+                    else if (p.source === 'commentText' && data.text && data.text.includes(p.text)) hit = true;
+                    if (hit) {
+                        console.log(`🎯 启发式追杀「${p.text}」@${username}（${data.displayName}）`);
+                        blockedUsersSet.add(username);
+                        markCommentByCategory(username, 'blacklist');
+                        blockUserByAPI(username);
+                        retroCount++;
+                        break;
+                    }
+                }
+            }
+            if (retroCount > 0) console.log(`🎓 启发式追杀完成：${retroCount} 人`);
+        }
+    }
+
+    /**
+     * 获取所有启用的启发式规则（自动学习 + 手动添加）
+     * @returns {Array<{text: string, enabled: boolean}>}
+     */
+    function getEnabledHeuristicPatterns() {
+        const learned = (config.get('heuristicPatterns') || []).filter(p => p.enabled);
+        const custom = (config.get('userCustomPatterns') || []).filter(p => p.enabled);
+        return [...learned, ...custom];
     }
 
     // 前置 spam 检测：命中两条规则中的任一条就判黑名单
@@ -1025,10 +1331,11 @@ ${keywords.map(k => `- ${k}`).join('\n')}
 ${tweetSection}${keywordsSection}
 
 分类标准：
-- blacklist：（最高优先级）包含上方"用户黑名单关键词"的评论（若已配置）；色情、约炮、线下见面等性暗示；诈骗、钓鱼、恶意链接；严重人身攻击、辱骂、威胁；极端政治煽动、仇恨言论；明显的机器人刷屏;大量 emoji/符号夹杂无实质内容的英文抒情句等；。
+- blacklist：（最高优先级）包含上方"用户黑名单关键词"的评论（若已配置）；明确的色情引流（如发布约炮链接、招嫖广告、卖淫信息），而非玩笑性质的荤段子或擦边调侃；诈骗、钓鱼、恶意链接；针对具体个人的直接死亡威胁或暴力恐吓（注意：情绪化的泛指脏话、抱怨社会、骂街发泄不算）；煽动针对特定族群的暴力或种族灭绝言论（注意：普通政治吐槽、讽刺体制、批评政府、牢骚不算）；明显的机器人刷屏;大量 emoji/符号夹杂无实质内容的英文抒情句等。
 - spam：评论内容本身包含推广链接、重复刷屏、或明确的商品/服务推销。仅根据评论内容判断，不要因为昵称像营销号就归入 spam。
 - 其它（与原推文相关的正常讨论、提问、赞同、批评等）视为 normal，不需要返回。
 - 重要：username（@后面的ID）不是判断依据，不要因为 username 看起来像某种含义就做出判断。只根据评论内容和昵称（displayName）判断。
+- 宁可放过，不可误杀。如果一条评论虽然用词粗俗或擦边，但明显是在参与话题讨论（而非引流/诈骗/刷屏），应归为 normal。
 
 
 注意：昵称（displayName）也是重要的判断依据。如果昵称包含"线下"、"约"、"全国安排"、"见面"等引流暗示词，即使评论内容看似正常，也应归入 blacklist。
@@ -1210,6 +1517,14 @@ ${comments.map((c, i) => {
             return data.displayName || u;
         };
 
+        // ✅ 判定为 blacklist 后立即记录到学习历史
+        for (const username of blacklistSet) {
+            const displayName = getDisplayName(username);
+            const commentText = previewText(username);
+            recordBlockHistory(username, displayName, commentText);
+        }
+
+        // 标记 UI 和加入已拉黑集合
         for (const username of blacklistSet) {
             console.log(t('consoleAiFilterBlacklist', {
                 displayName: getDisplayName(username),
@@ -1461,27 +1776,6 @@ ${comments.map((c, i) => {
         const isOnTweetPage = isOnTweetDetailPage();
         const isOnUserPage = isOnUserProfilePage();
 
-        if (isOnTweetPage) {
-            // Block commenters button (only on tweet page)
-            const blockButton = document.createElement('button');
-            blockButton.id = 'block-all-commenters-btn';
-            blockButton.innerHTML = '🚫';
-            blockButton.title = t('buttonText');
-            blockButton.style.cssText = getActionButtonStyle('#667eea', '#764ba2');
-            blockButton.addEventListener('click', handleBlockAllCommenters);
-            blockButton.addEventListener('mouseenter', function () {
-                if (!isBlocking) {
-                    this.style.transform = 'scale(1.12)';
-                    this.style.boxShadow = '0 3px 10px rgba(102, 126, 234, 0.5)';
-                }
-            });
-            blockButton.addEventListener('mouseleave', function () {
-                this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 2px 6px rgba(102, 126, 234, 0.35)';
-            });
-            actionsContainer.appendChild(blockButton);
-        }
-
         if (isOnTweetPage || isOnUserPage) {
             // AI summarize button
             const summarizeButton = document.createElement('button');
@@ -1504,25 +1798,6 @@ ${comments.map((c, i) => {
         }
 
         if (isOnTweetPage) {
-            // AI filter button (only on tweet page)
-            const aiFilterButton = document.createElement('button');
-            aiFilterButton.id = 'ai-filter-btn';
-            aiFilterButton.innerHTML = '🔍';
-            aiFilterButton.title = t('aiFilterButtonText');
-            aiFilterButton.style.cssText = getActionButtonStyle('#11998e', '#38ef7d');
-            aiFilterButton.addEventListener('click', handleManualAIFilter);
-            aiFilterButton.addEventListener('mouseenter', function () {
-                if (!aiFilterInProgress) {
-                    this.style.transform = 'scale(1.12)';
-                    this.style.boxShadow = '0 3px 10px rgba(17, 153, 142, 0.5)';
-                }
-            });
-            aiFilterButton.addEventListener('mouseleave', function () {
-                this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 2px 6px rgba(17, 153, 142, 0.35)';
-            });
-            actionsContainer.appendChild(aiFilterButton);
-
             // Show all spam button
             const showSpamButton = document.createElement('button');
             showSpamButton.id = 'show-all-spam-btn';
@@ -1854,24 +2129,10 @@ ${comments.map((c, i) => {
         }
     }
 
-    // Update button status
+    // 屏蔽进度反馈。手动屏蔽已从工具栏移到油猴菜单，没有按钮可更新，
+    // 进度只输出到控制台。
     function updateButtonStatus(text, isProcessing = false) {
-        const button = document.getElementById('block-all-commenters-btn');
-        if (button) {
-            if (isProcessing) {
-                button.innerHTML = '🔄';
-                button.title = text;
-                button.style.background = 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)';
-                button.style.cursor = 'not-allowed';
-                button.disabled = true;
-            } else {
-                button.innerHTML = '🚫';
-                button.title = t('buttonText');
-                button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-                button.style.cursor = 'pointer';
-                button.disabled = false;
-            }
-        }
+        if (isProcessing) console.log(`🚫 ${text}`);
     }
 
     // ==================== AI总结主处理函数 ====================
@@ -2066,7 +2327,7 @@ ${comments.map((c, i) => {
             let userId = null;
             let isFollowing = false;
 
-            // 优先从缓存中获取 userId（fetchUserBio 已缓存完整用户信息）
+            // 优先从缓存中获取 userId
             const cached = userInfoCache.get(username);
             if (cached && cached.restId) {
                 userId = cached.restId;
@@ -2483,11 +2744,20 @@ ${comments.map((c, i) => {
             // 前置规则检测：
             //   规则 1 broken-word：英文单词被符号/emoji 硬拆开 >= WORD_SPLIT_THRESHOLD 次
             //   规则 2 bot-decor：评论中包含机器人装饰字符 >= WORD_SPLIT_THRESHOLD 次（冷僻 Unicode，普通输入法打不出）
+            //   规则 3 displayName-keyword：昵称包含关键词黑名单（直接可见，无需 API）
+            //   规则 4 heuristic：昵称/评论匹配启发式学习的规则
             // 任一命中直接判黑名单，不送 AI，节省 token 也更稳定
+            const displayNameKeywordsRaw = config.get('displayNameKeywords') || '';
+            const displayNameKeywords = displayNameKeywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
+            const heuristicPatterns = getEnabledHeuristicPatterns();
+
             const preFilterBlacklist = [];
             const preFilterReason = new Map(); // username -> label
             const comments = [];
             for (const c of allComments) {
+                let matched = false;
+
+                // 检查评论文本规则
                 const rule = detectSpamRule(c.text);
                 if (rule) {
                     preFilterBlacklist.push(c.username);
@@ -2496,23 +2766,53 @@ ${comments.map((c, i) => {
                         : `机器人装饰字符 ≥${WORD_SPLIT_THRESHOLD}`;
                     preFilterReason.set(c.username, ruleLabel);
                     console.log(`🎯 前置命中（${ruleLabel}）@${c.username}: ${c.text.substring(0, 80)}`);
-                } else {
-                    comments.push(c);
+                    recordBlockHistory(c.username, c.displayName, c.text); // ✅ 记录学习
+                    matched = true;
                 }
-            }
 
-            // 规则 3 bio-prefix：后台查询用户简介，命中配置前缀的直接判黑名单
-            // 与 AI 调用并行执行，不阻塞主流程
-            const bioPrefixesRaw = config.get('bioBlacklistPrefixes') || '';
-            const bioPrefixes = bioPrefixesRaw.split('\n').map(p => p.trim()).filter(p => p.length > 0);
-            let bioPromise = Promise.resolve(new Map());
-            if (bioPrefixes.length > 0 && comments.length > 0) {
-                const COMMENT_LENGTH_THRESHOLD = 50;
-                const candidateNames = comments
-                    .filter(c => c.text.length <= COMMENT_LENGTH_THRESHOLD)
-                    .map(c => c.username);
-                if (candidateNames.length > 0) {
-                    bioPromise = checkBiosInBackground(candidateNames, bioPrefixes);
+                // 检查昵称是否包含关键词黑名单
+                if (!matched && displayNameKeywords.length > 0 && c.displayName) {
+                    const matchedKeyword = matchDisplayNameKeyword(c.displayName, displayNameKeywords);
+                    if (matchedKeyword) {
+                        preFilterBlacklist.push(c.username);
+                        preFilterReason.set(c.username, `昵称关键词「${matchedKeyword}」`);
+                        console.log(`🎯 前置命中（昵称关键词「${matchedKeyword}」）@${c.username}（${c.displayName}）`);
+                        recordBlockHistory(c.username, c.displayName, c.text); // ✅ 记录学习
+                        matched = true;
+                    }
+                }
+
+                // 检查启发式规则（昵称 + 评论）
+                if (!matched && heuristicPatterns.length > 0) {
+                    for (const pattern of heuristicPatterns) {
+                        let hit = false;
+                        let dimension = '';
+
+                        // 昵称维度
+                        if (pattern.source === 'displayName' && c.displayName && c.displayName.includes(pattern.text)) {
+                            hit = true;
+                            dimension = '昵称';
+                        }
+                        // 评论维度
+                        else if (pattern.source === 'commentText' && c.text && c.text.includes(pattern.text)) {
+                            hit = true;
+                            dimension = '评论';
+                        }
+
+                        if (hit) {
+                            preFilterBlacklist.push(c.username);
+                            const source = pattern.count ? `启发式·${dimension}·${(pattern.ratio * 100).toFixed(0)}%` : '手动添加';
+                            preFilterReason.set(c.username, `启发式规则「${pattern.text}」`);
+                            console.log(`🎯 前置命中（启发式规则「${pattern.text}」，${source}）@${c.username}（${c.displayName}）`);
+                            recordBlockHistory(c.username, c.displayName, c.text); // ✅ 记录学习（包含评论）
+                            matched = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!matched) {
+                    comments.push(c);
                 }
             }
 
@@ -2582,20 +2882,6 @@ ${comments.map((c, i) => {
                     current: processedCount,
                     total: comments.length
                 }));
-            }
-
-            // 等待并行的简介检查完成，处理 AI 未覆盖到的 bio 命中
-            const bioHits = await bioPromise;
-            if (!stillOnDetail()) return;
-            if (bioHits.size > 0) {
-                const bioBL = [...bioHits.keys()].filter(u => !aiFilterProcessed.has(u) && !blockedUsersSet.has(u));
-                if (bioBL.length > 0) {
-                    const bioMap = new Map(allComments
-                        .filter(c => bioBL.includes(c.username))
-                        .map(c => [c.username, { text: c.text, displayName: c.displayName, avatarUrl: c.avatarUrl }]));
-                    await processAIFilterResults({ blacklist: bioBL, spam: [] }, bioMap);
-                    bioBL.forEach(u => aiFilterProcessed.add(u));
-                }
             }
 
             // 完成
@@ -2707,14 +2993,6 @@ ${comments.map((c, i) => {
             return;
         }
 
-        // 更新按钮状态
-        const button = document.getElementById('ai-filter-btn');
-        if (button) {
-            button.innerHTML = '🔄';
-            button.style.background = 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)';
-            button.style.cursor = 'not-allowed';
-        }
-
         try {
             // 先滚动加载更多评论
             console.log(t('consoleLoading'));
@@ -2725,7 +3003,8 @@ ${comments.map((c, i) => {
 
             while (stableCount < 2 && totalScrolls < maxScrollAttempts) {
                 window.scrollTo(0, document.body.scrollHeight);
-                await sleep(800);
+                // 高度已稳定时只做短暂确认，不再整轮干等
+                await sleep(stableCount === 0 ? 700 : 400);
                 totalScrolls++;
 
                 const currentHeight = document.body.scrollHeight;
@@ -2745,11 +3024,7 @@ ${comments.map((c, i) => {
             await autoAIFilterComments();
 
         } finally {
-            if (button) {
-                button.innerHTML = '🔍';
-                button.style.background = 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)';
-                button.style.cursor = 'pointer';
-            }
+            console.log('🔍 手动 AI 过滤结束');
         }
     }
 
@@ -2783,8 +3058,21 @@ ${comments.map((c, i) => {
 
     // ==================== 初始化 ====================
 
+    // 手动屏蔽 / 手动 AI 过滤已从工具栏移除，改为油猴菜单入口（低频操作，
+    // 不占用页面空间）。只注册一次，避免 SPA 路由切换时重复注册。
+    let menuCommandsRegistered = false;
+    function registerManualMenuCommands() {
+        if (menuCommandsRegistered) return;
+        menuCommandsRegistered = true;
+        // i18n 文本自带 emoji，不再传 icon 以免重复
+        config.registerMenuCommand('buttonText', handleBlockAllCommenters);
+        config.registerMenuCommand('aiFilterButtonText', handleManualAIFilter);
+    }
+
     // Initialize
     function init() {
+        registerManualMenuCommands();
+
         // Create floating toolbar (only once, contains all action buttons)
         if (!document.getElementById('x-toolkit-toolbar')) {
             createFloatingToolbar();

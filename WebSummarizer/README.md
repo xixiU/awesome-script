@@ -6,10 +6,13 @@
 
 ## ✨ 特性
 
-- 🤖 **双 AI 引擎支持**：
-  - **Dify 工作流**：支持自定义工作流，灵活配置 AI 处理逻辑
-  - **Chrome Gemini AI**：使用 Chrome 浏览器内置的 Gemini Nano 模型，无需配置 API，本地运行更快速
-  - 一键切换，满足不同使用场景
+- 🤖 **多 AI 引擎支持**：
+  - **OpenAI**：GPT-3.5/GPT-4 等强大模型
+  - **Anthropic**：Claude 系列高质量模型
+  - **Ollama**：本地部署开源模型，完全免费
+  - **Chrome Gemini**：浏览器内置 AI，零配置零成本
+  - **Dify 工作流**：自定义工作流，灵活配置
+  - 统一配置界面，一键切换
 
 - ✂️ **双模式总结**：
   - **全文总结**：点击按钮总结整篇文章
@@ -28,12 +31,13 @@
   - 流畅的动画效果
   - 响应式结果展示面板
 
-- ⚙️ **代码与配置分离**：
-  - 配置信息存储在浏览器本地，与脚本代码完全独立
-  - 升级脚本时不会丢失配置
+- ⚙️ **智能配置管理**：
+  - 统一配置管理器，支持多种 AI 提供商
+  - 智能动态配置：根据选择自动显示/隐藏配置项
+  - Ollama 和 Chrome Gemini 自动隐藏不需要的 API Key 字段
+  - 配置信息本地存储，升级脚本不丢失
   - 可视化配置界面，操作简单直观
-  - 实时状态提示，一目了然
-  - 支持配置验证和错误提示
+  - 实时状态提示和配置验证
 
 ## 📦 安装
 
@@ -46,26 +50,43 @@
    - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/)
    - Edge: [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)
 
-#### AI 提供商配置（二选一）
+#### AI 提供商配置（任选其一）
 
-##### 选项 1: 使用 Chrome Gemini AI（推荐新手）
+##### 选项 1: Chrome Gemini（推荐新手 - 零配置）
 
-- **Chrome 版本**: >= 125
-- **Gemini Nano 模型**: 需要下载
-  1. 访问 `chrome://components`
+- **Chrome 版本**: Chrome Canary 127+ 或 Chrome Dev 127+
+- **启用 Prompt API**:
+  1. 访问 `chrome://flags/#prompt-api-for-gemini-nano`
+  2. 设置为 "Enabled"
+  3. 重启浏览器
+- **下载 Gemini Nano 模型**:
+  1. 访问 `chrome://components/`
   2. 找到 "Optimization Guide On Device Model"
-  3. 确认版本号 >= 2024.5.21.1031
-  4. 如未安装，点击 "Check for update" 下载
-- **优势**: 无需配置 API，本地运行，响应快速，免费
+  3. 点击 "Check for update" 下载（约 1.7GB）
+- **优势**: 无需 API Key，完全本地运行，零成本，隐私保护
 
-##### 选项 2: 使用 Dify 工作流（适合进阶用户）
+##### 选项 2: OpenAI（最成熟）
 
-- 登录你的Dify平台
-- 创建一个工作流，包含以下输入参数：
-  - `newsUrl` (文本): 网页URL
-  - `newsContent` (文本): 网页正文内容
-- 获取工作流的API地址和API Key
-- **优势**: 自定义工作流，灵活配置 AI 处理逻辑
+- 获取 OpenAI API Key: https://platform.openai.com/api-keys
+- **优势**: 质量最好，稳定可靠
+
+##### 选项 3: Anthropic Claude（高质量）
+
+- 获取 Anthropic API Key: https://console.anthropic.com/
+- **优势**: Claude 系列模型质量优秀
+
+##### 选项 4: Ollama（本地免费）
+
+- 安装 Ollama: https://ollama.ai/
+- 运行模型: `ollama run llama3`
+- **优势**: 完全免费，本地运行，无使用限制
+
+##### 选项 5: Dify 工作流（自定义）
+
+- 登录你的 Dify 平台
+- 创建工作流，包含输入参数：`newsUrl`、`newsContent`
+- 获取 API 地址和 API Key
+- **优势**: 自定义工作流，灵活配置
 
 ### 安装步骤
 
@@ -78,33 +99,40 @@
 
 ### 首次使用配置
 
-**特色：代码与配置完全分离** ✨
+**特色：智能动态配置界面** ✨
 
-脚本采用现代化的配置管理方式，所有配置信息都存储在浏览器本地，与脚本代码完全分离。这意味着：
+v2.0 采用智能配置管理方式，根据你选择的 AI 提供商**自动显示/隐藏**相应的配置项。这意味着：
 
+- ✅ 不会困惑"这个字段要不要填"
+- ✅ Ollama 和 Chrome Gemini 自动隐藏不需要的 API Key
 - ✅ 升级脚本时不会丢失配置
 - ✅ 配置信息安全存储在本地
-- ✅ 美观的可视化配置界面
-- ✅ 实时配置状态提示
 
 #### 配置步骤
 
 1. **打开任意网页**
-2. **点击右下角的 ⚙️ 齿轮图标**
-3. **在弹出的配置面板中填写**：
-   - **Dify 工作流 API 地址**：例如 `https://api.dify.ai/v1/workflows/run`
-   - **Dify API Key**：你的API密钥（以 `app-` 开头）
-   - 面板会显示每个配置项的状态（已配置/未配置）
+2. **点击油猴菜单 → "⚙️ 打开设置"** 或点击页面上的 ⚙️ 按钮
+3. **在弹出的配置面板中**：
+   - **选择 AI 提供商**（OpenAI / Anthropic / Ollama / Chrome Gemini / Dify）
+   - 配置界面会自动调整，只显示该提供商需要的字段
+   - 填写相应的配置信息
 4. **点击"保存配置"按钮**
 5. **看到"✓ 配置已成功保存！"提示**后即可使用
 
+#### 智能配置示例
+
+**选择 OpenAI**：显示 API地址 + API Key + 模型 + 提示词
+**选择 Ollama**：显示 API地址 + 模型 + 提示词（自动隐藏 API Key）
+**选择 Chrome Gemini**：显示 模型 + 提示词（自动隐藏 API地址和Key）+ 使用说明
+**选择 Dify**：只显示 Dify 专属配置
+
 #### 配置特点
 
-- 🔒 **安全存储**：配置信息使用 GM_setValue 存储在浏览器本地，安全可靠
-- 🎨 **美观界面**：现代化的表单设计，清晰的状态提示
-- ✓ **输入验证**：自动验证 URL 格式和必填字段
-- ⌨️ **快捷操作**：支持 Enter 键快速保存，Esc 键取消
-- 🔄 **易于修改**：随时可以重新打开设置面板修改配置
+- 🎯 **智能显示**：根据提供商自动显示/隐藏配置项
+- 🔒 **安全存储**：配置信息使用 GM_setValue 存储在浏览器本地
+- 🎨 **美观界面**：现代化设计，清晰的视觉反馈
+- ✓ **输入验证**：自动验证必填字段
+- 🔄 **易于切换**：随时可以切换 AI 提供商
 
 ### Dify工作流提示词
 
@@ -301,6 +329,29 @@ const result = data.data?.outputs?.text ||
 ```
 
 ## 📝 更新记录
+
+### v2.0.0 (2026-07-17)
+
+- ✨ **统一配置管理**
+  - 接入 common/config_manager.js 统一配置管理器
+  - 支持 5 种 AI 提供商：OpenAI、Anthropic、Ollama、Chrome Gemini、Dify
+  - 智能动态配置界面：根据选择的 AI 自动显示/隐藏配置项
+  
+- 🎯 **智能配置体验**
+  - OpenAI/Anthropic：显示完整配置（API地址 + Key + 模型）
+  - Ollama：自动隐藏 API Key（本地部署无需密钥）
+  - Chrome Gemini：自动隐藏 API地址和Key，显示使用说明
+  - Dify：显示专属配置，隐藏 LLM 配置
+  
+- 🔧 **Chrome Gemini 完整支持**
+  - 在 config_manager.js 中实现浏览器内置 AI 调用
+  - 自动检测 API 可用性和模型状态
+  - 显示详细的使用说明和前置条件
+  
+- 🐛 **Bug 修复**
+  - 修复配置面板点击自动关闭的问题
+  - 修复 z-index 层级冲突
+  - 优化事件冒泡处理
 
 ### v1.5.3 (2025-11-08)
 

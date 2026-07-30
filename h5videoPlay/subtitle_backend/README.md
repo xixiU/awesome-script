@@ -92,9 +92,40 @@ python system_audio_subtitle.py
 }
 ```
 
-- **device**: `cpu` 或 `cuda` (需要 NVIDIA 显卡)。
+- **device**: `cpu` 或 `cuda` (需要 NVIDIA 显卡)。macOS 上 faster-whisper 基于 CTranslate2，**不支持 mps**，只能用 `cpu`（Apple Silicon 想用 GPU 请看下方 mlx_whisper）。
 
-- **model_size**: `tiny`, `base`, `small`, `medium`, `large-v2`。
+- **model_size**: `tiny`, `base`, `small`, `medium`, `large-v2`, `large-v3`, `distil-large-v3`, `deepdml/faster-whisper-large-v3-turbo-ct2`。
+
+#### 3. MLX-Whisper (Apple Silicon 本地 GPU) - Mac 推荐
+
+基于 Apple MLX 框架，直接使用 M 系列芯片 GPU。相比 faster-whisper CPU 在 M2 上实测**约 10 倍提速**，适合实时字幕。仅 macOS (arm64) 可用，依赖 `mlx-whisper`（见 requirements.txt）。
+
+```json
+{
+  "type": "mlx_whisper",
+  "enabled": true,
+  "config": {
+    "model_size": "mlx-community/distil-whisper-large-v3"
+  }
+}
+```
+
+- **model_size**: 填 HuggingFace 上的 MLX 仓库 ID，首次识别时自动下载缓存。
+
+### 已实测模型对照（英语 / 日语 / 俄语场景，macOS M2）
+
+以下模型 ID 可直接填入 `model_config.json` 的对应 `config.model_size` / `config.model_id`：
+
+| 后端类型 | 模型 ID (model_size / model_id) | 运行 | 实测结论 |
+|---|---|---|---|
+| `mlx_whisper` | `mlx-community/distil-whisper-large-v3` | Apple GPU | **Mac 首选**。比 faster-whisper CPU 约 10x（5s 音频 0.9s vs 9.6s），实时流畅，精度同 distil-large-v3 |
+| `whisper` | `distil-large-v3` | CPU | 英语最佳；实测日/俄也能出结果（保留多语言 tokenizer，但官方仅英语优化）。CPU 上偏慢（RTF≈1.9，追不上实时） |
+| `whisper` | `deepdml/faster-whisper-large-v3-turbo-ct2` | CPU/CUDA | 官方多语言、理论最快；但本场景实测常几乎转写不出内容（层数少+贪心解码），**不推荐** |
+| `whisper` | `large-v3` | CPU/CUDA | 完整多语言、精度最高；CPU 上很慢 |
+| `whisper` | `small` | CPU | 轻量快，但中日文识别弱 |
+| `siliconflow` | `FunAudioLLM/SenseVoiceSmall` | 云端 API | 中/日/英/韩强，**无俄语**；需 api_key，有网络延迟 |
+
+> 结论：**Apple Silicon 用 `mlx_whisper` + `mlx-community/distil-whisper-large-v3`**；有 NVIDIA 显卡可用 faster-whisper `large-v3`；要中/日高精度且能联网可用 siliconflow 云端。
 
 ### UI 操作
 
