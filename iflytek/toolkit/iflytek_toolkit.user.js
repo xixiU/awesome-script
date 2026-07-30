@@ -14,8 +14,8 @@
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
 // @icon         https://in.iflytek.com/resources/fornt/img/icons/iflyui-shortcut.png
-// @downloadURL  https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/iflytek/iflytek_toolkit.user.js
-// @updateURL    https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/iflytek/iflytek_toolkit.user.js
+// @downloadURL  https://github.com/xixiU/awesome-script/raw/refs/heads/master/iflytek/toolkit/iflytek_toolkit.user.js
+// @updateURL    https://github.com/xixiU/awesome-script/raw/refs/heads/master/iflytek/toolkit/iflytek_toolkit.user.js
 // ==/UserScript==
 
 /**
