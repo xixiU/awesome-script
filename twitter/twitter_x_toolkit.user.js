@@ -817,6 +817,14 @@
         } = options;
 
         const items = [];
+        // Set 去重替代 items.find 的 O(n) 线性查找：滚动 10 页会累积几百条，
+        // 逐条 find 会退化成 O(n²)，是长内容总结卡顿的主因。
+        const seenIds = new Set();
+        // 记住已解析过的 article 节点，避免每轮滚动都对同一批节点重复做
+        // querySelector + emoji 文本提取（开销随页数线性叠加）。
+        // 用 WeakSet 而非 DOM 属性：Twitter 是 SPA 会复用节点，写属性会残留到
+        // 下一次提取导致误跳过，WeakSet 只作用于本次调用且不阻碍回收。
+        const scannedArticles = new WeakSet();
         let previousHeight = 0;
         let scrollAttempts = 0;
         let pagesLoaded = 0;
@@ -836,6 +844,9 @@
             articles.forEach((article, index) => {
                 // Skip the first article if specified (e.g., original tweet in comments)
                 if (skipFirst && index === 0) return;
+                // 本轮之前已解析过的节点直接跳过
+                if (scannedArticles.has(article)) return;
+                scannedArticles.add(article);
 
                 try {
                     const tweetTextElement = article.querySelector('[data-testid="tweetText"]');
@@ -856,7 +867,8 @@
 
                     if (shouldAdd) {
                         const itemId = `${author}_${tweetText.substring(0, idLength)}`;
-                        if (!items.find(item => item.id === itemId)) {
+                        if (!seenIds.has(itemId)) {
+                            seenIds.add(itemId);
                             items.push({
                                 id: itemId,
                                 author: author,
@@ -1108,8 +1120,39 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
      * @param {string} displayName - 昵称
      * @param {string} commentText - 评论文本
      */
-    function recordBlockHistory(username, displayName, commentText = '') {
+    // 批量拉黑时 recordBlockHistory 会被连续调用几十次。若每次都
+    // config.set（全量 JSON.stringify + GM_setValue 落盘）并可能触发
+    // O(n²) 的学习，主线程会被占满导致明显卡顿。
+    // 改为：内存中累积，落盘与学习合并到一次微任务后统一执行。
+    let historyFlushScheduled = false;
+    let historyDirty = false;
+    let pendingLearnCheck = false;
+
+    function flushBlockHistory() {
+        historyFlushScheduled = false;
+        if (!historyDirty) return;
+        historyDirty = false;
+
         const history = config.get('blockHistory') || [];
+        config.set('blockHistory', history);
+
+        // 只在跨过 20 条整数倍边界时学习一次，避免一轮批量里重复全量学习。
+        // 学习是纯 CPU 的子串统计，放到空闲时段执行，不与过滤/滚动抢主线程。
+        if (pendingLearnCheck) {
+            pendingLearnCheck = false;
+            const runLearn = () => learnHeuristicPatterns();
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(runLearn, { timeout: 3000 });
+            } else {
+                setTimeout(runLearn, 300);
+            }
+        }
+    }
+
+    function recordBlockHistory(username, displayName, commentText = '') {
+        // 直接改内存中的数组（config.get 返回的是引用），不立即落盘
+        const history = config.get('blockHistory') || [];
+        const before = history.length;
         history.push({
             displayName: displayName || username,
             commentText: commentText || '',
@@ -1118,11 +1161,17 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         // FIFO，保留最近100条
         if (history.length > 100) history.shift();
-        config.set('blockHistory', history);
 
-        // 每 20 条触发一次学习
-        if (history.length % 20 === 0) {
-            learnHeuristicPatterns();
+        // 跨过 20 条边界则本轮结束后学习一次
+        if (Math.floor(history.length / 20) !== Math.floor(before / 20)) {
+            pendingLearnCheck = true;
+        }
+
+        historyDirty = true;
+        if (!historyFlushScheduled) {
+            historyFlushScheduled = true;
+            // 让出主线程，等本轮批量记录全部完成后只写一次
+            setTimeout(flushBlockHistory, 0);
         }
     }
 
@@ -1144,17 +1193,24 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         const substringCount = new Map();
         const total = texts.length;
+        // stopWords 用 Set 查找，避免每个子串都做一次数组线性扫描
+        const stopWordSet = new Set(stopWords);
+        const PURE_DIGIT_SPACE = /^[\d\s]+$/;
 
-        // 提取子串
+        // 提取子串。同一条文本内重复出现的子串只计 1 次（我们要的是
+        // "多少条记录包含它"，而不是总出现次数），否则刷屏式重复内容会虚高。
+        const seenInText = new Set();
         for (const text of texts) {
             if (!text) continue;
+            seenInText.clear();
             for (let len = minLen; len <= maxLen; len++) {
-                for (let i = 0; i <= text.length - len; i++) {
+                const last = text.length - len;
+                for (let i = 0; i <= last; i++) {
                     const sub = text.substring(i, i + len);
-                    // 只过滤纯数字和纯空格的子串
-                    if (!/^[\d\s]+$/.test(sub) && !stopWords.includes(sub)) {
-                        substringCount.set(sub, (substringCount.get(sub) || 0) + 1);
-                    }
+                    if (seenInText.has(sub)) continue;
+                    if (PURE_DIGIT_SPACE.test(sub) || stopWordSet.has(sub)) continue;
+                    seenInText.add(sub);
+                    substringCount.set(sub, (substringCount.get(sub) || 0) + 1);
                 }
             }
         }
@@ -1171,14 +1227,23 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             }
         }
 
-        // 去重：如果长串包含短串且出现次数接近，只保留长串
-        const filtered = patterns.filter(p1 => {
-            return !patterns.some(p2 =>
-                p2.text.length > p1.text.length &&
-                p2.text.includes(p1.text) &&
-                p2.count >= p1.count * 0.9
-            );
-        });
+        // 去重：如果长串包含短串且出现次数接近，只保留长串。
+        // 原实现是 patterns.filter + patterns.some 的全量 O(n²) 对比，候选上千条时
+        // 会卡住主线程。改为按长度降序遍历，每条只与"已保留的更长串"比较。
+        patterns.sort((a, b) => b.text.length - a.text.length || b.count - a.count);
+        const filtered = [];
+        for (const p of patterns) {
+            let covered = false;
+            for (const kept of filtered) {
+                if (kept.text.length > p.text.length &&
+                    kept.count >= p.count * 0.9 &&
+                    kept.text.includes(p.text)) {
+                    covered = true;
+                    break;
+                }
+            }
+            if (!covered) filtered.push(p);
+        }
 
         return filtered.sort((a, b) => b.count - a.count).slice(0, 10);
     }
@@ -1393,87 +1458,135 @@ ${comments.map((c, i) => {
                 article.style.display = 'none';
                 article.setAttribute('data-blacklist-reason', reason);
             } else if (category === 'spam') {
-                // 垃圾评论：添加遮罩和显示按钮
-                article.style.position = 'relative';
-
-                // 创建遮罩层
-                const overlay = document.createElement('div');
-                overlay.className = 'ai-spam-overlay';
-                overlay.style.cssText = `
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0, 0, 0, 0.7);
-                    backdrop-filter: blur(6px);
-                    z-index: 10;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 4px;
-                    cursor: pointer;
-                    transition: all 0.25s ease;
-                `;
-
-                // 创建标签
-                const label = document.createElement('div');
-                label.style.cssText = `
-                    color: #ff9800;
-                    font-size: 13px;
-                    font-weight: bold;
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                `;
-                label.textContent = t('spamCommentLabel');
-
-                // 创建理由
-                const reasonText = document.createElement('div');
-                reasonText.style.cssText = `
-                    color: #ccc;
-                    font-size: 11px;
-                `;
-                reasonText.textContent = reason;
-
-                // 创建显示按钮
-                const showButton = document.createElement('button');
-                showButton.style.cssText = `
-                    padding: 4px 12px;
-                    background: #1DA1F2;
-                    color: white;
-                    border: none;
-                    border-radius: 14px;
-                    cursor: pointer;
-                    font-size: 12px;
-                    margin-top: 4px;
-                    transition: all 0.2s ease;
-                `;
-                showButton.textContent = t('spamCommentShow');
-
-                // 鼠标悬停效果
-                showButton.addEventListener('mouseenter', () => {
-                    showButton.style.background = '#0d8bd9';
-                    showButton.style.transform = 'scale(1.05)';
-                });
-                showButton.addEventListener('mouseleave', () => {
-                    showButton.style.background = '#1DA1F2';
-                    showButton.style.transform = 'scale(1)';
-                });
-
-                // 点击显示评论
-                overlay.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    overlay.style.display = 'none';
-                    article.removeAttribute('data-ai-filtered');
-                });
-
-                overlay.appendChild(label);
-                overlay.appendChild(reasonText);
-                overlay.appendChild(showButton);
-                article.appendChild(overlay);
+                applySpamOverlay(article, reason);
             }
+        });
+    }
+
+    /**
+     * 给一条评论加上垃圾评论遮罩（单条与批量标记共用）
+     * @param {HTMLElement} article
+     * @param {string} reason
+     */
+    function applySpamOverlay(article, reason) {
+        article.style.position = 'relative';
+
+        const overlay = document.createElement('div');
+        overlay.className = 'ai-spam-overlay';
+        overlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(6px);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        `;
+
+        const label = document.createElement('div');
+        label.style.cssText = `
+            color: #ff9800;
+            font-size: 13px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        `;
+        label.textContent = t('spamCommentLabel');
+
+        const reasonText = document.createElement('div');
+        reasonText.style.cssText = `
+            color: #ccc;
+            font-size: 11px;
+        `;
+        reasonText.textContent = reason;
+
+        const showButton = document.createElement('button');
+        showButton.style.cssText = `
+            padding: 4px 12px;
+            background: #1DA1F2;
+            color: white;
+            border: none;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 4px;
+            transition: all 0.2s ease;
+        `;
+        showButton.textContent = t('spamCommentShow');
+
+        showButton.addEventListener('mouseenter', () => {
+            showButton.style.background = '#0d8bd9';
+            showButton.style.transform = 'scale(1.05)';
+        });
+        showButton.addEventListener('mouseleave', () => {
+            showButton.style.background = '#1DA1F2';
+            showButton.style.transform = 'scale(1)';
+        });
+
+        overlay.addEventListener('click', (e) => {
+            e.stopPropagation();
+            overlay.style.display = 'none';
+            article.removeAttribute('data-ai-filtered');
+        });
+
+        overlay.appendChild(label);
+        overlay.appendChild(reasonText);
+        overlay.appendChild(showButton);
+        article.appendChild(overlay);
+    }
+
+    /**
+     * 批量标记评论。
+     * markCommentByCategory 每次调用都要 querySelectorAll 全量扫描，批量拉黑
+     * 时会退化成 N 次全量遍历；这里只遍历一次 DOM，并把所有样式写入放进同一个
+     * requestAnimationFrame，避免逐条同步写样式反复触发重排造成卡顿。
+     * @param {Set<string>} blacklistSet
+     * @param {Set<string>} spamSet
+     */
+    function markCommentsByCategoryBatch(blacklistSet, spamSet) {
+        if (!isOnTweetDetailPage()) return;
+        if (blacklistSet.size === 0 && spamSet.size === 0) return;
+
+        const articles = document.querySelectorAll('article[data-testid="tweet"]');
+        const toHide = [];
+        const toMask = [];
+
+        articles.forEach(article => {
+            if (article.hasAttribute('data-ai-filtered')) return;
+            const userNameArea = article.querySelector('[data-testid="User-Name"]');
+            if (!userNameArea) return;
+
+            // 取出该 article 作者，再查集合，避免对每个用户名各做一次 querySelector
+            const link = userNameArea.querySelector('a[role="link"][href^="/"]');
+            if (!link) return;
+            const username = link.getAttribute('href').slice(1);
+            if (!username || username.includes('/')) return;
+
+            if (blacklistSet.has(username)) toHide.push(article);
+            else if (spamSet.has(username)) toMask.push(article);
+        });
+
+        if (toHide.length === 0 && toMask.length === 0) return;
+
+        requestAnimationFrame(() => {
+            toHide.forEach(article => {
+                article.setAttribute('data-ai-filtered', 'blacklist');
+                article.setAttribute('data-blacklist-reason', '');
+                article.style.display = 'none';
+            });
+            toMask.forEach(article => {
+                article.setAttribute('data-ai-filtered', 'spam');
+                applySpamOverlay(article, '');
+            });
         });
     }
 
@@ -1524,25 +1637,25 @@ ${comments.map((c, i) => {
             recordBlockHistory(username, displayName, commentText);
         }
 
-        // 标记 UI 和加入已拉黑集合
+        // 标记 UI 和加入已拉黑集合。
+        // markCommentByCategory 每次调用都要全量遍历所有 article，一批 30 人
+        // 就是 30 次全量扫描，因此这里改为一次遍历批量处理。
         for (const username of blacklistSet) {
             console.log(t('consoleAiFilterBlacklist', {
                 displayName: getDisplayName(username),
                 username,
                 text: previewText(username)
             }));
-            markCommentByCategory(username, 'blacklist', '');
             blockedUsersSet.add(username);
         }
-
         for (const username of spamSet) {
             console.log(t('consoleAiFilterSpam', {
                 displayName: getDisplayName(username),
                 username,
                 text: previewText(username)
             }));
-            markCommentByCategory(username, 'spam', '');
         }
+        markCommentsByCategoryBatch(blacklistSet, spamSet);
 
         // 拉黑操作放后台，不阻塞 UI 标记和后续批次
         if (blacklistSet.size > 0) {
@@ -2260,8 +2373,11 @@ ${comments.map((c, i) => {
                 const tweetText = getElementTextWithEmoji(tweetTextElement);
 
                 // Get display name (nickname)
-                const displayNameElement = article.querySelector('[data-testid="User-Name"] span');
-                const displayName = displayNameElement ? displayNameElement.innerText : username;
+                // 用 textContent 而非 innerText：innerText 会强制同步布局重排，
+                // 本函数由 MutationObserver 每 300ms 全量重扫所有 article 调用，
+                // 逐条重排是 AI 过滤卡顿的直接原因。昵称是单行 span，两者结果一致。
+                const displayNameElement = userNameArea.querySelector('span');
+                const displayName = displayNameElement ? displayNameElement.textContent : username;
 
                 // Get avatar URL
                 const avatarImg = article.querySelector('img[draggable="true"]');
