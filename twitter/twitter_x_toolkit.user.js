@@ -2040,6 +2040,34 @@ ${comments.map((c, i) => {
         });
 
         document.body.appendChild(container);
+
+        // 监听图片浏览模态窗口的打开/关闭，避免工具栏遮挡导航按钮
+        const hideToolbarWhenModalOpen = () => {
+            const photoModal = document.querySelector('[role="dialog"][aria-modal="true"]');
+            if (photoModal) {
+                // 检查是否是图片浏览模态窗口（包含 carousel 或 Previous/Next slide 按钮）
+                const isPhotoViewer = photoModal.querySelector('[role="group"][aria-roledescription="carousel"]') ||
+                                     photoModal.querySelector('button[aria-label*="slide"]');
+                if (isPhotoViewer) {
+                    container.style.display = 'none';
+                    return;
+                }
+            }
+            container.style.display = 'flex';
+        };
+
+        // 初始检查
+        hideToolbarWhenModalOpen();
+
+        // 监听 DOM 变化（模态窗口的打开/关闭）
+        const modalObserver = new MutationObserver(hideToolbarWhenModalOpen);
+        modalObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['aria-modal', 'role']
+        });
+
         return container;
     }
 
