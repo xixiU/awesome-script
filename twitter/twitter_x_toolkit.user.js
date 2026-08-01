@@ -1253,16 +1253,31 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         for (const [sub, count] of substringCount) {
             const ratio = count / total;
             if (count >= MIN_COUNT && ratio >= MIN_RATIO) {
-                patterns.push({ text: sub, count, ratio, source });
+                // 清理首尾空白和常见标点，避免 "我真顶不住"、" 我真顶不住 @" 等
+                // 本质相同的模式因为空格/标点差异被当作不同规则
+                const cleaned = sub.trim().replace(/^[@#\s]+|[@#\s]+$/g, '');
+                if (cleaned.length >= 3) {  // 清理后太短的不要
+                    patterns.push({ text: cleaned, count, ratio, source });
+                }
             }
         }
+
+        // 合并清理后重复的模式：text 相同的取 count 最大的
+        const deduped = new Map();
+        for (const p of patterns) {
+            const existing = deduped.get(p.text);
+            if (!existing || p.count > existing.count) {
+                deduped.set(p.text, p);
+            }
+        }
+        const uniquePatterns = Array.from(deduped.values());
 
         // 去重：如果长串包含短串且出现次数接近，只保留长串。
         // 原实现是 patterns.filter + patterns.some 的全量 O(n²) 对比，候选上千条时
         // 会卡住主线程。改为按长度降序遍历，每条只与"已保留的更长串"比较。
-        patterns.sort((a, b) => b.text.length - a.text.length || b.count - a.count);
+        uniquePatterns.sort((a, b) => b.text.length - a.text.length || b.count - a.count);
         const filtered = [];
-        for (const p of patterns) {
+        for (const p of uniquePatterns) {
             let covered = false;
             for (const kept of filtered) {
                 if (kept.text.length > p.text.length &&
