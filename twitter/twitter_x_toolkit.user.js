@@ -1176,7 +1176,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     }
 
     /**
-     * 从拉黑历史中提取常见子串模式
+     * 从拉黑历史中提取常见子串/单词模式
      * @param {string[]} texts - 文本列表
      * @param {Object} options - 配置选项
      * @returns {Array<{text: string, count: number, ratio: number, source: string}>}
@@ -1193,9 +1193,15 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         const substringCount = new Map();
         const total = texts.length;
-        // stopWords 用 Set 查找，避免每个子串都做一次数组线性扫描
         const stopWordSet = new Set(stopWords);
         const PURE_DIGIT_SPACE = /^[\d\s]+$/;
+
+        // 检测文本是否主要是 CJK 字符（中日韩统一表意文字）
+        const isCJK = (text) => {
+            if (!text) return false;
+            const cjkChars = text.match(/[一-鿿぀-ゟ゠-ヿ가-힯]/g);
+            return cjkChars && cjkChars.length / text.length > 0.3;
+        };
 
         // 提取子串。同一条文本内重复出现的子串只计 1 次（我们要的是
         // "多少条记录包含它"，而不是总出现次数），否则刷屏式重复内容会虚高。
@@ -1203,14 +1209,38 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         for (const text of texts) {
             if (!text) continue;
             seenInText.clear();
-            for (let len = minLen; len <= maxLen; len++) {
-                const last = text.length - len;
-                for (let i = 0; i <= last; i++) {
-                    const sub = text.substring(i, i + len);
-                    if (seenInText.has(sub)) continue;
-                    if (PURE_DIGIT_SPACE.test(sub) || stopWordSet.has(sub)) continue;
-                    seenInText.add(sub);
-                    substringCount.set(sub, (substringCount.get(sub) || 0) + 1);
+
+            if (isCJK(text)) {
+                // CJK 文本：按字符长度提取子串（5-10 字符）
+                for (let len = minLen; len <= maxLen; len++) {
+                    const last = text.length - len;
+                    for (let i = 0; i <= last; i++) {
+                        const sub = text.substring(i, i + len);
+                        if (seenInText.has(sub)) continue;
+                        if (PURE_DIGIT_SPACE.test(sub) || stopWordSet.has(sub)) continue;
+                        seenInText.add(sub);
+                        substringCount.set(sub, (substringCount.get(sub) || 0) + 1);
+                    }
+                }
+            } else {
+                // 拉丁文本：按单词边界分词，提取 1-3 个连续单词的 n-gram
+                // 过滤掉纯符号、纯数字、停用词
+                const words = text.toLowerCase()
+                    .split(/[\s\p{P}\p{S}]+/u)
+                    .filter(w => w.length > 0 && !/^\d+$/.test(w));
+
+                // 提取 1-gram, 2-gram, 3-gram
+                for (let n = 1; n <= 3 && n <= words.length; n++) {
+                    for (let i = 0; i <= words.length - n; i++) {
+                        const ngram = words.slice(i, i + n).join(' ');
+                        if (seenInText.has(ngram)) continue;
+                        if (stopWordSet.has(ngram)) continue;
+                        // 过滤掉过短的单词（< 3 字符）和过长的组合（> 50 字符）
+                        if (n === 1 && ngram.length < 3) continue;
+                        if (ngram.length > 50) continue;
+                        seenInText.add(ngram);
+                        substringCount.set(ngram, (substringCount.get(ngram) || 0) + 1);
+                    }
                 }
             }
         }
@@ -1255,11 +1285,29 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const history = config.get('blockHistory') || [];
         if (history.length < 10) return; // 至少10条才学习
 
-        // 评论文本停用词（常见无意义词）
+        // 中文停用词（评论文本常见无意义词）
         const commentStopWords = [
             '哈哈', '哈哈哈', '笑死', '确实', '真的', '这个', '什么', '怎么',
             '可以', '不是', '就是', '还是', '已经', '应该', '觉得', '感觉'
         ];
+
+        // 英文停用词（常见虚词、代词、冠词等）
+        const englishStopWords = [
+            'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i',
+            'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at',
+            'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she',
+            'or', 'an', 'will', 'my', 'one', 'all', 'would', 'there', 'their',
+            'what', 'so', 'up', 'out', 'if', 'about', 'who', 'get', 'which', 'go',
+            'me', 'when', 'make', 'can', 'like', 'time', 'no', 'just', 'him', 'know',
+            'take', 'people', 'into', 'year', 'your', 'good', 'some', 'could', 'them',
+            'see', 'other', 'than', 'then', 'now', 'look', 'only', 'come', 'its', 'over',
+            'think', 'also', 'back', 'after', 'use', 'two', 'how', 'our', 'work',
+            'first', 'well', 'way', 'even', 'new', 'want', 'because', 'any', 'these',
+            'give', 'day', 'most', 'us', 'is', 'was', 'are', 'been', 'has', 'had',
+            'were', 'said', 'did', 'having', 'may', 'should', 'am', 'being'
+        ];
+
+        const allStopWords = [...commentStopWords, ...englishStopWords];
 
         // 从昵称学习（5-8字，≥20%）
         const displayNames = history.map(h => h.displayName).filter(n => n);
@@ -1268,7 +1316,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             maxLen: 8,
             minRatio: 0.20,
             minCount: 5,
-            source: 'displayName'
+            source: 'displayName',
+            stopWords: allStopWords
         });
 
         // 从评论学习（5-10字，≥15%，过滤停用词）
@@ -1279,7 +1328,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             minRatio: 0.15,
             minCount: 5,
             source: 'commentText',
-            stopWords: commentStopWords
+            stopWords: allStopWords
         });
 
         const newPatterns = [...displayNamePatterns, ...commentPatterns];
