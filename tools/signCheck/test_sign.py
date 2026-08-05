@@ -345,6 +345,20 @@ def test_fz_sign():
     print({"url":fz_url,"timestamp": ts, "sign": sg})
     print(resp.status_code, resp.text)
 
+def test_fz_updateCheck():
+    print('法正接口测试')
+    ts = str(int(time.time() * 1000))
+    sg = fz_sign(ts, SECRET_KEY) 
+    import requests
+    fz_url = f"{HOST_PREFIX}/ts-service/internet/fz/updateCheck"
+    resp = requests.post(
+        fz_url,
+        params={"timestamp": ts, "sign": sg},
+        json={"courtCode":"110","courtId":"110002","sn":"testsn","currentVersion":"v1111"},
+        timeout=5,
+    )
+    print({"url":fz_url,"timestamp": ts, "sign": sg})
+    print(resp.status_code, resp.text)
 
 if __name__ == "__main__":
     device_id = gen_nonce()  # 生成设备 UUID
@@ -356,7 +370,7 @@ if __name__ == "__main__":
     # 吉林
     # HOST_PREFIX = 'https://xfrh-jlfy.e-court.gov.cn:8866/'
     # 安徽
-    HOST_PREFIX = 'http://zhft.iflysec.com/ahcz'
+    # HOST_PREFIX = 'http://zhft.iflysec.com/ahcz'
 
     # 成都
     # HOST_PREFIX = 'https://zhft.iflysec.com/scmz'
@@ -368,7 +382,7 @@ if __name__ == "__main__":
     # 天津武清
     # HOST_PREFIX= 'https://wqzyserver.iflysec.com'
     # 研发环境
-    # HOST_PREFIX = 'https://hktestservice.iflysec.com'
+    HOST_PREFIX = 'https://hktestservice.iflysec.com'
     # 测试环境
     # HOST_PREFIX = 'https://ys-slfdfs.iflysec.com'
 
@@ -396,8 +410,8 @@ if __name__ == "__main__":
     #     token=TOKEN
     # )
     
-    test_fz_sign()
-
+    # test_fz_sign()
+    test_fz_updateCheck()
     # ============== 内外网文件传递测试 ==============
     # 方式一：上传本地文件
     # test_transfer_file(file_path=r"C:\Users\rjyuan2\Downloads\二维码.png")
