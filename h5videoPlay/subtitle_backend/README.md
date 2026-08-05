@@ -118,7 +118,8 @@ python system_audio_subtitle.py
 
 | 后端类型 | 模型 ID (model_size / model_id) | 运行 | 实测结论 |
 |---|---|---|---|
-| `mlx_whisper` | `mlx-community/distil-whisper-large-v3` | Apple GPU | **Mac 首选**。比 faster-whisper CPU 约 10x（5s 音频 0.9s vs 9.6s），实时流畅，精度同 distil-large-v3 |
+| `mlx_whisper` | `mlx-community/whisper-large-v3-turbo` | Apple GPU | **Mac 首选** 多模态模型 |
+| `mlx_whisper` | `mlx-community/distil-whisper-large-v3` | Apple GPU | 纯英文模型 比 faster-whisper CPU 约 10x（5s 音频 0.9s vs 9.6s），实时流畅，精度同 distil-large-v3 |
 | `whisper` | `distil-large-v3` | CPU | 英语最佳；实测日/俄也能出结果（保留多语言 tokenizer，但官方仅英语优化）。CPU 上偏慢（RTF≈1.9，追不上实时） |
 | `whisper` | `deepdml/faster-whisper-large-v3-turbo-ct2` | CPU/CUDA | 官方多语言、理论最快；但本场景实测常几乎转写不出内容（层数少+贪心解码），**不推荐** |
 | `whisper` | `large-v3` | CPU/CUDA | 完整多语言、精度最高；CPU 上很慢 |
