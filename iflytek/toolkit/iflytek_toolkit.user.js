@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         iFlytek Toolkit (自动登录+视频控制+自动答题+解除复制限制)
-// @version      2.0.0
-// @description  讯飞全域工具箱。登录页：自动登录(Coremail/集团账号/统一认证)。21tb视频页：左右键快进/回退，数字键调速。21tb考试页：直接调用Dify API自动答题，支持暂停/继续、失败题目重试。全站：解除网页禁止复制/粘贴/右键/选择的限制。
+// @name         iFlytek Toolkit (自动登录+视频控制+自动答题+解除复制限制+禁用切屏检测)
+// @version      2.1.0
+// @description  讯飞全域工具箱。登录页：自动登录(Coremail/集团账号/统一认证)。21tb视频页：左右键快进/回退，数字键调速。21tb考试页：直接调用Dify API自动答题，支持暂停/继续、失败题目重试。全站：解除网页禁止复制/粘贴/右键/选择的限制。开发模式：禁用切屏检测用于测试。
 // @author       yuan
 // @match        *://*.21tb.com/*
 // @match        *://*.iflytek.*/*
@@ -40,6 +40,18 @@
  *    - 解除文本选择限制
  *    - 实时拦截页面动态绑定的限制监听器
  *
+ * 4. 开发模式：禁用切屏检测（v2.1 新增）
+ *    - 拦截 visibilitychange 和 blur 事件监听器
+ *    - 阻止切屏事件上报到服务器
+ *    - 伪造页面始终可见状态
+ *    - 递归处理所有 iframe（包括考试页面）
+ *
+ * 更新日志 (v2.1.0)：
+ * - 新增禁用切屏检测功能，方便开发测试
+ * - 拦截所有切屏相关的事件监听器
+ * - 阻止 saveEventLog 接口上报切屏事件
+ * - 支持通过油猴菜单开关此功能
+ *
  * 更新日志 (v1.5.0)：
  * - 新增完整的网页限制解除功能
  * - 自动递归处理所有 iframe（包括考试页面的嵌套 iframe）
@@ -64,6 +76,209 @@
     const IS_IFLYTEK = location.hostname.includes('iflytek.');
 
     console.log('[iFlytek Toolkit] 脚本已加载, 域名类型:', IS_21TB ? '21tb' : (IS_IFLYTEK ? 'iflytek' : 'other'));
+
+    /******************************************************************
+     *
+     * PART -1: 禁用切屏检测模块（开发模式）
+     *
+     * 功能说明：
+     * - 拦截页面的 visibilitychange 和 blur 事件监听器
+     * - 阻止切屏事件上报到服务器（拦截 saveEventLog 请求）
+     * - 伪造 document.hidden 和 document.visibilityState
+     * - 递归处理所有 iframe，包括考试页面的嵌套 iframe
+     *
+     * 使用场景：
+     * - 开发者本地测试反复答题逻辑
+     * - 调试考试流程，避免被切屏检测干扰
+     *
+     * ⚠️ 注意：此功能仅用于开发测试，不应用于实际考试作弊
+     *
+     ******************************************************************/
+
+    // 检查是否启用禁用切屏检测功能（默认启用）
+    function isDisableScreenMonitorEnabled() {
+        return true; // 默认启用
+    }
+
+    /**
+     * 禁用切屏检测的核心函数
+     * @param {Window} win - 目标窗口对象
+     * @param {Document} doc - 目标文档对象
+     */
+    function disableScreenMonitor(win, doc) {
+        if (!win || !doc) return;
+
+        console.log('[切屏检测] 开始禁用切屏检测:', win.location.href);
+
+        // 1. 拦截 addEventListener，阻止绑定 visibilitychange 和 blur 事件
+        const originalAddEventListener = win.EventTarget.prototype.addEventListener;
+        win.EventTarget.prototype.addEventListener = function(type, listener, options) {
+            // 拦截切屏相关事件
+            if (type === 'visibilitychange' || type === 'blur') {
+                console.log('[切屏检测] 拦截事件监听器:', type);
+                return; // 不执行原始的 addEventListener
+            }
+            return originalAddEventListener.call(this, type, listener, options);
+        };
+
+        // 2. 移除已有的 visibilitychange 和 blur 事件监听器
+        try {
+            // 克隆节点会移除所有事件监听器
+            const docClone = doc.cloneNode(false);
+            // 但我们不能直接替换 document，所以使用另一种方法
+
+            // 尝试移除 document 上的监听器
+            if (typeof doc.onvisibilitychange !== 'undefined') {
+                doc.onvisibilitychange = null;
+            }
+        } catch (e) {
+            console.warn('[切屏检测] 移除现有监听器失败:', e);
+        }
+
+        // 3. 伪造 document.hidden 和 document.visibilityState
+        try {
+            Object.defineProperty(doc, 'hidden', {
+                get: function() {
+                    return false; // 始终返回 false，表示页面可见
+                },
+                configurable: true
+            });
+
+            Object.defineProperty(doc, 'visibilityState', {
+                get: function() {
+                    return 'visible'; // 始终返回 visible
+                },
+                configurable: true
+            });
+
+            console.log('[切屏检测] 已伪造 document.hidden 和 visibilityState');
+        } catch (e) {
+            console.warn('[切屏检测] 伪造属性失败:', e);
+        }
+
+        // 4. 拦截 fetch 和 XMLHttpRequest，阻止切屏事件上报
+        // 拦截 fetch
+        const originalFetch = win.fetch;
+        win.fetch = function(...args) {
+            const url = args[0];
+            if (typeof url === 'string' && url.includes('saveEventLog')) {
+                console.log('[切屏检测] 拦截 saveEventLog 请求:', url);
+                // 返回一个假的成功响应
+                return Promise.resolve(new Response(JSON.stringify({
+                    code: 1001,
+                    msg: '操作处理成功（已被拦截）'
+                }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' }
+                }));
+            }
+            return originalFetch.apply(this, args);
+        };
+
+        // 拦截 XMLHttpRequest
+        const originalOpen = win.XMLHttpRequest.prototype.open;
+        const originalSend = win.XMLHttpRequest.prototype.send;
+
+        win.XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+            this._url = url;
+            return originalOpen.call(this, method, url, ...rest);
+        };
+
+        win.XMLHttpRequest.prototype.send = function(data) {
+            if (this._url && this._url.includes('saveEventLog')) {
+                console.log('[切屏检测] 拦截 XMLHttpRequest saveEventLog 请求:', this._url);
+                // 伪造成功响应
+                Object.defineProperty(this, 'readyState', { get: () => 4 });
+                Object.defineProperty(this, 'status', { get: () => 200 });
+                Object.defineProperty(this, 'responseText', {
+                    get: () => JSON.stringify({
+                        code: 1001,
+                        msg: '操作处理成功（已被拦截）'
+                    })
+                });
+
+                setTimeout(() => {
+                    if (this.onreadystatechange) this.onreadystatechange();
+                    if (this.onload) this.onload();
+                }, 0);
+
+                return;
+            }
+            return originalSend.call(this, data);
+        };
+
+        console.log('[切屏检测] 切屏检测已完全禁用');
+    }
+
+    /**
+     * 递归禁用所有 iframe 的切屏检测
+     * @param {Window} win - 目标窗口
+     */
+    function disableScreenMonitorRecursive(win) {
+        try {
+            const doc = win.document;
+            disableScreenMonitor(win, doc);
+
+            // 递归处理所有 iframe
+            const iframes = doc.querySelectorAll('iframe');
+            iframes.forEach(iframe => {
+                try {
+                    if (iframe.contentWindow && iframe.contentDocument) {
+                        console.log('[切屏检测] 处理 iframe:', iframe.src);
+                        disableScreenMonitorRecursive(iframe.contentWindow);
+                    }
+                } catch (e) {
+                    console.warn('[切屏检测] 无法访问 iframe（跨域）:', iframe.src, e);
+                }
+            });
+
+            // 监听新增的 iframe
+            const observer = new MutationObserver(mutations => {
+                mutations.forEach(mutation => {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.tagName === 'IFRAME') {
+                            setTimeout(() => {
+                                try {
+                                    if (node.contentWindow && node.contentDocument) {
+                                        console.log('[切屏检测] 处理新增 iframe:', node.src);
+                                        disableScreenMonitorRecursive(node.contentWindow);
+                                    }
+                                } catch (e) {
+                                    console.warn('[切屏检测] 无法访问新增 iframe:', e);
+                                }
+                            }, 100);
+                        }
+                    });
+                });
+            });
+
+            observer.observe(doc.body, {
+                childList: true,
+                subtree: true
+            });
+        } catch (e) {
+            console.error('[切屏检测] 禁用失败:', e);
+        }
+    }
+
+    // 初始化禁用切屏检测功能
+    if (IS_21TB && isDisableScreenMonitorEnabled()) {
+        console.log('[切屏检测] 开发模式已启用，正在禁用切屏检测...');
+
+        // 页面加载完成后执行
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                disableScreenMonitorRecursive(window);
+            });
+        } else {
+            disableScreenMonitorRecursive(window);
+        }
+
+        // 监听动态加载的内容
+        setInterval(() => {
+            disableScreenMonitorRecursive(window);
+        }, 2000);
+    }
 
     /******************************************************************
      *
