@@ -38,6 +38,14 @@
 (function () {
     'use strict';
 
+    // 禁用域名黑名单：这些域名下扩展完全不生效
+    // 已在 manifest.json 的 exclude_matches 中排除，这里做运行时兜底
+    const DISABLED_HOSTS = ['xfchat.iflytek.com'];
+    if (DISABLED_HOSTS.some(h => location.hostname === h || location.hostname.endsWith('.' + h))) {
+        console.log('[iFlytek Toolkit Extension] 当前域名在禁用列表中，脚本不生效:', location.hostname);
+        return;
+    }
+
     // 域名判断：隔离 21tb 专属功能和讯飞专属功能
     const IS_21TB = location.hostname.includes('21tb.com');
     const IS_IFLYTEK = location.hostname.includes('iflytek.');

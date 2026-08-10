@@ -1,5 +1,42 @@
 # 更新日志
 
+## v3.2.0 - 域名黑名单 🚫
+
+### 🆕 新增功能
+- ✅ **域名黑名单机制**
+  - `xfchat.iflytek.com` 及其所有子域（如 `yf2ljykclb.xfchat.iflytek.com`）下扩展完全不生效
+  - manifest `exclude_matches` + 运行时 hostname 校验双重保障
+
+### 🛠️ 技术实现
+- `manifest.json` 的 content.js 条目新增 `exclude_matches`
+- `content.js` / `inject.js` 各自增加运行时 `DISABLED_HOSTS` 兜底校验
+- 采用精确后缀匹配（`hostname === host || hostname.endsWith('.' + host)`），
+  避免 `notxfchat.iflytek.com`（前缀粘连）与 `xfchat.iflytek.com.evil.com`（后缀伪装）被误杀
+
+---
+
+## v3.1.0 - 修复插件版切屏拦截失效 🐛
+
+### 🐛 问题修复
+- ✅ **修复 `Failed to fetch` 报错**
+  - 根因：content script 运行在隔离世界（Isolated World），其 `window` /
+    `EventTarget.prototype` / `document` 与页面真实对象不是同一个，覆盖后拦不到
+    页面自身的切屏检测代码
+  - 且 `setInterval` 每 2 秒重复包裹隔离世界的 `window.fetch`，层层嵌套叠加 MV3 下
+    content script fetch 的 CORS 语义，导致插件自身请求（Dify 答题）报 `Failed to fetch`
+
+### 🛠️ 技术实现
+- 新增 `inject.js`，通过 manifest `world: MAIN` + `document_start` + `all_frames: true`
+  注入页面主世界，在业务代码执行前一次性覆盖 `fetch` / `addEventListener` / `document.hidden`
+- 每个同源 frame（含考试 iframe）独立注入，移除递归遍历 iframe 与 `setInterval` 反复包裹
+- `content.js` 删除无效且有害的切屏检测模块，恢复插件自身干净的 fetch
+
+### ⚠️ 回归要点（避免二次引入）
+- 切屏拦截逻辑只放 `inject.js`（主世界）
+- **禁止**在 `content.js` 内改 `window.fetch` / `XMLHttpRequest.prototype`
+
+---
+
 ## v2.1.0 - 解除网页限制版本 🔓
 
 ### 🆕 新增功能

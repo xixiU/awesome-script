@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         iFlytek Toolkit (自动登录+视频控制+自动答题+解除复制限制+禁用切屏检测)
-// @version      2.1.0
+// @version      2.2.0
 // @description  讯飞全域工具箱。登录页：自动登录(Coremail/集团账号/统一认证)。21tb视频页：左右键快进/回退，数字键调速。21tb考试页：直接调用Dify API自动答题，支持暂停/继续、失败题目重试。全站：解除网页禁止复制/粘贴/右键/选择的限制。开发模式：禁用切屏检测用于测试。
 // @author       yuan
 // @match        *://*.21tb.com/*
 // @match        *://*.iflytek.*/*
 // @match        *://*.iflytek.com/*
 // @match        *://*.iflytek.cn/*
+// @exclude      *://*.xfchat.iflytek.com/*
 // @connect      *
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
@@ -46,6 +47,14 @@
  *    - 伪造页面始终可见状态
  *    - 递归处理所有 iframe（包括考试页面）
  *
+ * 5. 域名黑名单（v2.2 新增）
+ *    - xfchat.iflytek.com 及其子域下脚本完全不生效
+ *    - @exclude 元数据 + 运行时兜底双重保障
+ *
+ * 更新日志 (v2.2.0)：
+ * - 新增域名黑名单机制，在 xfchat.iflytek.com（含子域）下禁用脚本
+ * - 采用 @exclude + 运行时 hostname 校验双保险，兼顾 iframe 场景与元数据缓存
+ *
  * 更新日志 (v2.1.0)：
  * - 新增禁用切屏检测功能，方便开发测试
  * - 拦截所有切屏相关的事件监听器
@@ -69,6 +78,15 @@
 
 (function () {
     'use strict';
+
+    // 禁用域名黑名单：这些域名下脚本完全不生效
+    // xfchat.iflytek.com（含其子域，如 yf2ljykclb.xfchat.iflytek.com）会被 @exclude 拦掉，
+    // 这里再做一次运行时兜底：覆盖 iframe 场景，以及油猴缓存旧 metadata 未生效的情况
+    const DISABLED_HOSTS = ['xfchat.iflytek.com'];
+    if (DISABLED_HOSTS.some(h => location.hostname === h || location.hostname.endsWith('.' + h))) {
+        console.log('[iFlytek Toolkit] 当前域名在禁用列表中，脚本不生效:', location.hostname);
+        return;
+    }
 
     // 域名判断：21tb 专属功能(答题/视频/设置面板)仅在 21tb.com 生效
     // 解除复制限制 + 自动登录在所有匹配域名生效

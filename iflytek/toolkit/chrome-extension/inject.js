@@ -24,6 +24,16 @@
 (function () {
     'use strict';
 
+    // 禁用域名黑名单：这些域名下不生效（运行时兜底，manifest 已限定仅 21tb.com 注入）
+    var DISABLED_HOSTS = ['xfchat.iflytek.com'];
+    for (var i = 0; i < DISABLED_HOSTS.length; i++) {
+        var host = DISABLED_HOSTS[i];
+        var suffix = '.' + host;
+        if (location.hostname === host || location.hostname.slice(-suffix.length) === suffix) {
+            return;
+        }
+    }
+
     // 仅在 21tb 域名生效
     if (!location.hostname.includes('21tb.com')) return;
 
