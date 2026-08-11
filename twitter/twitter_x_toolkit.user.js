@@ -1432,6 +1432,79 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         return null;
     }
 
+    // ==================== 规则 5：批量相似评论检测 ====================
+    // 垃圾/色情引流评论往往成批出现，文案高度雷同，仅在 emoji、空格、前后缀
+    // 上做随机变化（如"没人比我玩的开了吧🐺💩我福不黑不信你看" vs
+    // "应该没人比我玩的开了吧🧐😀 我福不黑不信你看"）。
+    // 归一化后用字符 bigram Dice 系数比对：同一推文下两个不同用户的评论
+    // 相似度 >= 阈值即整组判黑。选 Dice 而非编辑距离：模板评论的变化集中在
+    // 前后缀增删，编辑距离相似度会被拉低到 80% 以下漏判，bigram 集合比对不受影响。
+    const SIMILARITY_MIN_LENGTH = 10;   // 归一化后最小长度，短文本（"来了""第一"）撞车概率高
+    const SIMILARITY_THRESHOLD = 0.9;   // bigram Dice 相似度阈值
+    const SIMILARITY_MIN_UNIQUE = 5;    // 归一化后最少唯一字符数，防"哈哈哈哈…"类刷梗误伤
+    const SIMILARITY_CORPUS_CAP = 500;  // 每条推文的语料上限，防长会话内存/CPU 膨胀
+
+    // 归一化：小写化并去掉空白/emoji/符号，只保留字母数字（含 CJK）
+    function normalizeForSimilarity(text) {
+        if (!text || typeof text !== 'string') return '';
+        return text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    }
+
+    function charBigrams(str) {
+        const grams = new Set();
+        const chars = [...str]; // 展开为码点，正确处理代理对
+        for (let i = 0; i < chars.length - 1; i++) grams.add(chars[i] + chars[i + 1]);
+        return grams;
+    }
+
+    function diceSimilarity(setA, setB) {
+        if (setA.size === 0 || setB.size === 0) return 0;
+        const [small, big] = setA.size <= setB.size ? [setA, setB] : [setB, setA];
+        let inter = 0;
+        for (const g of small) if (big.has(g)) inter++;
+        return (2 * inter) / (setA.size + setB.size);
+    }
+
+    // 当前推文的评论语料（跨滚动批次累积，路由变化时重置）
+    let similarityCorpus = [];
+
+    /**
+     * 批量相似评论检测：新评论与本推文已见评论两两比对。
+     * 同伙可能分散在不同滚动批次里，因此此前批次被判正常的老评论
+     * 一旦与新评论构成相似集群，也会出现在返回值中（追溯拉黑）。
+     * @param {Array<{username, displayName, text}>} newComments
+     * @returns {Map<string, {displayName, text, peer, sim}>} username -> 命中信息
+     */
+    function detectSimilaritySpamBatch(newComments) {
+        const hits = new Map();
+        for (const c of newComments) {
+            const norm = normalizeForSimilarity(c.text);
+            const chars = [...norm];
+            if (chars.length < SIMILARITY_MIN_LENGTH) continue;
+            if (new Set(chars).size < SIMILARITY_MIN_UNIQUE) continue;
+            const grams = charBigrams(norm);
+
+            for (const prev of similarityCorpus) {
+                if (prev.username === c.username) continue; // 同一用户重复发不算批量
+                const sim = diceSimilarity(grams, prev.grams);
+                if (sim >= SIMILARITY_THRESHOLD) {
+                    const pct = (sim * 100).toFixed(0);
+                    if (!hits.has(c.username)) {
+                        hits.set(c.username, { displayName: c.displayName, text: c.text, peer: prev.username, sim: pct });
+                    }
+                    if (!hits.has(prev.username)) {
+                        hits.set(prev.username, { displayName: prev.displayName, text: prev.text, peer: c.username, sim: pct });
+                    }
+                }
+            }
+
+            if (similarityCorpus.length < SIMILARITY_CORPUS_CAP) {
+                similarityCorpus.push({ username: c.username, displayName: c.displayName, text: c.text, grams });
+            }
+        }
+        return hits;
+    }
+
     async function classifyCommentsByAI(comments, mainTweet) {
         const customPrompt = config.get('aiFilterPrompt') || '';
         const keywordsRaw = config.get('blockKeywords') || '';
@@ -2954,10 +3027,13 @@ ${comments.map((c, i) => {
             //   规则 2 bot-decor：评论中包含机器人装饰字符 >= WORD_SPLIT_THRESHOLD 次（冷僻 Unicode，普通输入法打不出）
             //   规则 3 displayName-keyword：昵称包含关键词黑名单（直接可见，无需 API）
             //   规则 4 heuristic：昵称/评论匹配启发式学习的规则
+            //   规则 5 batch-similarity：同推文下不同用户的评论文本高度雷同（批量模板刷屏）
             // 任一命中直接判黑名单，不送 AI，节省 token 也更稳定
             const displayNameKeywordsRaw = config.get('displayNameKeywords') || '';
             const displayNameKeywords = displayNameKeywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
             const heuristicPatterns = getEnabledHeuristicPatterns();
+            // 规则 5 是跨评论比对，须先对整批计算（内部会累积语料并追溯此前批次的同伙）
+            const similarityHits = detectSimilaritySpamBatch(allComments);
 
             const preFilterBlacklist = [];
             const preFilterReason = new Map(); // username -> label
@@ -3019,9 +3095,30 @@ ${comments.map((c, i) => {
                     }
                 }
 
+                // 检查批量相似评论（规则 5）
+                if (!matched && similarityHits.has(c.username)) {
+                    const hit = similarityHits.get(c.username);
+                    preFilterBlacklist.push(c.username);
+                    preFilterReason.set(c.username, `批量相似评论（${hit.sim}% ≈ @${hit.peer}）`);
+                    console.log(`🎯 前置命中（批量相似评论，相似度 ${hit.sim}%，同伙 @${hit.peer}）@${c.username}: ${c.text.substring(0, 80)}`);
+                    // 学习记录由 processAIFilterResults 统一完成
+                    matched = true;
+                }
+
                 if (!matched) {
                     comments.push(c);
                 }
+            }
+
+            // 规则 5 追溯命中：此前批次被判正常、这次与新评论构成相似集群的老用户
+            // （不在本批 allComments 中，需要单独补进黑名单）
+            for (const [username, hit] of similarityHits) {
+                if (preFilterReason.has(username)) continue;                  // 本批已处理
+                if (allComments.some(c => c.username === username)) continue; // 本批用户已在循环中处理
+                if (blockedUsersSet.has(username)) continue;                  // 已被拉黑
+                preFilterBlacklist.push(username);
+                preFilterReason.set(username, `批量相似评论（追溯，${hit.sim}%）`);
+                console.log(`🎯 前置命中（批量相似评论·追溯，相似度 ${hit.sim}%，同伙 @${hit.peer}）@${username}: ${hit.text.substring(0, 80)}`);
             }
 
             // 先处理前置命中的黑名单（直接拉黑，不走 AI）
@@ -3029,6 +3126,13 @@ ${comments.map((c, i) => {
                 const preMap = new Map(allComments
                     .filter(c => preFilterBlacklist.includes(c.username))
                     .map(c => [c.username, { text: c.text, displayName: c.displayName, avatarUrl: c.avatarUrl }]));
+                // 补充追溯命中的老用户（不在本批 allComments 中，取语料里存的信息）
+                for (const username of preFilterBlacklist) {
+                    if (!preMap.has(username)) {
+                        const hit = similarityHits.get(username);
+                        if (hit) preMap.set(username, { text: hit.text, displayName: hit.displayName, avatarUrl: '' });
+                    }
+                }
                 await processAIFilterResults({ blacklist: preFilterBlacklist, spam: [] }, preMap);
                 if (!stillOnDetail()) return;
                 preFilterBlacklist.forEach(u => aiFilterProcessed.add(u));
@@ -3348,6 +3452,8 @@ ${comments.map((c, i) => {
             // Reset AI filter state for new page
             aiFilterProcessed = new Set();
             aiFilterInProgress = false;
+            // 清空相似评论语料，避免跨推文误比对
+            similarityCorpus = [];
             // 停止评论监听器，避免在非详情页误触发过滤
             if (commentObserver) {
                 commentObserver.disconnect();
