@@ -2981,6 +2981,60 @@ ${comments.map((c, i) => {
     let aiFilterProcessed = new Set(); // Track processed users to avoid duplicates
     let aiFilterInProgress = false;
 
+    // ==================== AI 判定结果缓存 ====================
+    // 同一条推文刷新/回访时，已判定过的用户不再重复送 AI，直接省 token。
+    // key: "<tweetId>|<username>"，value: { v: 'n'|'b'|'s', t: 判定时间, l: 判定时聚合评论文本长度 }
+    // 失效机制（三层）：
+    // - TTL 7 天：推文讨论热度基本几天内结束，过期条目在加载时清理
+    // - 上限 2000 条：超限按时间淘汰最旧，防止存储无限增长
+    // - l 字段：该用户又发了新评论（聚合文本变长）则缓存失效重新判定
+    // 注意：缓存必须在前置规则之后检查——规则会进化，新学的启发式规则
+    // 要能命中此前判 normal 的用户，不能被缓存挡住。
+    const VERDICT_CACHE_KEY = 'aiVerdictCache';
+    const VERDICT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+    const VERDICT_CACHE_MAX = 2000;
+    let verdictCache = null;
+    let verdictCacheDirty = false;
+    let verdictCacheFlushScheduled = false;
+
+    function loadVerdictCache() {
+        if (verdictCache) return verdictCache;
+        let raw = {};
+        try { raw = JSON.parse(GM_getValue(VERDICT_CACHE_KEY, '{}')) || {}; } catch (_) { raw = {}; }
+        const now = Date.now();
+        let entries = Object.entries(raw).filter(([, e]) => e && now - e.t < VERDICT_TTL_MS);
+        if (entries.length > VERDICT_CACHE_MAX) {
+            entries.sort((a, b) => b[1].t - a[1].t);
+            entries = entries.slice(0, VERDICT_CACHE_MAX);
+        }
+        verdictCache = Object.fromEntries(entries);
+        return verdictCache;
+    }
+
+    function getVerdictCache(tweetId, username) {
+        return loadVerdictCache()[`${tweetId}|${username}`] || null;
+    }
+
+    function setVerdictCache(tweetId, username, verdict, textLen) {
+        loadVerdictCache()[`${tweetId}|${username}`] = { v: verdict, t: Date.now(), l: textLen };
+        verdictCacheDirty = true;
+        // 合并落盘：一批判定写完后只序列化一次
+        if (!verdictCacheFlushScheduled) {
+            verdictCacheFlushScheduled = true;
+            setTimeout(() => {
+                verdictCacheFlushScheduled = false;
+                if (!verdictCacheDirty) return;
+                verdictCacheDirty = false;
+                try { GM_setValue(VERDICT_CACHE_KEY, JSON.stringify(verdictCache)); } catch (_) { }
+            }, 0);
+        }
+    }
+
+    function getTweetIdFromUrl() {
+        const m = location.pathname.match(/\/status\/(\d+)/);
+        return m ? m[1] : null;
+    }
+
     /**
      * AI自动过滤评论
      * 在推文详情页自动运行，先展示评论，异步调用AI判断
@@ -3138,7 +3192,38 @@ ${comments.map((c, i) => {
                 preFilterBlacklist.forEach(u => aiFilterProcessed.add(u));
             }
 
-            if (comments.length === 0) {
+            // AI 判定缓存分流：前置规则都没命中的用户，若本推文下已判定过
+            // 且此后没发新评论，直接复用结果，不再送 AI
+            const tweetId = getTweetIdFromUrl();
+            let needAI = comments;
+            if (tweetId && comments.length > 0) {
+                needAI = [];
+                const cachedBlacklist = new Set();
+                const cachedSpam = new Set();
+                let cachedNormal = 0;
+                for (const c of comments) {
+                    const entry = getVerdictCache(tweetId, c.username);
+                    // 聚合文本比判定时更长 = 有新评论，缓存失效重判
+                    if (!entry || c.text.length > entry.l) { needAI.push(c); continue; }
+                    if (entry.v === 'b') cachedBlacklist.add(c.username);
+                    else if (entry.v === 's') cachedSpam.add(c.username);
+                    else cachedNormal++;
+                    aiFilterProcessed.add(c.username);
+                }
+                if (cachedBlacklist.size > 0 || cachedSpam.size > 0 || cachedNormal > 0) {
+                    console.log(`💾 AI判定缓存命中 ${cachedBlacklist.size + cachedSpam.size + cachedNormal} 条（黑名单 ${cachedBlacklist.size}，垃圾 ${cachedSpam.size}，正常 ${cachedNormal}），送AI ${needAI.length} 条`);
+                }
+                if (cachedBlacklist.size > 0 || cachedSpam.size > 0) {
+                    cachedBlacklist.forEach(u => blockedUsersSet.add(u));
+                    markCommentsByCategoryBatch(cachedBlacklist, cachedSpam);
+                    // 还能看到该用户评论，多半上次拉黑失败或未生效，补一次（不重复记学习历史）
+                    if (cachedBlacklist.size > 0) {
+                        Promise.all([...cachedBlacklist].map(u => blockUserByAPI(u))).catch(() => { });
+                    }
+                }
+            }
+
+            if (needAI.length === 0) {
                 updateAIFilterStatus(t('aiFilterStatusComplete'), true);
                 aiFilterInProgress = false;
                 return;
@@ -3148,21 +3233,21 @@ ${comments.map((c, i) => {
             const mainTweet = extractTweetContent();
 
             // 显示状态指示器
-            updateAIFilterStatus(t('aiFilterStatusProcessing', { current: 0, total: comments.length }));
+            updateAIFilterStatus(t('aiFilterStatusProcessing', { current: 0, total: needAI.length }));
 
             // 批量调用AI分类（每次最多处理30条评论，最多2个批次并行）
             const batchSize = 30;
             const concurrency = 2;
             let processedCount = 0;
 
-            for (let i = 0; i < comments.length; i += batchSize * concurrency) {
+            for (let i = 0; i < needAI.length; i += batchSize * concurrency) {
                 if (!stillOnDetail()) return;
 
                 // 构建本轮要并行发送的批次
                 const batches = [];
-                for (let j = 0; j < concurrency && i + j * batchSize < comments.length; j++) {
+                for (let j = 0; j < concurrency && i + j * batchSize < needAI.length; j++) {
                     const start = i + j * batchSize;
-                    batches.push(comments.slice(start, start + batchSize));
+                    batches.push(needAI.slice(start, start + batchSize));
                 }
 
                 const batchPromises = batches.map(batch => {
@@ -3187,12 +3272,21 @@ ${comments.map((c, i) => {
                     await processAIFilterResults(item.results, item.batchDataMap);
                     if (!stillOnDetail()) return;
                     item.batch.forEach(c => aiFilterProcessed.add(c.username));
+                    // 写入判定缓存：blacklist/spam 按 AI 返回，其余为 normal
+                    if (tweetId) {
+                        const blSet = new Set(item.results?.blacklist || []);
+                        const spSet = new Set(item.results?.spam || []);
+                        item.batch.forEach(c => {
+                            const v = blSet.has(c.username) ? 'b' : (spSet.has(c.username) ? 's' : 'n');
+                            setVerdictCache(tweetId, c.username, v, c.text.length);
+                        });
+                    }
                     processedCount += item.batch.length;
                 }
 
                 updateAIFilterStatus(t('aiFilterStatusProcessing', {
                     current: processedCount,
-                    total: comments.length
+                    total: needAI.length
                 }));
             }
 
