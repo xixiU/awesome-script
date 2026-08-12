@@ -68,6 +68,9 @@ class MLXWhisperSTTModel(BaseSpeechToTextModel):
             if prompt:
                 kwargs["initial_prompt"] = prompt
 
+            # 记录实际传给模型的参数
+            logger.debug(f"[MLX-Whisper] 传入 language={kwargs.get('language', 'None(自动检测)')}, prompt={prompt[:30] if prompt else 'None'}")
+
             result = mlx_whisper.transcribe(audio, **kwargs)
 
             text = (result.get("text") or "").strip()

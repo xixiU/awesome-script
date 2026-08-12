@@ -94,14 +94,17 @@ class SiliconFlowSTTModel(BaseSpeechToTextModel):
                 'model': self.model_id,
                 'response_format': 'json'
             }
-            
+
             # 添加可选参数
             if language and language != "auto":
                 data['language'] = language
-            
+
             if prompt:
                 data['prompt'] = prompt
-            
+
+            # 记录实际传给 API 的参数
+            logger.debug(f"[硅基流动] 传入 language={data.get('language', 'None(自动检测)')}, prompt={prompt[:30] if prompt else 'None'}")
+
             # 发送请求
             audio_duration = len(audio_data) / sample_rate
             logger.info(f"📡 [硅基流动] 发送请求... (音频: {audio_duration:.2f}s)")

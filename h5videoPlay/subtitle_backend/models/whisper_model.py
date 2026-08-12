@@ -87,9 +87,12 @@ class WhisperSTTModel(BaseSpeechToTextModel):
         if not self.model:
             logger.error("[Whisper] 模型未初始化")
             return None, None, 0.0
-        
+
         t0 = time.time()
         try:
+            # 记录实际传给模型的 language 参数（None=自动检测）
+            logger.debug(f"[Whisper] 传入 language={language}, prompt={prompt[:30] if prompt else 'None'}")
+
             segments, info = self.model.transcribe(
                 audio_data,
                 beam_size=1,
@@ -107,7 +110,7 @@ class WhisperSTTModel(BaseSpeechToTextModel):
             )
             text = " ".join([s.text.strip() for s in segments])
             cost = time.time() - t0
-            
+
             if text:
                 logger.info(f"👂 [Whisper] 原文 [{info.language}][{cost:.2f}s]: {text}")
                 return text, info.language, cost
