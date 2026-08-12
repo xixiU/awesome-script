@@ -1140,7 +1140,12 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         // 学习是纯 CPU 的子串统计，放到空闲时段执行，不与过滤/滚动抢主线程。
         if (pendingLearnCheck) {
             pendingLearnCheck = false;
-            const runLearn = () => learnHeuristicPatterns();
+            // 学习完成后更新"上次学习位置"
+            const totalRecorded = config.get('totalRecorded') || 0;
+            const runLearn = () => {
+                learnHeuristicPatterns();
+                config.set('lastLearnedAt', totalRecorded);
+            };
             if (typeof requestIdleCallback === 'function') {
                 requestIdleCallback(runLearn, { timeout: 3000 });
             } else {
@@ -1150,8 +1155,14 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     }
 
     function recordBlockHistory(username, displayName, commentText = '') {
-        // 直接改内存中的数组（config.get 返回的是引用），不立即落盘
         const history = config.get('blockHistory') || [];
+
+        // 去重：同一 displayName + commentText 组合只记一次（垃圾团伙用同一模板刷屏，重复记录会稀释有效样本）
+        const key = `${displayName}|${commentText}`;
+        if (history.some(h => `${h.displayName}|${h.commentText}` === key)) {
+            return; // 已存在，跳过
+        }
+
         const before = history.length;
         history.push({
             displayName: displayName || username,
@@ -1162,15 +1173,20 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         // FIFO，保留最近100条
         if (history.length > 100) history.shift();
 
-        // 跨过 20 条边界则本轮结束后学习一次
-        if (Math.floor(history.length / 20) !== Math.floor(before / 20)) {
+        // 累积计数器（持久化）：不再依赖 history.length（FIFO 满后不变），改为记录总条数
+        let totalRecorded = config.get('totalRecorded') || 0;
+        let lastLearnedAt = config.get('lastLearnedAt') || 0;
+        totalRecorded++;
+        config.set('totalRecorded', totalRecorded);
+
+        // 每累积 20 条新记录触发一次学习（即使 history 满员也能继续学习）
+        if (totalRecorded - lastLearnedAt >= 20) {
             pendingLearnCheck = true;
         }
 
         historyDirty = true;
         if (!historyFlushScheduled) {
             historyFlushScheduled = true;
-            // 让出主线程，等本轮批量记录全部完成后只写一次
             setTimeout(flushBlockHistory, 0);
         }
     }
@@ -1335,12 +1351,12 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             stopWords: allStopWords
         });
 
-        // 从评论学习（5-10字，≥15%，过滤停用词）
+        // 从评论学习（5-10字，≥10%，过滤停用词）-- 降低阈值让小批次垃圾也能被学到
         const commentTexts = history.map(h => h.commentText).filter(t => t);
         const commentPatterns = extractCommonSubstrings(commentTexts, {
             minLen: 5,
             maxLen: 10,
-            minRatio: 0.15,
+            minRatio: 0.10,  // 从 0.15 降至 0.10：100 条里出现 10 次即可
             minCount: 5,
             source: 'commentText',
             stopWords: allStopWords
@@ -1447,7 +1463,17 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     // 归一化：小写化并去掉空白/emoji/符号，只保留字母数字（含 CJK）
     function normalizeForSimilarity(text) {
         if (!text || typeof text !== 'string') return '';
-        return text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+        // 先去掉 @mention（垃圾评论常夹杂 @xxx 稀释相似度）
+        const noMention = text.replace(/@\w+/g, '');
+        // 检测是否 CJK 为主：垃圾团伙在 CJK 文案中夹杂随机 ASCII 逃避检测，CJK-only 归一化可秒杀
+        const cjkChars = noMention.match(/[一-鿿぀-ゟ゠-ヿ가-힯]/g);
+        const totalChars = noMention.replace(/\s/g, '').length;
+        if (cjkChars && totalChars > 0 && cjkChars.length / totalChars > 0.5) {
+            // CJK 占比 > 50%：只保留 CJK 字符，去掉随机 ASCII 干扰
+            return cjkChars.join('');
+        }
+        // 否则：保留所有字母数字（原逻辑）
+        return noMention.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
     }
 
     function charBigrams(str) {
@@ -3514,6 +3540,23 @@ ${comments.map((c, i) => {
         }
 
         console.log(t('consoleScriptLoaded'));
+
+        // 启动补学：检查是否有积压未学习的记录（上次会话积累到 FIFO 满后学习失效）
+        const totalRecorded = config.get('totalRecorded') || 0;
+        const lastLearnedAt = config.get('lastLearnedAt') || 0;
+        const history = config.get('blockHistory') || [];
+        if (history.length >= 20 && totalRecorded - lastLearnedAt >= 20) {
+            console.log(`🎓 启动补学：积压 ${totalRecorded - lastLearnedAt} 条记录未学习，立即触发`);
+            const runCatchup = () => {
+                learnHeuristicPatterns();
+                config.set('lastLearnedAt', totalRecorded);
+            };
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(runCatchup, { timeout: 3000 });
+            } else {
+                setTimeout(runCatchup, 500);
+            }
+        }
     }
 
     // Initialize after page load
