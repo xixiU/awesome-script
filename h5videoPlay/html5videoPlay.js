@@ -724,9 +724,15 @@ const tip = (msg) => {
         $msg = tipEl;
     }
     // 全屏时把提示挂到全屏元素下，退出全屏则挂回 body，保证任何状态都可见。
+    // 同时切换定位方式：全屏时用 absolute（相对容器），非全屏用 fixed（相对 viewport），
+    // 避免全屏容器有 transform 时 fixed 元素继承缩放导致提示框变大。
     const fsEl = getFsElement();
     const target = (fsEl && fsEl.appendChild) ? fsEl : by;
-    if ($msg.parentNode !== target) target.appendChild($msg);
+    if ($msg.parentNode !== target) {
+        target.appendChild($msg);
+        // 全屏时改用 absolute，避免容器 transform 影响；非全屏恢复 fixed
+        $msg.style.position = fsEl ? 'absolute' : 'fixed';
+    }
     clearTimeout(_tipTimer);
     $msg.textContent = msg;
     $msg.style.top = '190px';

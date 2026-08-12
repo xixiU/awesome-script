@@ -167,9 +167,15 @@
             d.body.appendChild(el);
         }
         // 全屏时把提示挂到全屏元素下，否则会被全屏元素（top layer）盖住看不见。
+        // 同时切换定位方式：全屏时用 absolute（相对容器），非全屏用 fixed（相对 viewport），
+        // 避免全屏容器有 transform 时 fixed 元素继承缩放导致提示框变大。
         const fsEl = d.fullscreenElement || d.webkitFullscreenElement || d.mozFullScreenElement;
         const target = (fsEl && fsEl.appendChild) ? fsEl : d.body;
-        if (el.parentNode !== target) target.appendChild(el);
+        if (el.parentNode !== target) {
+            target.appendChild(el);
+            // 全屏时改用 absolute，避免容器 transform 影响；非全屏恢复 fixed
+            el.style.position = fsEl ? 'absolute' : 'fixed';
+        }
         el.textContent = msg;
         clearTimeout(tipTimer);
         el.style.top = '20px';
