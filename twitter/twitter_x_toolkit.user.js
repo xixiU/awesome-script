@@ -1135,6 +1135,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         const history = config.get('blockHistory') || [];
         config.set('blockHistory', history);
+        historyGramsDirty = true; // 历史已变动，规则 6 的 bigram 缓存失效
 
         // 只在跨过 20 条整数倍边界时学习一次，避免一轮批量里重复全量学习。
         // 学习是纯 CPU 的子串统计，放到空闲时段执行，不与过滤/滚动抢主线程。
@@ -1493,6 +1494,62 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
     // 当前推文的评论语料（跨滚动批次累积，路由变化时重置）
     let similarityCorpus = [];
+
+    // ==================== 规则 6：与历史拉黑评论比对 ====================
+    // 规则 5 是同推文内横向比对（需要两个不同用户同时在场才能发现）。
+    // 但同一批文案会在不同推文、不同时间反复投放，历史拉黑记录本身就是
+    // 已确认的垃圾样本库——新评论只要与其中任一条高度相似，单条即可判黑，
+    // 不必等同伙一起出现，也比启发式学习（要攒够 5 次同一子串）反应更快。
+    // 阈值取得比规则 5 高：历史里可能混有误杀记录，避免误判扩散。
+    const HISTORY_SIMILARITY_THRESHOLD = 0.92;
+
+    // 历史 bigram 缓存：避免每批评论都重算 100 条历史的 bigram 集合
+    let historyGramsCache = null;
+    let historyGramsDirty = true;
+
+    function getHistoryGrams() {
+        if (historyGramsCache && !historyGramsDirty) return historyGramsCache;
+        const history = config.get('blockHistory') || [];
+        historyGramsCache = [];
+        for (const h of history) {
+            if (!h.commentText) continue;
+            const norm = normalizeForSimilarity(h.commentText);
+            const chars = [...norm];
+            // 与规则 5 同样的护栏：太短/字符太单一的历史样本不参与比对，避免误伤
+            if (chars.length < SIMILARITY_MIN_LENGTH) continue;
+            if (new Set(chars).size < SIMILARITY_MIN_UNIQUE) continue;
+            historyGramsCache.push({
+                displayName: h.displayName,
+                text: h.commentText,
+                grams: charBigrams(norm)
+            });
+        }
+        historyGramsDirty = false;
+        return historyGramsCache;
+    }
+
+    /**
+     * 与历史拉黑评论比对相似度
+     * @param {string} text - 待检评论
+     * @returns {{sim: string, peerText: string, peerName: string}|null}
+     */
+    function detectHistorySimilarity(text) {
+        const norm = normalizeForSimilarity(text);
+        const chars = [...norm];
+        if (chars.length < SIMILARITY_MIN_LENGTH) return null;
+        if (new Set(chars).size < SIMILARITY_MIN_UNIQUE) return null;
+
+        const grams = charBigrams(norm);
+        const historyGrams = getHistoryGrams();
+        let best = null;
+        for (const h of historyGrams) {
+            const sim = diceSimilarity(grams, h.grams);
+            if (sim >= HISTORY_SIMILARITY_THRESHOLD && (!best || sim > best.raw)) {
+                best = { raw: sim, sim: (sim * 100).toFixed(0), peerText: h.text, peerName: h.displayName };
+            }
+        }
+        return best;
+    }
 
     /**
      * 批量相似评论检测：新评论与本推文已见评论两两比对。
@@ -3108,6 +3165,7 @@ ${comments.map((c, i) => {
             //   规则 3 displayName-keyword：昵称包含关键词黑名单（直接可见，无需 API）
             //   规则 4 heuristic：昵称/评论匹配启发式学习的规则
             //   规则 5 batch-similarity：同推文下不同用户的评论文本高度雷同（批量模板刷屏）
+            //   规则 6 history-similarity：与历史拉黑评论高度相似（跨推文、跨时间复用同一文案）
             // 任一命中直接判黑名单，不送 AI，节省 token 也更稳定
             const displayNameKeywordsRaw = config.get('displayNameKeywords') || '';
             const displayNameKeywords = displayNameKeywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
@@ -3183,6 +3241,17 @@ ${comments.map((c, i) => {
                     console.log(`🎯 前置命中（批量相似评论，相似度 ${hit.sim}%，同伙 @${hit.peer}）@${c.username}: ${c.text.substring(0, 80)}`);
                     // 学习记录由 processAIFilterResults 统一完成
                     matched = true;
+                }
+
+                // 检查与历史拉黑评论的相似度（规则 6）：单条即可判黑，无需同伙在场
+                if (!matched) {
+                    const histHit = detectHistorySimilarity(c.text);
+                    if (histHit) {
+                        preFilterBlacklist.push(c.username);
+                        preFilterReason.set(c.username, `历史相似评论（${histHit.sim}%）`);
+                        console.log(`🎯 前置命中（历史相似评论，相似度 ${histHit.sim}%）@${c.username}: ${c.text.substring(0, 60)}\n    ↳ 历史样本（${histHit.peerName}）: ${histHit.peerText.substring(0, 60)}`);
+                        matched = true;
+                    }
                 }
 
                 if (!matched) {
