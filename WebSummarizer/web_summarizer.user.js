@@ -1500,7 +1500,7 @@
          * @param {string} newsContent - 网页内容
          * @returns {Promise<string>} - 总结结果
          */
-        static async summarize(newsUrl, newsContent, promptType = 'article') {
+        static async summarize(newsUrl, newsContent, promptType = 'article', customDimension = null) {
             // 检查配置是否就绪
             if (!summarizerConfig.isLLMReady()) {
                 const apiFormat = summarizerConfig.get('aiApiFormat');
@@ -1513,8 +1513,7 @@
 
             // 构建总结提示词（含AI生成概率检测）
             // promptType='discussion' 用于知乎问答等多方讨论型内容，输出定性+定量分析
-            // 用户自定义提示词（aiSystemPrompt）仅覆盖文章型，讨论型始终使用内置模板
-            const articlePrompt = summarizerConfig.get('aiSystemPrompt') || `你是一个专业的内容总结助手，同时具备AI生成内容识别能力。
+            const articlePrompt = `你是一个专业的内容总结助手，同时具备AI生成内容识别能力。
 每次回复必须严格按以下格式输出，第一行为AI生成概率分数，第二行为分隔线，之后为总结正文：
 AI_SCORE: [0-100的整数]
 ---
@@ -1553,6 +1552,16 @@ AI_SCORE说明：评估这些回答与评论整体由AI生成的概率，100表�
 
             const systemPrompt = promptType === 'discussion' ? discussionPrompt : articlePrompt;
 
+            // 如果有自定义维度,追加到 system prompt
+            const finalSystemPrompt = customDimension
+                ? `${systemPrompt}
+
+【用户指定的分析维度】
+${customDimension}
+
+请严格按照用户指定的维度进行分析,同时保持 AI_SCORE 格式要求。`
+                : systemPrompt;
+
             const userPrompt = `网页地址：${newsUrl}
 
 网页内容：
@@ -1562,7 +1571,7 @@ ${newsContent}`;
                 // 使用 ConfigManager 的统一 LLM 调用方法
                 const result = await summarizerConfig.callLLM({
                     prompt: userPrompt,
-                    system: systemPrompt,
+                    system: finalSystemPrompt,
                     temperature: 0.7,
                     maxTokens: 4096
                 });
@@ -2105,18 +2114,9 @@ ${newsContent}`;
                 placeholder: 'gpt-4',
                 help: '模型名称（如: gpt-4, claude-sonnet-4-5, llama3, gemini-nano）'
             });
-            const llmPromptGroup = this.createFormGroup({
-                key: 'aiSystemPrompt',
-                label: '系统提示词（可选）',
-                type: 'textarea',
-                placeholder: '自定义总结提示词，留空使用默认',
-                help: '自定义总结时的系统提示词，留空则使用默认提示词'
-            });
-
             llmSection.appendChild(llmUrlGroup);
             llmSection.appendChild(llmKeyGroup);
             llmSection.appendChild(llmModelGroup);
-            llmSection.appendChild(llmPromptGroup);
             content.appendChild(llmSection);
 
             // Chrome Gemini 提示区
@@ -2304,6 +2304,7 @@ ${newsContent}`;
                 let isSelectionMode = false;
                 let promptType = 'article';   // 提示词类型：article | discussion
                 let adapterName = null;        // 命中的站点适配器名称
+                let extractedData = null;      // 站点适配器的结构化数据(用于展示原始数据)
 
                 // 进度提示回调：更新加载面板文本
                 const onProgress = (text) => {
@@ -2326,6 +2327,7 @@ ${newsContent}`;
                             newsContent = adapter.formatForLLM(data);
                             promptType = adapter.promptType;
                             adapterName = adapter.name;
+                            extractedData = data;  // 保存结构化数据
                             console.log(`[${adapter.name}] 结构化提取完成，长度:`, newsContent.length);
                         } catch (e) {
                             console.warn(`[${adapter.name}] 适配器提取失败，回退通用提取器:`, e);
@@ -2352,6 +2354,12 @@ ${newsContent}`;
                 this.currentSummaryMode = isSelectionMode ? 'selection' : (adapterName ? 'adapter' : 'full');
                 this.currentAdapterName = adapterName;
 
+                // 缓存抓取结果（用于失败重试和结构化展示）
+                this.lastFormattedContent = newsContent;
+                this.lastPromptType = promptType;
+                this.lastExtractedData = extractedData;  // 知乎问答等适配器的结构化数据
+                this.lastNewsUrl = newsUrl;
+
                 // 根据配置选择 AI 提供商
                 let rawResult;
                 const provider = summarizerConfig.get('aiProvider') || 'unified';
@@ -2374,8 +2382,13 @@ ${newsContent}`;
                 this.showResultPanel(content, aiScore);
 
             } catch (error) {
-                console.error('错误:', error);
-                this.showErrorPanel(error.message);
+                console.error('总结失败:', error);
+                // 如果已缓存了抓取结果,展示面板+重试按钮;否则直接报错
+                if (this.lastFormattedContent) {
+                    this.showResultPanel('', null, true, error.message);
+                } else {
+                    this.showErrorPanel(error.message);
+                }
             } finally {
                 // 恢复按钮状态
                 this.button.classList.remove('loading');
@@ -2421,6 +2434,48 @@ ${newsContent}`;
             }
         }
 
+        // 重试 AI 总结(使用缓存的抓取结果,不重新抓取数据)
+        async handleRetry(customDimension = null) {
+            if (!this.lastFormattedContent) {
+                this.showErrorPanel('没有可重试的内容，请重新抓取');
+                return;
+            }
+
+            try {
+                // 显示加载状态
+                this.button.classList.add('loading');
+                const iconSpan = this.button.querySelector('.btn-icon');
+                const textSpan = this.button.querySelector('.btn-text');
+                if (iconSpan) iconSpan.textContent = '⏳';
+                if (textSpan) textSpan.textContent = '重试中...';
+
+                this.showLoadingPanel();
+
+                // 直接用缓存内容调 AI
+                let rawResult;
+                const provider = summarizerConfig.get('aiProvider') || 'unified';
+                if (provider === 'dify') {
+                    rawResult = await DifyAPI.summarize(this.lastNewsUrl, this.lastFormattedContent);
+                } else {
+                    rawResult = await UnifiedAPI.summarize(this.lastNewsUrl, this.lastFormattedContent, this.lastPromptType, customDimension);
+                }
+
+                const { aiScore, content } = parseAIScore(rawResult);
+                this.currentResult = content;
+                this.showResultPanel(content, aiScore);
+
+            } catch (error) {
+                console.error('重试失败:', error);
+                this.showResultPanel('', null, true, error.message);
+            } finally {
+                this.button.classList.remove('loading');
+                const iconSpan = this.button.querySelector('.btn-icon');
+                const textSpan = this.button.querySelector('.btn-text');
+                if (iconSpan) iconSpan.textContent = '📝';
+                if (textSpan) textSpan.textContent = 'AI总结';
+            }
+        }
+
         showLoadingPanel() {
             // 显示加载动画
             const contentDiv = this.panel.querySelector('#dify-panel-content');
@@ -2450,7 +2505,7 @@ ${newsContent}`;
             this.overlay.classList.add('show');
         }
 
-        showResultPanel(result, aiScore = null) {
+        showResultPanel(result, aiScore = null, showRetry = false, errorMsg = null) {
             // 更新面板标题
             const titleElement = this.panel.querySelector('#dify-panel-title');
             if (this.currentSummaryMode === 'selection') {
@@ -2465,6 +2520,47 @@ ${newsContent}`;
 
             const contentDiv = this.panel.querySelector('#dify-panel-content');
             contentDiv.textContent = '';
+
+            // 如果是错误+重试模式,显示警告条和重试按钮
+            if (showRetry && errorMsg) {
+                const errorBanner = document.createElement('div');
+                errorBanner.style.cssText = 'background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:16px;margin-bottom:16px;';
+                errorBanner.innerHTML = `
+                    <div style="display:flex;align-items:start;gap:12px;">
+                        <span style="font-size:20px;">⚠️</span>
+                        <div style="flex:1;">
+                            <div style="font-weight:600;color:#991b1b;margin-bottom:4px;">AI 总结失败</div>
+                            <div style="font-size:13px;color:#dc2626;margin-bottom:8px;">${errorMsg}</div>
+                            <div style="font-size:12px;color:#7f1d1d;">数据已抓取完成，可以重试或查看下方原始数据</div>
+                        </div>
+                    </div>
+                `;
+                contentDiv.appendChild(errorBanner);
+
+                // 自定义维度输入框 + 重试按钮
+                const retryContainer = document.createElement('div');
+                retryContainer.style.cssText = 'margin-bottom:16px;';
+
+                // textarea: 自定义总结维度
+                const dimensionTextarea = document.createElement('textarea');
+                dimensionTextarea.placeholder = '自定义总结维度(选填)\n例如: 从技术可行性分析 / 提取时间线 / 对比正反方论据强度';
+                dimensionTextarea.style.cssText = 'width:100%;min-height:60px;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;line-height:1.5;resize:vertical;box-sizing:border-box;margin-bottom:8px;font-family:inherit;';
+                retryContainer.appendChild(dimensionTextarea);
+
+                // 重试按钮
+                const retryBtn = document.createElement('button');
+                retryBtn.textContent = '🔄 重新总结';
+                retryBtn.style.cssText = 'width:100%;padding:12px;background:#3b82f6;color:white;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;';
+                retryBtn.onmouseover = () => retryBtn.style.background = '#2563eb';
+                retryBtn.onmouseout = () => retryBtn.style.background = '#3b82f6';
+                retryBtn.onclick = () => {
+                    const customDimension = dimensionTextarea.value.trim() || null;
+                    this.handleRetry(customDimension);
+                };
+                retryContainer.appendChild(retryBtn);
+
+                contentDiv.appendChild(retryContainer);
+            }
 
             if (aiScore !== null) {
                 // 渲染AI生成概率条
@@ -2497,11 +2593,144 @@ ${newsContent}`;
             // 将 Markdown 格式的结果转换为 DOM 元素
             this.renderMarkdownContent(result, contentDiv);
 
+            // 如果有缓存内容(总结成功或失败重试),显示"自定义维度重新总结"区块
+            if (this.lastFormattedContent && !showRetry) {
+                const reSummarizeContainer = document.createElement('div');
+                reSummarizeContainer.style.cssText = 'margin-top:24px;padding-top:16px;border-top:2px solid #e5e7eb;';
+
+                const sectionTitle = document.createElement('div');
+                sectionTitle.textContent = '💡 换个角度重新总结';
+                sectionTitle.style.cssText = 'font-weight:600;font-size:14px;color:#374151;margin-bottom:8px;';
+                reSummarizeContainer.appendChild(sectionTitle);
+
+                // textarea: 自定义总结维度
+                const dimensionTextarea = document.createElement('textarea');
+                dimensionTextarea.placeholder = '输入自定义分析维度(选填)\n例如: 从技术可行性分析 / 提取关键时间节点 / 对比各方论据强度';
+                dimensionTextarea.style.cssText = 'width:100%;min-height:60px;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;line-height:1.5;resize:vertical;box-sizing:border-box;margin-bottom:8px;font-family:inherit;';
+                reSummarizeContainer.appendChild(dimensionTextarea);
+
+                // 重新总结按钮
+                const reSummarizeBtn = document.createElement('button');
+                reSummarizeBtn.textContent = '🔄 重新总结';
+                reSummarizeBtn.style.cssText = 'width:100%;padding:10px;background:#10b981;color:white;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;';
+                reSummarizeBtn.onmouseover = () => reSummarizeBtn.style.background = '#059669';
+                reSummarizeBtn.onmouseout = () => reSummarizeBtn.style.background = '#10b981';
+                reSummarizeBtn.onclick = () => {
+                    const customDimension = dimensionTextarea.value.trim() || null;
+                    this.handleRetry(customDimension);
+                };
+                reSummarizeContainer.appendChild(reSummarizeBtn);
+
+                contentDiv.appendChild(reSummarizeContainer);
+            }
+
+            // 如果是知乎问答,在 AI 总结下方追加结构化原始数据
+            if (this.currentAdapterName === 'ZhihuQA' && this.lastExtractedData) {
+                this.renderZhihuRawData(contentDiv, this.lastExtractedData);
+            }
+
             // 重置滚动位置到顶部，确保内容完整显示
             contentDiv.scrollTop = 0;
 
             this.panel.classList.add('show');
             this.overlay.classList.add('show');
+        }
+
+        // 渲染知乎问答的结构化原始数据
+        renderZhihuRawData(container, data) {
+            const rawDataSection = document.createElement('details');
+            rawDataSection.style.cssText = 'margin-top:24px;border-top:2px solid #e5e7eb;padding-top:16px;';
+
+            const summary = document.createElement('summary');
+            summary.style.cssText = 'cursor:pointer;font-weight:600;font-size:15px;color:#374151;margin-bottom:12px;user-select:none;';
+            summary.textContent = `📊 原始数据 (${data.capturedAnswers} 个回答 / ${data.capturedComments} 条评论)`;
+            rawDataSection.appendChild(summary);
+
+            const dataContainer = document.createElement('div');
+            dataContainer.style.cssText = 'font-size:13px;line-height:1.6;';
+
+            // 问题信息
+            const questionBox = document.createElement('div');
+            questionBox.style.cssText = 'background:#f9fafb;border-radius:8px;padding:12px;margin-bottom:16px;';
+            questionBox.innerHTML = `
+                <div style="font-weight:600;color:#1f2937;margin-bottom:4px;">${data.title}</div>
+                ${data.questionDetail ? `<div style="color:#6b7280;font-size:12px;">${data.questionDetail}</div>` : ''}
+                <div style="color:#9ca3af;font-size:11px;margin-top:6px;">
+                    共 ${data.totalAnswers} 个回答，已抓取 ${data.capturedAnswers} 个
+                </div>
+            `;
+            dataContainer.appendChild(questionBox);
+
+            // 回答列表
+            data.answers.forEach((ans, idx) => {
+                const answerCard = document.createElement('div');
+                answerCard.style.cssText = 'border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:12px;';
+
+                // 回答头部
+                const header = document.createElement('div');
+                header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #f3f4f6;';
+                header.innerHTML = `
+                    <div style="font-weight:600;color:#1f2937;">
+                        ${idx + 1}. ${ans.author}
+                    </div>
+                    <div style="display:flex;gap:12px;font-size:12px;color:#6b7280;">
+                        <span>👍 ${ans.upvotes}</span>
+                        <span>💬 ${ans.commentCount}</span>
+                    </div>
+                `;
+                answerCard.appendChild(header);
+
+                // 回答正文(可折叠)
+                const contentDetails = document.createElement('details');
+                const contentSummary = document.createElement('summary');
+                contentSummary.style.cssText = 'cursor:pointer;color:#3b82f6;font-size:12px;margin-bottom:6px;';
+                contentSummary.textContent = '展开正文';
+                contentDetails.appendChild(contentSummary);
+
+                const contentText = document.createElement('div');
+                contentText.style.cssText = 'color:#374151;white-space:pre-wrap;font-size:12px;line-height:1.5;max-height:200px;overflow-y:auto;';
+                contentText.textContent = ans.content.slice(0, 500) + (ans.content.length > 500 ? '...' : '');
+                contentDetails.appendChild(contentText);
+                answerCard.appendChild(contentDetails);
+
+                // 评论区
+                if (ans.comments.length > 0) {
+                    const commentsBox = document.createElement('div');
+                    commentsBox.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #f3f4f6;';
+                    commentsBox.innerHTML = `<div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">热门评论 (${ans.comments.length})</div>`;
+
+                    ans.comments.forEach(c => {
+                        const commentItem = document.createElement('div');
+                        commentItem.style.cssText = 'margin-left:8px;margin-bottom:6px;font-size:12px;';
+                        commentItem.innerHTML = `
+                            <div style="color:#6b7280;">
+                                <span style="color:#3b82f6;font-weight:500;">${c.author}</span>
+                                <span style="color:#9ca3af;font-size:11px;margin-left:6px;">❤️ ${c.likes}</span>
+                            </div>
+                            <div style="color:#374151;margin-left:12px;">${c.content.slice(0, 100)}${c.content.length > 100 ? '...' : ''}</div>
+                        `;
+
+                        // 子评论
+                        if (c.children.length > 0) {
+                            c.children.forEach(cc => {
+                                const childItem = document.createElement('div');
+                                childItem.style.cssText = 'margin-left:24px;margin-top:4px;font-size:11px;color:#6b7280;';
+                                childItem.innerHTML = `└ <span style="color:#3b82f6;">${cc.author}</span> (❤️${cc.likes}): ${cc.content.slice(0, 80)}${cc.content.length > 80 ? '...' : ''}`;
+                                commentItem.appendChild(childItem);
+                            });
+                        }
+
+                        commentsBox.appendChild(commentItem);
+                    });
+
+                    answerCard.appendChild(commentsBox);
+                }
+
+                dataContainer.appendChild(answerCard);
+            });
+
+            rawDataSection.appendChild(dataContainer);
+            container.appendChild(rawDataSection);
         }
 
         showErrorPanel(errorMessage) {
@@ -3152,7 +3381,6 @@ ${newsContent}`;
             const aiBaseUrlInput = this.settingsPanel.querySelector('[data-key="aiBaseUrl"]');
             const aiApiKeyInput = this.settingsPanel.querySelector('[data-key="aiApiKey"]');
             const aiModelInput = this.settingsPanel.querySelector('[data-key="aiModel"]');
-            const aiSystemPromptInput = this.settingsPanel.querySelector('[data-key="aiSystemPrompt"]');
 
             if (providerInput) providerInput.value = provider;
             if (difyUrlInput) difyUrlInput.value = summarizerConfig.get('difyApiUrl') || '';
@@ -3160,7 +3388,6 @@ ${newsContent}`;
             if (aiBaseUrlInput) aiBaseUrlInput.value = summarizerConfig.get('aiBaseUrl') || '';
             if (aiApiKeyInput) aiApiKeyInput.value = summarizerConfig.get('aiApiKey') || '';
             if (aiModelInput) aiModelInput.value = summarizerConfig.get('aiModel') || '';
-            if (aiSystemPromptInput) aiSystemPromptInput.value = summarizerConfig.get('aiSystemPrompt') || '';
 
             // 更新配置区块显示
             this.updateConfigSections(provider);
@@ -3206,7 +3433,6 @@ ${newsContent}`;
                 const baseUrl = this.settingsPanel.querySelector('[data-key="aiBaseUrl"]').value.trim();
                 const apiKey = this.settingsPanel.querySelector('[data-key="aiApiKey"]').value.trim();
                 const model = this.settingsPanel.querySelector('[data-key="aiModel"]').value.trim();
-                const systemPrompt = this.settingsPanel.querySelector('[data-key="aiSystemPrompt"]').value.trim();
 
                 if (!baseUrl || (provider !== 'ollama' && !apiKey) || !model) {
                     alert('请填写完整的配置信息');
@@ -3218,14 +3444,11 @@ ${newsContent}`;
                 summarizerConfig.set('aiBaseUrl', baseUrl);
                 summarizerConfig.set('aiApiKey', apiKey);
                 summarizerConfig.set('aiModel', model);
-                summarizerConfig.set('aiSystemPrompt', systemPrompt);
             } else {
                 // Chrome Gemini
                 summarizerConfig.set('aiApiFormat', 'chrome-gemini');
                 const model = this.settingsPanel.querySelector('[data-key="aiModel"]').value.trim() || 'gemini-nano';
-                const systemPrompt = this.settingsPanel.querySelector('[data-key="aiSystemPrompt"]').value.trim();
                 summarizerConfig.set('aiModel', model);
-                summarizerConfig.set('aiSystemPrompt', systemPrompt);
             }
 
             // 显示成功消息
