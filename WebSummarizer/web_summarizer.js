@@ -6,7 +6,7 @@
 // @author       xixiu
 // @match        *://*/*
 // @exclude      https://www.youtube.com/*
-// @require      https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/common/config_manager.js
+// @require      https://github.com/xixiU/awesome-script/raw/refs/heads/master/common/config_manager.js
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -14,8 +14,8 @@
 // @grant        GM_addStyle
 // @connect      *
 // @run-at       document-end
-// @downloadURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/WebSummarizer/web_summarizer.js
-// @updateURL https://raw.githubusercontent.com/xixiU/awesome-script/refs/heads/master/WebSummarizer/web_summarizer.js
+// @downloadURL  https://github.com/xixiU/awesome-script/raw/refs/heads/master/WebSummarizer/web_summarizer.js
+// @updateURL   https://github.com/xixiU/awesome-script/raw/refs/heads/master/WebSummarizer/web_summarizer.js
 // ==/UserScript==
 
 (function () {
@@ -1293,7 +1293,7 @@
         // 排除专栏 zhuanlan.zhihu.com（走通用单篇逻辑）
         match(loc) {
             return /(^|\.)zhihu\.com$/.test(loc.hostname) &&
-                   /^\/question\/\d+/.test(loc.pathname);
+                /^\/question\/\d+/.test(loc.pathname);
         }
 
         // 从 URL 提取问题 id
@@ -1330,7 +1330,7 @@
         }
 
         // 主抓取流程
-        async extract(onProgress = () => {}) {
+        async extract(onProgress = () => { }) {
             const qid = this.getQuestionId();
             if (!qid) throw new Error('无法解析知乎问题 id');
 
