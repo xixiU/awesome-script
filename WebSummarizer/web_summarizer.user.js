@@ -2664,14 +2664,18 @@ ${newsContent}`;
             // 回答列表
             data.answers.forEach((ans, idx) => {
                 const answerCard = document.createElement('div');
-                answerCard.style.cssText = 'border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:12px;';
+                answerCard.style.cssText = 'border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:12px;cursor:pointer;transition:background 0.2s;';
 
-                // 回答头部
+                // hover 效果
+                answerCard.onmouseenter = () => answerCard.style.background = '#f9fafb';
+                answerCard.onmouseleave = () => answerCard.style.background = 'white';
+
+                // 回答头部(可点击展开/折叠)
                 const header = document.createElement('div');
-                header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #f3f4f6;';
+                header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
                 header.innerHTML = `
                     <div style="font-weight:600;color:#1f2937;">
-                        ${idx + 1}. ${ans.author}
+                        <span style="margin-right:4px;">▶</span>${idx + 1}. ${ans.author}
                     </div>
                     <div style="display:flex;gap:12px;font-size:12px;color:#6b7280;">
                         <span>👍 ${ans.upvotes}</span>
@@ -2680,42 +2684,53 @@ ${newsContent}`;
                 `;
                 answerCard.appendChild(header);
 
-                // 回答正文(可折叠)
+                // 可折叠内容容器(默认隐藏)
+                const collapsibleContent = document.createElement('div');
+                collapsibleContent.style.cssText = 'display:none;margin-top:12px;padding-top:12px;border-top:1px solid #f3f4f6;';
+
+                // 回答正文(可单独折叠)
                 const contentDetails = document.createElement('details');
                 const contentSummary = document.createElement('summary');
-                contentSummary.style.cssText = 'cursor:pointer;color:#3b82f6;font-size:12px;margin-bottom:6px;';
-                contentSummary.textContent = '展开正文';
+                contentSummary.style.cssText = 'cursor:pointer;color:#3b82f6;font-size:12px;margin-bottom:6px;user-select:none;';
+                contentSummary.textContent = '📄 展开正文';
                 contentDetails.appendChild(contentSummary);
 
                 const contentText = document.createElement('div');
-                contentText.style.cssText = 'color:#374151;white-space:pre-wrap;font-size:12px;line-height:1.5;max-height:200px;overflow-y:auto;';
-                contentText.textContent = ans.content.slice(0, 500) + (ans.content.length > 500 ? '...' : '');
+                contentText.style.cssText = 'color:#374151;white-space:pre-wrap;font-size:12px;line-height:1.5;max-height:200px;overflow-y:auto;padding:8px;background:#f9fafb;border-radius:4px;margin-top:4px;';
+                contentText.textContent = ans.content.slice(0, 1000) + (ans.content.length > 1000 ? '...' : '');
                 contentDetails.appendChild(contentText);
-                answerCard.appendChild(contentDetails);
+                collapsibleContent.appendChild(contentDetails);
 
-                // 评论区
+                // 评论区(可单独折叠)
                 if (ans.comments.length > 0) {
+                    const commentsDetails = document.createElement('details');
+                    commentsDetails.style.cssText = 'margin-top:8px;';
+
+                    const commentsSummary = document.createElement('summary');
+                    commentsSummary.style.cssText = 'cursor:pointer;color:#3b82f6;font-size:12px;margin-bottom:6px;user-select:none;';
+                    commentsSummary.textContent = `💬 展开评论 (${ans.comments.length} 条)`;
+                    commentsDetails.appendChild(commentsSummary);
+
                     const commentsBox = document.createElement('div');
-                    commentsBox.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #f3f4f6;';
-                    commentsBox.innerHTML = `<div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">热门评论 (${ans.comments.length})</div>`;
+                    commentsBox.style.cssText = 'padding:8px;background:#f9fafb;border-radius:4px;margin-top:4px;';
 
                     ans.comments.forEach(c => {
                         const commentItem = document.createElement('div');
-                        commentItem.style.cssText = 'margin-left:8px;margin-bottom:6px;font-size:12px;';
+                        commentItem.style.cssText = 'margin-bottom:8px;font-size:12px;padding-bottom:8px;border-bottom:1px solid #e5e7eb;';
                         commentItem.innerHTML = `
-                            <div style="color:#6b7280;">
+                            <div style="color:#6b7280;margin-bottom:4px;">
                                 <span style="color:#3b82f6;font-weight:500;">${c.author}</span>
                                 <span style="color:#9ca3af;font-size:11px;margin-left:6px;">❤️ ${c.likes}</span>
                             </div>
-                            <div style="color:#374151;margin-left:12px;">${c.content.slice(0, 100)}${c.content.length > 100 ? '...' : ''}</div>
+                            <div style="color:#374151;">${c.content.slice(0, 200)}${c.content.length > 200 ? '...' : ''}</div>
                         `;
 
                         // 子评论
                         if (c.children.length > 0) {
                             c.children.forEach(cc => {
                                 const childItem = document.createElement('div');
-                                childItem.style.cssText = 'margin-left:24px;margin-top:4px;font-size:11px;color:#6b7280;';
-                                childItem.innerHTML = `└ <span style="color:#3b82f6;">${cc.author}</span> (❤️${cc.likes}): ${cc.content.slice(0, 80)}${cc.content.length > 80 ? '...' : ''}`;
+                                childItem.style.cssText = 'margin-left:16px;margin-top:6px;font-size:11px;color:#6b7280;padding-left:8px;border-left:2px solid #e5e7eb;';
+                                childItem.innerHTML = `<span style="color:#3b82f6;font-weight:500;">${cc.author}</span> <span style="color:#9ca3af;">(❤️${cc.likes})</span>: ${cc.content.slice(0, 150)}${cc.content.length > 150 ? '...' : ''}`;
                                 commentItem.appendChild(childItem);
                             });
                         }
@@ -2723,8 +2738,20 @@ ${newsContent}`;
                         commentsBox.appendChild(commentItem);
                     });
 
-                    answerCard.appendChild(commentsBox);
+                    commentsDetails.appendChild(commentsBox);
+                    collapsibleContent.appendChild(commentsDetails);
                 }
+
+                answerCard.appendChild(collapsibleContent);
+
+                // 点击头部切换展开/折叠(阻止事件冒泡到 details 元素)
+                const arrow = header.querySelector('span');
+                header.onclick = (e) => {
+                    e.stopPropagation();
+                    const isExpanded = collapsibleContent.style.display !== 'none';
+                    collapsibleContent.style.display = isExpanded ? 'none' : 'block';
+                    arrow.textContent = isExpanded ? '▶' : '▼';
+                };
 
                 dataContainer.appendChild(answerCard);
             });
