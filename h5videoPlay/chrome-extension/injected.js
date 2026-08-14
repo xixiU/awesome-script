@@ -223,7 +223,11 @@
 
         toggle() {
             if (!this.container || !this.container.contains(v)) {
-                this.container = getPlayerContainer(v);
+                // 优先用站点指定的播放器容器（shellCSS，如 YouTube 的 #player），
+                // 避免 getPlayerContainer 在 video 高度为 0 时误爬到 <body>/根节点，
+                // 导致 gm-fp-innerBox 链式塌陷、画面变黑。
+                const shell = (cfg.shellCSS && q(cfg.shellCSS));
+                this.container = (shell && shell.contains(v)) ? shell : getPlayerContainer(v);
             }
 
             d.body.classList.toggle('gm-fp-body');
@@ -674,6 +678,11 @@
         if (!video) return null;
         let e = video, p = e.parentNode;
         const { clientWidth: w, clientHeight: h } = e;
+        // 当 video 尺寸无效（宽或高为 0，常见于加载初期或布局塌陷）时，
+        // 尺寸比较会失真而一路爬到根节点，这里直接返回其父容器兜底，避免误判。
+        if (w <= 0 || h <= 0) {
+            return (p && p !== d.body) ? p : e;
+        }
         while (p && p !== d.body && p.clientWidth - w < 5 && p.clientHeight - h < 5) {
             e = p;
             p = e.parentNode;
