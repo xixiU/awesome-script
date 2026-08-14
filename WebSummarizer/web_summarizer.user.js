@@ -14,8 +14,8 @@
 // @grant        GM_addStyle
 // @connect      *
 // @run-at       document-end
-// @downloadURL  https://github.com/xixiU/awesome-script/raw/refs/heads/master/WebSummarizer/web_summarizer.js
-// @updateURL   https://github.com/xixiU/awesome-script/raw/refs/heads/master/WebSummarizer/web_summarizer.js
+// @downloadURL  https://github.com/xixiU/awesome-script/raw/refs/heads/master/WebSummarizer/web_summarizer.user.js
+// @updateURL   https://github.com/xixiU/awesome-script/raw/refs/heads/master/WebSummarizer/web_summarizer.user.js
 // ==/UserScript==
 
 (function () {
