@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.5.8
+// @version      1.5.9
 // @description  使用统一配置管理的多模型AI智能总结网页内容，支持OpenAI/Anthropic/Ollama/Chrome Gemini/Dify，支持全文总结和选中文本总结
 // @author       xixiu
 // @match        *://*/*
@@ -1226,6 +1226,272 @@
         }
     }
 
+    // ==================== 站点适配器基础设施 ====================
+    // 设计说明：
+    //   - 每个站点一个适配器，实现 match / extract / formatForLLM / promptType
+    //   - handleSummarize 先按 URL 匹配适配器，命中则用其结构化抓取，否则走通用 ContentExtractor
+    //   - 适配器 extract 抛错时自动回退通用提取器，保证“最差不比现在差”
+    //   - extract 返回结构化对象，formatForLLM 拼成带数字标注的文本供 AI 定量分析
+
+    // 适配器基类：定义统一接口
+    class SiteAdapter {
+        // 是否命中当前页面
+        match(_loc) { return false; }
+        // 结构化抓取，返回 { ...任意结构化数据 }；onProgress(text) 用于进度提示
+        async extract(_onProgress) { throw new Error('not implemented'); }
+        // 把结构化数据拼成送 AI 的文本
+        formatForLLM(_data) { return ''; }
+        // 提示词类型：'discussion'（讨论型）| 'article'（单篇文章）
+        get promptType() { return 'article'; }
+        // 适配器名称（用于日志与结果面板标识）
+        get name() { return 'SiteAdapter'; }
+    }
+
+    // 站点适配器注册表
+    class SiteAdapterRegistry {
+        constructor() {
+            this.adapters = [];
+        }
+        register(adapter) {
+            this.adapters.push(adapter);
+            return this;
+        }
+        // 按当前 location 匹配适配器，返回命中的适配器或 null
+        match(loc = window.location) {
+            for (const adapter of this.adapters) {
+                try {
+                    if (adapter.match(loc)) return adapter;
+                } catch (e) {
+                    console.warn('[SiteAdapter] match 异常:', adapter.name, e);
+                }
+            }
+            return null;
+        }
+    }
+
+    // ==================== 知乎问答适配器 ====================
+    // 通过知乎官方 JSON 接口抓取，而非爬 DOM（更快、更准、更抗改版）
+    //   - 回答列表: /api/v4/questions/{qid}/feeds  跟随 paging.next 翻页
+    //   - 主评论:   /api/v4/comment_v5/answers/{aid}/root_comment?order_by=score
+    //   - 子评论:   /api/v4/comment_v5/comment/{cid}/child_comment
+    // 同源 fetch 自动带 cookie 与签名头，无需处理 x-zse-96
+    class ZhihuQAAdapter extends SiteAdapter {
+        constructor() {
+            super();
+            // 抓取参数（集中常量，便于调整）
+            this.TIME_BUDGET_MS = 60 * 1000;   // 时间盒上限
+            this.REQUEST_GAP_MS = 600;         // 请求间隔，防风控
+            this.FEEDS_LIMIT = 20;             // 每页回答数
+            this.MAX_ROOT_COMMENTS = 20;       // 每个回答抓取的主评论上限
+            this.MAX_CHILD_COMMENTS = 10;      // 每条主评论抓取的子评论上限
+        }
+
+        get name() { return 'ZhihuQA'; }
+        get promptType() { return 'discussion'; }
+
+        // 命中知乎问答页：zhihu.com/question/{id} 或 /question/{id}/answer/{id}
+        // 排除专栏 zhuanlan.zhihu.com（走通用单篇逻辑）
+        match(loc) {
+            return /(^|\.)zhihu\.com$/.test(loc.hostname) &&
+                   /^\/question\/\d+/.test(loc.pathname);
+        }
+
+        // 从 URL 提取问题 id
+        getQuestionId(loc = window.location) {
+            const m = loc.pathname.match(/\/question\/(\d+)/);
+            return m ? m[1] : null;
+        }
+
+        sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        // 同源 GET JSON
+        async fetchJSON(url) {
+            const r = await fetch(url, {
+                headers: { 'x-requested-with': 'fetch' },
+                credentials: 'include'
+            });
+            if (!r.ok) throw new Error(`知乎接口 ${r.status}: ${url}`);
+            return r.json();
+        }
+
+        // HTML 正文转纯文本
+        htmlToText(html) {
+            if (!html) return '';
+            const div = document.createElement('div');
+            div.innerHTML = html;
+            div.querySelectorAll('p, br, div, li').forEach(el => {
+                if (el.tagName === 'BR') el.replaceWith('\n');
+                else if (el.textContent.trim()) el.insertAdjacentText('afterend', '\n');
+            });
+            return (div.innerText || div.textContent || '')
+                .replace(/\n{3,}/g, '\n\n')
+                .replace(/[ \t]{2,}/g, ' ')
+                .trim();
+        }
+
+        // 主抓取流程
+        async extract(onProgress = () => {}) {
+            const qid = this.getQuestionId();
+            if (!qid) throw new Error('无法解析知乎问题 id');
+
+            const startTime = Date.now();
+            const timeLeft = () => this.TIME_BUDGET_MS - (Date.now() - startTime);
+
+            // 问题标题与补充（从 DOM 取，最稳）
+            const title = (document.querySelector('.QuestionHeader-title') || {}).innerText || document.title;
+            const detailEl = document.querySelector('.QuestionRichText, .Question-mainColumn .RichText');
+            const questionDetail = detailEl ? this.htmlToText(detailEl.innerHTML).slice(0, 500) : '';
+
+            // 总回答数：feeds 接口的 paging 不含总数，从 DOM 的"N 个回答"文本读取
+            let totalAnswers = 0;
+            const headerEl = document.querySelector('.List-headerText, .QuestionAnswers-answerButton');
+            if (headerEl) {
+                const m = headerEl.innerText.match(/([\d,]+)\s*个回答/);
+                if (m) totalAnswers = parseInt(m[1].replace(/,/g, ''), 10);
+            }
+
+            // 1. 翻页抓取回答列表
+            const answers = [];
+            const include = 'data[*].content,voteup_count,comment_count,created_time,author,is_normal;data[*].author.follower_count';
+            let url = `/api/v4/questions/${qid}/feeds?include=${encodeURIComponent(include)}&limit=${this.FEEDS_LIMIT}&offset=0&order=default&platform=desktop`;
+
+            while (url && timeLeft() > 0) {
+                let json;
+                try {
+                    json = await this.fetchJSON(url);
+                } catch (e) {
+                    console.warn('[ZhihuQA] 拉取回答失败，停止翻页:', e);
+                    break;
+                }
+                for (const item of (json.data || [])) {
+                    const t = item.target;
+                    if (!t || t.type !== 'answer' || t.is_normal === false) continue;
+                    answers.push({
+                        id: String(t.id),
+                        author: (t.author && t.author.name) || '匿名用户',
+                        upvotes: t.voteup_count || 0,
+                        commentCount: t.comment_count || 0,
+                        content: this.htmlToText(t.content),
+                        comments: []
+                    });
+                }
+                onProgress(`正在抓取知乎回答... 已获取 ${answers.length} 个`);
+                const next = json.paging && !json.paging.is_end ? json.paging.next : null;
+                url = next ? next.replace(/^https?:\/\/www\.zhihu\.com/, '') : null;
+                if (url) await this.sleep(this.REQUEST_GAP_MS);
+            }
+
+            // 2. 为每个回答抓取评论（时间盒内，按赞数从高到低优先）
+            answers.sort((a, b) => b.upvotes - a.upvotes);
+            let commentTotal = 0;
+            for (const ans of answers) {
+                if (timeLeft() <= 0) break;
+                if (ans.commentCount === 0) continue;
+                try {
+                    ans.comments = await this.fetchComments(ans.id, timeLeft, onProgress);
+                    commentTotal += ans.comments.length;
+                    ans.comments.forEach(c => { commentTotal += c.children.length; });
+                } catch (e) {
+                    console.warn('[ZhihuQA] 抓取评论失败:', ans.id, e);
+                }
+                onProgress(`正在抓取评论... 回答 ${answers.length} 个 / 评论 ${commentTotal} 条`);
+            }
+
+            if (answers.length === 0) throw new Error('未抓取到任何回答');
+
+            return {
+                title,
+                questionDetail,
+                totalAnswers: totalAnswers || answers.length,
+                capturedAnswers: answers.length,
+                capturedComments: commentTotal,
+                url: window.location.href,
+                answers
+            };
+        }
+
+        // 抓取单个回答的主评论 + 子评论
+        async fetchComments(answerId, timeLeft, onProgress) {
+            const result = [];
+            let url = `/api/v4/comment_v5/answers/${answerId}/root_comment?order_by=score&limit=20&offset=`;
+            while (url && result.length < this.MAX_ROOT_COMMENTS && timeLeft() > 0) {
+                const json = await this.fetchJSON(url);
+                for (const c of (json.data || [])) {
+                    if (result.length >= this.MAX_ROOT_COMMENTS) break;
+                    const root = {
+                        author: (c.author && c.author.name) || '匿名',
+                        content: this.htmlToText(c.content),
+                        likes: c.like_count || 0,
+                        childCount: c.child_comment_count || 0,
+                        children: []
+                    };
+                    // 抓子评论
+                    if (root.childCount > 0 && timeLeft() > 0) {
+                        try {
+                            root.children = await this.fetchChildComments(c.id, timeLeft);
+                        } catch (e) {
+                            console.warn('[ZhihuQA] 子评论抓取失败:', c.id, e);
+                        }
+                    }
+                    result.push(root);
+                }
+                const next = json.paging && !json.paging.is_end ? json.paging.next : null;
+                url = next ? next.replace(/^https?:\/\/www\.zhihu\.com/, '') : null;
+                if (url) await this.sleep(this.REQUEST_GAP_MS);
+            }
+            return result;
+        }
+
+        // 抓取子评论（上限 MAX_CHILD_COMMENTS）
+        async fetchChildComments(commentId, timeLeft) {
+            const children = [];
+            let url = `/api/v4/comment_v5/comment/${commentId}/child_comment?order_by=ts&limit=20&offset=`;
+            while (url && children.length < this.MAX_CHILD_COMMENTS && timeLeft() > 0) {
+                const json = await this.fetchJSON(url);
+                for (const c of (json.data || [])) {
+                    if (children.length >= this.MAX_CHILD_COMMENTS) break;
+                    children.push({
+                        author: (c.author && c.author.name) || '匿名',
+                        content: this.htmlToText(c.content),
+                        likes: c.like_count || 0
+                    });
+                }
+                const next = json.paging && !json.paging.is_end ? json.paging.next : null;
+                url = next ? next.replace(/^https?:\/\/www\.zhihu\.com/, '') : null;
+                if (url) await this.sleep(this.REQUEST_GAP_MS);
+            }
+            return children;
+        }
+
+        // 拼成带数字标注的文本，供 AI 做定量分析
+        formatForLLM(data) {
+            const lines = [];
+            lines.push(`知乎问题：${data.title}`);
+            if (data.questionDetail) lines.push(`问题补充：${data.questionDetail}`);
+            lines.push(`（该问题共 ${data.totalAnswers} 个回答，本次抓取 ${data.capturedAnswers} 个回答、${data.capturedComments} 条评论，按回答赞同数从高到低排列）`);
+            lines.push('');
+            data.answers.forEach((ans, i) => {
+                lines.push(`【回答 ${i + 1}】作者：${ans.author} | 赞同 ${ans.upvotes} | 评论 ${ans.commentCount}`);
+                lines.push(ans.content);
+                if (ans.comments.length) {
+                    lines.push(`  —— 该回答的热门评论（${ans.comments.length} 条）——`);
+                    ans.comments.forEach(c => {
+                        lines.push(`  · [赞${c.likes}] ${c.author}：${c.content}`);
+                        c.children.forEach(cc => {
+                            lines.push(`      └ [赞${cc.likes}] ${cc.author}：${cc.content}`);
+                        });
+                    });
+                }
+                lines.push('');
+            });
+            return lines.join('\n');
+        }
+    }
+
+    // 全局注册表实例（各适配器定义后 register 进来）
+    const siteAdapterRegistry = new SiteAdapterRegistry();
+    siteAdapterRegistry.register(new ZhihuQAAdapter());
+
     // ==================== 统一的AI调用接口 ====================
     class UnifiedAPI {
         /**
@@ -1234,7 +1500,7 @@
          * @param {string} newsContent - 网页内容
          * @returns {Promise<string>} - 总结结果
          */
-        static async summarize(newsUrl, newsContent) {
+        static async summarize(newsUrl, newsContent, promptType = 'article') {
             // 检查配置是否就绪
             if (!summarizerConfig.isLLMReady()) {
                 const apiFormat = summarizerConfig.get('aiApiFormat');
@@ -1246,7 +1512,9 @@
             }
 
             // 构建总结提示词（含AI生成概率检测）
-            const systemPrompt = summarizerConfig.get('aiSystemPrompt') || `你是一个专业的内容总结助手，同时具备AI生成内容识别能力。
+            // promptType='discussion' 用于知乎问答等多方讨论型内容，输出定性+定量分析
+            // 用户自定义提示词（aiSystemPrompt）仅覆盖文章型，讨论型始终使用内置模板
+            const articlePrompt = summarizerConfig.get('aiSystemPrompt') || `你是一个专业的内容总结助手，同时具备AI生成内容识别能力。
 每次回复必须严格按以下格式输出，第一行为AI生成概率分数，第二行为分隔线，之后为总结正文：
 AI_SCORE: [0-100的整数]
 ---
@@ -1263,6 +1531,27 @@ AI_SCORE说明：100表示确定是AI生成，0表示确定是人工写作，判
 6. 基于文章观点，在单独章节给出相关的建议或者预测
 7. 如涉及人物、事件等给出必要的背景信息，以及信源来源；
 8. 最后要有阅读原文跳转链接`;
+
+            const discussionPrompt = `你是一个专业的舆论分析助手，擅长对多方讨论进行定性与定量分析。
+每次回复必须严格按以下格式输出，第一行为AI生成概率分数，第二行为分隔线，之后为分析正文：
+AI_SCORE: [0-100的整数]
+---
+[分析正文]
+
+AI_SCORE说明：评估这些回答与评论整体由AI生成的概率，100表示确定是AI生成，0表示确定是人工写作。
+
+输入内容说明：这是一个讨论型页面（如知乎问答）的多方观点，每个回答标注了作者、赞同数、评论数，评论标注了点赞数。赞同数与点赞数代表该观点获得的认同程度，是你做定量分析的关键依据。
+
+分析正文要求（使用中文、markdown格式）：
+1. **核心分歧**：讨论围绕哪几个对立/主要观点展开，分别概括
+2. **观点分布（定量）**：结合赞同数，估算各主要观点的支持比例（如“约六成高赞回答支持A”），并列出各阵营代表性观点及其赞同量级。务必基于赞同数据说话，给出量化描述
+3. **评论区倾向**：综合评论及其点赞数，判断评论区整体情绪倾向（支持/反对/中立/情绪化），以及是否与回答区主流一致
+4. **少数派/被低估观点**：赞同数不高但有价值或独特的视角
+5. **共识与结论**：讨论是否形成共识，最核心的结论是什么
+6. 涉及人物、事件时给出必要背景信息
+7. 最后附上原文链接`;
+
+            const systemPrompt = promptType === 'discussion' ? discussionPrompt : articlePrompt;
 
             const userPrompt = `网页地址：${newsUrl}
 
@@ -2013,18 +2302,44 @@ ${newsContent}`;
 
                 let newsContent = '';
                 let isSelectionMode = false;
+                let promptType = 'article';   // 提示词类型：article | discussion
+                let adapterName = null;        // 命中的站点适配器名称
+
+                // 进度提示回调：更新加载面板文本
+                const onProgress = (text) => {
+                    const el = this.panel.querySelector('#dify-loading-progress');
+                    if (el) el.textContent = text;
+                };
 
                 if (selectedText && selectedText.length >= 50) {
-                    // 使用选中的文本
+                    // 使用选中的文本（选中模式下不走站点适配器）
                     newsContent = selectedText;
                     isSelectionMode = true;
                     console.log('使用选中文本，长度:', newsContent.length);
                 } else {
-                    // 提取全文内容
-                    const extractor = new ContentExtractor();
-                    newsContent = extractor.extract();
-                    console.log('提取全文内容，长度:', newsContent.length);
-                    console.log('内容预览:', newsContent.substring(0, 500));
+                    // 优先尝试站点适配器（如知乎问答），失败则回退通用提取器
+                    const adapter = siteAdapterRegistry.match();
+                    if (adapter) {
+                        try {
+                            console.log(`命中站点适配器: ${adapter.name}`);
+                            const data = await adapter.extract(onProgress);
+                            newsContent = adapter.formatForLLM(data);
+                            promptType = adapter.promptType;
+                            adapterName = adapter.name;
+                            console.log(`[${adapter.name}] 结构化提取完成，长度:`, newsContent.length);
+                        } catch (e) {
+                            console.warn(`[${adapter.name}] 适配器提取失败，回退通用提取器:`, e);
+                            newsContent = '';
+                        }
+                    }
+                    // 未命中适配器或适配器失败 → 通用提取器
+                    if (!newsContent) {
+                        const extractor = new ContentExtractor();
+                        newsContent = extractor.extract();
+                        promptType = 'article';
+                        adapterName = null;
+                        console.log('通用提取全文，长度:', newsContent.length);
+                    }
                 }
 
                 const newsUrl = window.location.href;
@@ -2034,7 +2349,8 @@ ${newsContent}`;
                 }
 
                 // 保存总结模式（用于显示标题）
-                this.currentSummaryMode = isSelectionMode ? 'selection' : 'full';
+                this.currentSummaryMode = isSelectionMode ? 'selection' : (adapterName ? 'adapter' : 'full');
+                this.currentAdapterName = adapterName;
 
                 // 根据配置选择 AI 提供商
                 let rawResult;
@@ -2044,7 +2360,7 @@ ${newsContent}`;
                     rawResult = await DifyAPI.summarize(newsUrl, newsContent);
                 } else {
                     // 使用统一LLM配置（OpenAI/Anthropic/Ollama/Chrome Gemini）
-                    rawResult = await UnifiedAPI.summarize(newsUrl, newsContent);
+                    rawResult = await UnifiedAPI.summarize(newsUrl, newsContent, promptType);
                 }
 
                 // 解析合并回复中的AI生成概率与正文内容
@@ -2114,6 +2430,12 @@ ${newsContent}`;
             spinner.className = 'dify-loading-spinner';
             contentDiv.appendChild(spinner);
 
+            // 进度提示文本（站点适配器抓取时更新）
+            const progressText = document.createElement('div');
+            progressText.id = 'dify-loading-progress';
+            progressText.style.cssText = 'text-align:center;margin-top:16px;color:#666;font-size:13px;';
+            contentDiv.appendChild(progressText);
+
             // 确保面板处于非全屏状态（新请求时）
             if (this.isFullscreen) {
                 this.toggleFullscreen();
@@ -2133,6 +2455,10 @@ ${newsContent}`;
             const titleElement = this.panel.querySelector('#dify-panel-title');
             if (this.currentSummaryMode === 'selection') {
                 titleElement.textContent = '📝 AI总结结果（选中文本）';
+            } else if (this.currentSummaryMode === 'adapter' && this.currentAdapterName === 'ZhihuQA') {
+                titleElement.textContent = '📝 知乎问答分析（多方观点）';
+            } else if (this.currentSummaryMode === 'adapter') {
+                titleElement.textContent = '📝 AI总结结果（站点适配）';
             } else {
                 titleElement.textContent = '📝 AI总结结果（全文）';
             }
