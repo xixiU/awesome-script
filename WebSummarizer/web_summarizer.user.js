@@ -2361,7 +2361,12 @@ ${newsContent}`;
                 this.lastNewsUrl = newsUrl;
 
                 // 更新进度提示:抓取完成,开始调用 AI
-                onProgress('数据抓取完成，AI 分析中...');
+                if (extractedData && extractedData.capturedAnswers !== undefined) {
+                    // 知乎问答等有结构化数据的适配器,显示详细统计
+                    onProgress(`数据抓取完成，回答 ${extractedData.capturedAnswers} 个 / 评论 ${extractedData.capturedComments} 条，AI 分析中...`);
+                } else {
+                    onProgress('数据抓取完成，AI 分析中...');
+                }
 
                 // 根据配置选择 AI 提供商
                 let rawResult;
