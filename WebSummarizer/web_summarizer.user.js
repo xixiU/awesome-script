@@ -2360,6 +2360,9 @@ ${newsContent}`;
                 this.lastExtractedData = extractedData;  // 知乎问答等适配器的结构化数据
                 this.lastNewsUrl = newsUrl;
 
+                // 更新进度提示:抓取完成,开始调用 AI
+                onProgress('数据抓取完成，AI 分析中...');
+
                 // 根据配置选择 AI 提供商
                 let rawResult;
                 const provider = summarizerConfig.get('aiProvider') || 'unified';
