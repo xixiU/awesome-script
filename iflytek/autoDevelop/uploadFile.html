@@ -4,7 +4,7 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>智慧法庭JAR 包部署上传</title>
+	<title>智慧法庭部署上传系统</title>
 	<style>
 		body {
 			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -23,7 +23,7 @@
 			border-radius: 12px;
 			box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
 			width: 100%;
-			max-width: 500px;
+			max-width: 600px;
 			text-align: center;
 		}
 
@@ -72,6 +72,65 @@
 			gap: 20px;
 		}
 
+		/* 文件类型选择 */
+		.file-type-selector {
+			display: flex;
+			gap: 15px;
+			justify-content: center;
+			margin-bottom: 10px;
+		}
+
+		.file-type-btn {
+			flex: 1;
+			padding: 12px 20px;
+			border: 2px solid #d0d7e0;
+			background: white;
+			border-radius: 8px;
+			cursor: pointer;
+			transition: all 0.2s;
+			font-size: 16px;
+			font-weight: 500;
+		}
+
+		.file-type-btn:hover {
+			border-color: #007bff;
+			background-color: #f8f9fa;
+		}
+
+		.file-type-btn.active {
+			border-color: #007bff;
+			background-color: #007bff;
+			color: white;
+		}
+
+		/* 配置文件排除选项 */
+		.config-option {
+			background: #fff3cd;
+			border: 1px solid #ffc107;
+			border-radius: 8px;
+			padding: 12px;
+			margin-bottom: 15px;
+			display: none;
+		}
+
+		.config-option.show {
+			display: block;
+		}
+
+		.config-option label {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			cursor: pointer;
+			justify-content: center;
+		}
+
+		.config-option input[type="checkbox"] {
+			width: 18px;
+			height: 18px;
+			cursor: pointer;
+		}
+
 		.file-input-wrapper {
 			border: 2px dashed #d0d7e0;
 			padding: 25px;
@@ -85,7 +144,7 @@
 			border-color: #007bff;
 		}
 
-		#jarFile {
+		#fileInput {
 			display: none;
 		}
 
@@ -93,6 +152,12 @@
 			color: #555;
 			margin-top: 10px;
 			font-style: italic;
+		}
+
+		.supported-files {
+			font-size: 12px;
+			color: #6c757d;
+			margin-top: 8px;
 		}
 
 		#uploadButton {
@@ -107,7 +172,6 @@
 			transition: background-color 0.2s, opacity 0.2s;
 			opacity: 0.6;
 			pointer-events: none;
-			/* Initially disabled */
 		}
 
 		#uploadButton.enabled {
@@ -144,7 +208,6 @@
 
 		.progress-ring__svg {
 			transform: rotate(-90deg);
-			/* Start from the top */
 		}
 
 		.progress-ring__track,
@@ -160,7 +223,6 @@
 		.progress-ring__circle {
 			stroke: #007bff;
 			stroke-linecap: round;
-			/* Rounded ends */
 			transition: stroke-dashoffset 0.35s;
 		}
 
@@ -178,7 +240,6 @@
 			color: #0056b3;
 		}
 
-		/* --- Hide/Show Logic --- */
 		.hidden {
 			display: none;
 		}
@@ -188,7 +249,7 @@
 <body>
 
 	<div class="upload-container">
-		<h1>智慧法庭研发184 JAR包部署上传</h1>
+		<h1>智慧法庭研发184 部署上传系统</h1>
 
 		<!-- 部署时间信息显示区域 -->
 		<div class="deployment-info">
@@ -198,11 +259,30 @@
 
 		<div id="form-container">
 			<form id="uploadForm">
-				<label for="jarFile" class="file-input-wrapper">
-					<div>点击此处选择,当前支持:ts-service、aicourt-monitor、aicourt-video、aicourt-assistant-service部署</div>
+				<!-- 文件类型选择 -->
+				<div class="file-type-selector">
+					<button type="button" class="file-type-btn active" data-type="jar">后端JAR包</button>
+					<button type="button" class="file-type-btn" data-type="zip">前端ZIP包</button>
+				</div>
+
+				<!-- 配置文件排除选项（仅ZIP时显示） -->
+				<div class="config-option" id="configOption">
+					<label>
+						<input type="checkbox" id="excludeConfig" checked>
+						<span>部署时排除配置文件（推荐）</span>
+					</label>
+				</div>
+
+				<label for="fileInput" class="file-input-wrapper">
+					<div id="upload-hint">
+						点击此处选择JAR包
+					</div>
 					<div id="file-name-display">未选择任何文件</div>
+					<div class="supported-files" id="supported-files">
+						当前支持: ts-service、aicourt-monitor、aicourt-video、aicourt-assistant-service、iflytek-admin
+					</div>
 				</label>
-				<input type="file" id="jarFile" accept=".jar" required>
+				<input type="file" id="fileInput" accept=".jar" required>
 				<button type="submit" id="uploadButton">上传文件</button>
 			</form>
 		</div>
@@ -224,7 +304,7 @@
 		document.addEventListener('DOMContentLoaded', () => {
 			// DOM Elements
 			const uploadForm = document.getElementById('uploadForm');
-			const jarFileInput = document.getElementById('jarFile');
+			const fileInput = document.getElementById('fileInput');
 			const uploadButton = document.getElementById('uploadButton');
 			const statusMessage = document.getElementById('statusMessage');
 			const fileNameDisplay = document.getElementById('file-name-display');
@@ -233,14 +313,63 @@
 			const progressCircle = document.getElementById('progress-ring-circle');
 			const progressText = document.getElementById('progress-text');
 			const deploymentTime = document.getElementById('deploymentTime');
+			const fileTypeBtns = document.querySelectorAll('.file-type-btn');
+			const configOption = document.getElementById('configOption');
+			const excludeConfigCheckbox = document.getElementById('excludeConfig');
+			const uploadHint = document.getElementById('upload-hint');
+			const supportedFiles = document.getElementById('supported-files');
 
 			// Config
 			const N8N_WEBHOOK_BASE_URL = 'http://172.31.160.184:5678/webhook/uploadJar';
 			const DEPLOYMENT_STATUS_URL = 'http://172.31.160.184:5678/webhook/zftdDetect';
+
+			let currentFileType = 'jar';
+
 			const radius = progressCircle.r.baseVal.value;
 			const circumference = 2 * Math.PI * radius;
 			progressCircle.style.strokeDasharray = `${circumference} ${circumference}`;
 			progressCircle.style.strokeDashoffset = circumference;
+
+			// 文件类型配置
+			const fileTypeConfig = {
+				jar: {
+					accept: '.jar',
+					hint: '点击此处选择JAR包',
+					supported: '当前支持: ts-service、aicourt-monitor、aicourt-video、aicourt-assistant-service、iflytek-admin'
+				},
+				zip: {
+					accept: '.zip',
+					hint: '点击此处选择ZIP包',
+					supported: '当前支持: tsManagementClientWeb、recordBack、hlwts-web等内网前端项目'
+				}
+			};
+
+			// 文件类型切换
+			fileTypeBtns.forEach(btn => {
+				btn.addEventListener('click', () => {
+					fileTypeBtns.forEach(b => b.classList.remove('active'));
+					btn.classList.add('active');
+					currentFileType = btn.dataset.type;
+
+					// 更新UI
+					const config = fileTypeConfig[currentFileType];
+					fileInput.accept = config.accept;
+					uploadHint.textContent = config.hint;
+					supportedFiles.textContent = config.supported;
+
+					// 显示/隐藏配置文件排除选项
+					if (currentFileType === 'zip') {
+						configOption.classList.add('show');
+					} else {
+						configOption.classList.remove('show');
+					}
+
+					// 重置文件选择
+					fileInput.value = '';
+					fileNameDisplay.textContent = '未选择任何文件';
+					uploadButton.classList.remove('enabled');
+				});
+			});
 
 			// 获取部署时间函数
 			async function fetchDeploymentTime() {
@@ -253,10 +382,8 @@
 						throw new Error(`HTTP error! status: ${response.status}`);
 					}
 
-					// 获取纯文本格式的部署时间
 					const deploymentTimeText = await response.text();
 
-					// 检查返回的文本是否为空或无效
 					if (deploymentTimeText && deploymentTimeText.trim()) {
 						deploymentTime.textContent = `上次部署时间: ${deploymentTimeText.trim()}`;
 						deploymentTime.className = 'deployment-time';
@@ -274,18 +401,13 @@
 			// 自动刷新部署时间的定时器
 			let deploymentRefreshTimer = null;
 
-			// 启动自动刷新
 			function startAutoRefresh() {
-				// 立即获取一次
 				fetchDeploymentTime();
-
-				// 设置定时器，每10秒刷新一次
 				deploymentRefreshTimer = setInterval(() => {
 					fetchDeploymentTime();
-				}, 10000); // 10秒 = 10000毫秒
+				}, 10000);
 			}
 
-			// 停止自动刷新
 			function stopAutoRefresh() {
 				if (deploymentRefreshTimer) {
 					clearInterval(deploymentRefreshTimer);
@@ -293,7 +415,6 @@
 				}
 			}
 
-			// 页面加载时启动自动刷新
 			startAutoRefresh();
 
 			function setProgress(percent) {
@@ -302,9 +423,22 @@
 				progressText.textContent = `${percent}%`;
 			}
 
-			jarFileInput.addEventListener('change', () => {
-				if (jarFileInput.files.length > 0) {
-					fileNameDisplay.textContent = `已选择: ${jarFileInput.files[0].name}`;
+			fileInput.addEventListener('change', () => {
+				if (fileInput.files.length > 0) {
+					const fileName = fileInput.files[0].name;
+					const fileExt = fileName.split('.').pop().toLowerCase();
+
+					// 验证文件类型
+					if ((currentFileType === 'jar' && fileExt !== 'jar') ||
+						(currentFileType === 'zip' && fileExt !== 'zip')) {
+						showStatus(`请选择正确的${currentFileType.toUpperCase()}文件！`, 'error');
+						fileInput.value = '';
+						fileNameDisplay.textContent = '未选择任何文件';
+						uploadButton.classList.remove('enabled');
+						return;
+					}
+
+					fileNameDisplay.textContent = `已选择: ${fileName}`;
 					uploadButton.classList.add('enabled');
 				} else {
 					fileNameDisplay.textContent = '未选择任何文件';
@@ -314,23 +448,24 @@
 
 			uploadForm.addEventListener('submit', (event) => {
 				event.preventDefault();
-				const file = jarFileInput.files[0];
+				const file = fileInput.files[0];
 				if (!file) {
-					showStatus('请先选择一个 JAR 文件！', 'error');
+					showStatus('请先选择一个文件！', 'error');
 					return;
 				}
 
-				// --- UI Orchestration ---
+				// UI Orchestration
 				formContainer.classList.add('hidden');
 				progressContainer.classList.remove('hidden');
 				statusMessage.textContent = '正在上传...';
 				statusMessage.className = '';
 				setProgress(0);
 
-				// --- Use XMLHttpRequest for Progress Events ---
+				// Use XMLHttpRequest for Progress Events
 				const xhr = new XMLHttpRequest();
 				const fileName = file.name;
-				const fullUrl = `${N8N_WEBHOOK_BASE_URL}?fileName=${encodeURIComponent(fileName)}`;
+				const excludeConfig = currentFileType === 'zip' ? excludeConfigCheckbox.checked : true;
+				const fullUrl = `${N8N_WEBHOOK_BASE_URL}?fileName=${encodeURIComponent(fileName)}&excludeConfig=${excludeConfig}`;
 
 				// Upload progress
 				xhr.upload.addEventListener('progress', (e) => {
@@ -340,18 +475,19 @@
 					}
 				});
 
-				// Upload finished (successfully or not)
+				// Upload finished
 				xhr.addEventListener('load', () => {
-					setProgress(100); // Ensure it hits 100%
+					setProgress(100);
 					if (xhr.status >= 200 && xhr.status < 300) {
-						// Wait a moment so user can see 100%
 						setTimeout(() => {
 							progressContainer.classList.add('hidden');
 							formContainer.classList.remove('hidden');
 							uploadForm.reset();
 							fileNameDisplay.textContent = '未选择任何文件';
 							uploadButton.classList.remove('enabled');
-							showStatus('已成功上传，请等待机器部署。', 'success');
+
+							const deployType = currentFileType === 'jar' ? '后端服务' : '前端页面';
+							showStatus(`${deployType}已成功上传，请等待部署完成。`, 'success');
 						}, 500);
 					} else {
 						handleUploadError(`上传失败: 服务器返回错误 ${xhr.status}. ${xhr.responseText}`);
@@ -376,7 +512,7 @@
 
 			function showStatus(message, type) {
 				statusMessage.textContent = message;
-				statusMessage.className = ''; // Reset class
+				statusMessage.className = '';
 				if (type === 'success') {
 					statusMessage.classList.add('status-success');
 				} else if (type === 'error') {

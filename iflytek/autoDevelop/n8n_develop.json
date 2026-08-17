@@ -9,13 +9,13 @@
           "binaryData": true
         }
       },
-      "id": "c9a715ac-8250-4b40-97da-00ca33c7070d",
+      "id": "6775d198-854a-4c61-b2be-d6f1e9b17ac5",
       "name": "Webhook Upload",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        -1100,
-        -40
+        -2340,
+        120
       ],
       "webhookId": "71112d55-f154-4229-ba8a-144381526f0e"
     },
@@ -23,15 +23,15 @@
       "parameters": {
         "mode": "runOnceForEachItem",
         "language": "python",
-        "pythonCode": "# 从 URL query 参数中获取我们自己传递的 \"fileName\" 字段\nquery_params = item.get(\"json\", {}).get(\"query\")\nfile_name = query_params.get(\"fileName\")\n\n# 新的、更清晰的错误检查\nif not file_name:\n    raise ValueError(f\"无法从 URL Query 参数中找到 fileName 字段。收到的 Query 为: {query_params}\")\n\n# 检查二进制数据是否存在，如果不存在也给出警告（但流程继续）\nbinary_data = item.get(\"binary\")\nif not binary_data:\n    raise ValueError(\"警告: 未在输入中找到二进制文件数据(binary property)。后续文件操作节点可能会失败。\")\n\n\n# 定义你的文件部署映射\nfile_map = {\n    \"ts-service-5.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/ts-service-inner/ts-service-5.0/ts-service-5.0\",\n        \"port\":9191,\n    },\n    \"aicourt-monitor-service-1.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-monitor-service-1.0\",\n        \"port\":7901,\n    },\n    \"aicourt-video-service-1.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-video-service-1.0\",\n        \"port\":7902,\n    },\n    \"aicourt-assistant-service.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-assistant-service\",\n        \"port\":7100,\n    }\n}\n\nif file_name not in file_map:\n    raise ValueError(f\"不支持的文件名: {file_name}。请在 Code 节点的 file_map 中添加配置。\")\n\nconfig = file_map[file_name]\ntarget_dir = config[\"targetDir\"]\nservice_port = config[\"port\"] \nrestart_script = f\"{target_dir}/restartup.sh\"\n\ntempFileName = binary_data.get(\"data\",{}).get(\"fileName\")\nreturn {\n    \"fileName\": file_name,\n    \"targetDir\": target_dir,\n    \"restartScript\": restart_script,\n    \"tempFilePath\": f\"/tmp/{tempFileName}\",\n    \"tempFileName\" :tempFileName,\n    \"port\": service_port,\n    \"binary\": binary_data\n}"
+        "pythonCode": "# 从 URL query 参数中获取我们自己传递的 \"fileName\" 和 \"excludeConfig\" 字段\nquery_params = item.get(\"json\", {}).get(\"query\")\nfile_name = query_params.get(\"fileName\")\nexclude_config = query_params.get(\"excludeConfig\", \"true\")  # 默认排除配置文件\n\n# 错误检查\nif not file_name:\n    raise ValueError(f\"无法从 URL Query 参数中找到 fileName 字段。收到的 Query 为: {query_params}\")\n\n# 检查二进制数据是否存在\nbinary_data = item.get(\"binary\")\nif not binary_data:\n    raise ValueError(\"警告: 未在输入中找到二进制文件数据(binary property)。后续文件操作节点可能会失败。\")\n\n# 判断文件类型\nfile_extension = file_name.split(\".\")[-1].lower()\nis_zip = file_extension == \"zip\"\nis_jar = file_extension == \"jar\"\n\n# JAR包配置（完整文件名精确匹配）\njar_file_map = {\n    \"ts-service-5.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/ts-service-inner/ts-service-5.0/ts-service-5.0\",\n        \"port\": 9191,\n    },\n    \"aicourt-monitor-service-1.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-monitor-service-1.0\",\n        \"port\": 7901,\n    },\n    \"aicourt-video-service-1.0.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-video-service-1.0\",\n        \"port\": 7902,\n    },\n    \"aicourt-assistant-service.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-assistant-service\",\n        \"port\": 7100,\n    },\n    \"iflytek-admin.jar\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/aicourt-soundcard-auth-service/iflytek-admin\",\n        \"port\": 7001,\n    }\n}\n\n# 前端ZIP包配置（key 为业务前缀，采用前缀匹配）\n# 匹配规则：上传文件名去掉 .zip 后，等于前缀 或 以 \"前缀-\" 开头 即命中\n#   recordBack.zip / recordBack-V4.3-1116.zip -> recordBack\n#   tsManagementClientWeb.zip / tsManagementClientWeb-V4.3-1077.zip -> tsManagementClientWeb\nzip_file_map = {\n    \"tsManagementClientWeb\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/zhft-web/tsManagementClientWeb\",\n        \"excludeFiles\": [\"config.json\"],\n        \"needRestart\": False,\n    },\n    \"recordBack\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/zhft-web/recordBack\",\n        \"excludeFiles\": [\"config.js\", \"app.config.json\"],\n        \"needRestart\": False,\n    },\n    \"hlwtsweb\": {\n        \"targetDir\": \"/iflytek/server/zhft-4.0-mysql/zhft-web/hlwts-web\",\n        \"excludeFiles\": [\"config.js\", \"app.config.json\"],\n        \"needRestart\": False,\n    },\n}\n\n\ndef match_zip_prefix(fname, prefix_map):\n    \"\"\"前缀匹配：返回命中的最长前缀 key，未命中返回 None。\"\"\"\n    base_name = fname[:-4] if fname.lower().endswith(\".zip\") else fname\n    matched_key = None\n    matched_len = -1\n    for prefix in prefix_map:\n        # 精确等于前缀(recordBack.zip)，或以 \"前缀-\" 开头(recordBack-V4.3-1116.zip)\n        if base_name == prefix or base_name.startswith(prefix + \"-\"):\n            if len(prefix) > matched_len:  # 取最长匹配，避免 record 误匹配 recordBack\n                matched_key = prefix\n                matched_len = len(prefix)\n    return matched_key\n\n\n# 根据文件类型选择配置\nif is_jar:\n    if file_name not in jar_file_map:\n        raise ValueError(f\"不支持的JAR文件名: {file_name}。请在 Code 节点的 jar_file_map 中添加配置。\")\n\n    config = jar_file_map[file_name]\n    target_dir = config[\"targetDir\"]\n    service_port = config[\"port\"]\n    restart_script = f\"{target_dir}/restartup.sh\"\n    need_restart = True\n    exclude_files = []\n    matched_key = file_name\n\nelif is_zip:\n    matched_key = match_zip_prefix(file_name, zip_file_map)\n    if not matched_key:\n        raise ValueError(f\"不支持的ZIP包: {file_name}。未匹配到任何业务前缀，请在 Code 节点的 zip_file_map 中添加配置(key 为业务前缀)。\")\n\n    config = zip_file_map[matched_key]\n    target_dir = config[\"targetDir\"]\n    service_port = None  # 前端无需端口探活\n    restart_script = None\n    need_restart = config.get(\"needRestart\", False)\n\n    # 根据用户选择决定是否排除配置文件\n    if exclude_config.lower() == \"true\":\n        exclude_files = config.get(\"excludeFiles\", [])\n    else:\n        exclude_files = []\nelse:\n    raise ValueError(f\"不支持的文件类型: {file_extension}。仅支持 .jar 和 .zip 文件。\")\n\ntempFileName = binary_data.get(\"data\", {}).get(\"fileName\")\n\nresult = {\n    \"fileName\": file_name,\n    \"matchedKey\": matched_key,\n    \"fileType\": file_extension,\n    \"isZip\": is_zip,\n    \"isJar\": is_jar,\n    \"targetDir\": target_dir,\n    \"restartScript\": restart_script,\n    \"tempFilePath\": f\"/tmp/{tempFileName}\",\n    \"tempFileName\": tempFileName,\n    \"port\": service_port,\n    \"needRestart\": need_restart,\n    \"excludeFiles\": exclude_files,\n    \"excludeConfig\": exclude_config,\n    \"binary\": binary_data\n}\n\nreturn result\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -920,
-        -40
+        -2160,
+        120
       ],
-      "id": "ca6351d8-2b3d-474c-9e0e-fa2b41f117fe",
+      "id": "559e84de-7c47-4f52-9304-6ee2e6953d3a",
       "name": "路径转换",
       "alwaysOutputData": true
     },
@@ -44,10 +44,10 @@
       "type": "n8n-nodes-base.ssh",
       "typeVersion": 1,
       "position": [
-        -760,
-        -40
+        -2000,
+        120
       ],
-      "id": "216b459a-1354-44c6-b1cb-0fc16b21f9df",
+      "id": "2fadaa00-75d5-41af-9759-6ea26b466706",
       "name": "上传到服务器",
       "credentials": {
         "sshPassword": {
@@ -58,15 +58,15 @@
     },
     {
       "parameters": {
-        "command": "=#!/bin/bash\nset -e\n\n# 从 n8n 获取我们准备好的所有变量\n# 文件的【最终正确名】\nFINAL_FILE={{ $('路径转换').item.json.fileName }}\n# 文件在 /tmp 目录下的【临时随机名】\nTEMP_FILE_NAME={{ $('路径转换').item.json.tempFileName}}\n# 部署的目标目录\nDIR={{ $('路径转换').item.json.targetDir }}\n\n# 临时文件的完整路径\nTEMP_FILE_PATH=\"/tmp/$TEMP_FILE_NAME\"\n\n# --- 核心操作开始 ---\n\n# 1. 移动到目标目录\ncd \"$DIR\"\n\n# 2. 创建备份目录\nmkdir -p backup\n\n# 3. 如果目标位置已存在同名文件（旧版本），则备份它\nif [ -f \"$FINAL_FILE\" ]; then\n  cp \"$FINAL_FILE\" \"backup/$FINAL_FILE.$(date +%Y%m%d%H%M%S)\"\nfi\n\n# 4. 将临时文件移动到当前目录，并【重命名】为最终的正确名字\n# 这是最关键的一步！\nmv \"$TEMP_FILE_PATH\" \"./$FINAL_FILE\"\n\n# 5. （可选）给新文件设置正确的权限\n# chmod 644 \"$FINAL_FILE\""
+        "command": "=#!/bin/bash\nset -e\n\n# 从 n8n 获取我们准备好的所有变量\nFINAL_FILE={{ $('路径转换').item.json.fileName }}\nTEMP_FILE_NAME={{ $('路径转换').item.json.tempFileName }}\nDIR={{ $('路径转换').item.json.targetDir }}\nFILE_TYPE={{ $('路径转换').item.json.fileType }}\nIS_ZIP={{ $('路径转换').item.json.isZip }}\n\n# 临时文件的完整路径\nTEMP_FILE_PATH=\"/tmp/$TEMP_FILE_NAME\"\n\n# --- 核心操作开始 ---\n\n# 1. 移动到目标目录\ncd \"$DIR\"\n\n# 2. 创建备份目录\nmkdir -p backup\n\nif [ \"$IS_ZIP\" = \"True\" ] || [ \"$IS_ZIP\" = \"true\" ]; then\n    echo \"检测到ZIP文件，开始解压部署流程...\"\n\n    # ZIP包处理流程\n    BACKUP_NAME=\"backup_$(date +%Y%m%d%H%M%S)\"\n    TEMP_EXTRACT_DIR=\"/tmp/extract_${TEMP_FILE_NAME%.*}_$$\"\n\n    # 3. 备份当前目录（整个目录打包）\n    cd ..\n    tar -czf \"$DIR/backup/${BACKUP_NAME}.tar.gz\" \"$(basename \"$DIR\")\" 2>/dev/null || true\n    cd \"$DIR\"\n\n    # 4. 创建临时解压目录\n    mkdir -p \"$TEMP_EXTRACT_DIR\"\n\n    # 5. 解压ZIP文件到临时目录\n    unzip -q -o \"$TEMP_FILE_PATH\" -d \"$TEMP_EXTRACT_DIR\"\n\n    # 5.1 清理Mac打包产生的 __MACOSX 干扰目录\n    rm -rf \"$TEMP_EXTRACT_DIR/__MACOSX\"\n\n    # 5.2 智能定位同步源目录：若解压后仅含单个子目录（外层包裹目录），则深入取该子目录内容\n    SYNC_SOURCE=\"$TEMP_EXTRACT_DIR\"\n    ITEM_COUNT=$(find \"$TEMP_EXTRACT_DIR\" -mindepth 1 -maxdepth 1 | wc -l)\n    if [ \"$ITEM_COUNT\" -eq 1 ]; then\n        ONLY_ITEM=$(find \"$TEMP_EXTRACT_DIR\" -mindepth 1 -maxdepth 1)\n        if [ -d \"$ONLY_ITEM\" ]; then\n            SYNC_SOURCE=\"$ONLY_ITEM\"\n            echo \"检测到单层包裹目录: $(basename \"$ONLY_ITEM\")，将从该子目录同步文件\"\n        fi\n    fi\n\n    # 6. 获取排除文件列表（从n8n传递过来，JSON数组格式）\n    EXCLUDE_FILES='{{ $('路径转换').item.json.excludeFiles }}'\n\n    # 7. 构建rsync排除参数\n    RSYNC_EXCLUDES=\"\"\n    if [ \"$EXCLUDE_FILES\" != \"[]\" ] && [ -n \"$EXCLUDE_FILES\" ]; then\n        # 解析JSON数组并构建排除参数\n        # 示例: [\"config.json\", \"app.config.js\"] -> --exclude=config.json --exclude=app.config.js\n        EXCLUDE_LIST=$(echo \"$EXCLUDE_FILES\" | sed 's/\\[//g' | sed 's/]//g' | sed 's/\"//g' | sed \"s/'//g\")\n        for exclude_file in ${EXCLUDE_LIST//,/ }; do\n            exclude_file=$(echo \"$exclude_file\" | xargs)  # 去除空格\n            if [ -n \"$exclude_file\" ]; then\n                RSYNC_EXCLUDES=\"$RSYNC_EXCLUDES --exclude=$exclude_file\"\n                echo \"将排除文件: $exclude_file\"\n            fi\n        done\n    fi\n\n    # 8. 使用rsync同步文件（排除配置文件）\n    if [ -n \"$RSYNC_EXCLUDES\" ]; then\n        echo \"使用rsync同步文件，排除配置文件...\"\n        rsync -av $RSYNC_EXCLUDES \"$SYNC_SOURCE/\" \"$DIR/\"\n    else\n        echo \"使用rsync同步文件，不排除任何文件...\"\n        rsync -av \"$SYNC_SOURCE/\" \"$DIR/\"\n    fi\n\n    # 9. 清理临时解压目录\n    rm -rf \"$TEMP_EXTRACT_DIR\"\n\n    # 10. 清理临时ZIP文件\n    rm -f \"$TEMP_FILE_PATH\"\n\n    echo \"ZIP包部署完成！\"\n\nelse\n    echo \"检测到JAR文件，使用标准JAR部署流程...\"\n\n    # JAR包处理流程（原有逻辑）\n    # 3. 如果目标位置已存在同名文件（旧版本），则备份它\n    if [ -f \"$FINAL_FILE\" ]; then\n        cp \"$FINAL_FILE\" \"backup/$FINAL_FILE.$(date +%Y%m%d%H%M%S)\"\n    fi\n\n    # 4. 将临时文件移动到当前目录，并【重命名】为最终的正确名字\n    mv \"$TEMP_FILE_PATH\" \"./$FINAL_FILE\"\n\n    # 5. 给新文件设置正确的权限\n    chmod 644 \"$FINAL_FILE\"\n\n    echo \"JAR包部署完成！\"\nfi"
       },
       "type": "n8n-nodes-base.ssh",
       "typeVersion": 1,
       "position": [
-        -580,
-        -40
+        -1820,
+        120
       ],
-      "id": "89dc83a9-9b75-4650-a1d7-e04a2d6e2545",
+      "id": "202a21e7-8682-4016-acbc-517ea0f980d3",
       "name": "ssh备份并替换",
       "credentials": {
         "sshPassword": {
@@ -77,15 +77,15 @@
     },
     {
       "parameters": {
-        "command": "=# 部署的目标目录 \nDIR={{ $('路径转换').item.json.targetDir }}\n# 1. 移动到目标目录\ncd \"$DIR\"\nJAVA_BIN_DIR=/usr/java/jdk1.8.0_361/bin/java\nexport PATH=$JAVA_BIN_DIR:$PATH\nbash -l -c \"cd {{ $('路径转换').item.json.targetDir }} && bash {{ $('路径转换').item.json.restartScript }}\"\n\n"
+        "command": "=# 检查是否需要重启服务\nNEED_RESTART={{ $('路径转换').item.json.needRestart }}\n\nif [ \"$NEED_RESTART\" = \"True\" ] || [ \"$NEED_RESTART\" = \"true\" ]; then\n    echo \"需要重启服务，开始重启...\"\n    # 部署的目标目录 \n    DIR={{ $('路径转换').item.json.targetDir }}\n    # 1. 移动到目标目录\n    cd \"$DIR\"\n    JAVA_BIN_DIR=/usr/java/jdk1.8.0_361/bin/java\n    export PATH=$JAVA_BIN_DIR:$PATH\n    bash -l -c \"cd {{ $('路径转换').item.json.targetDir }} && bash {{ $('路径转换').item.json.restartScript }}\"\n    echo \"服务重启完成！\"\nelse\n    echo \"前端部署无需重启服务，跳过重启步骤。\"\n    exit 0\nfi"
       },
       "type": "n8n-nodes-base.ssh",
       "typeVersion": 1,
       "position": [
-        -400,
-        -40
+        -1640,
+        120
       ],
-      "id": "5dc7a719-8f0e-4abb-97a1-92fe4cb819e3",
+      "id": "2155d63e-7732-4ba3-b893-2da6f852885f",
       "name": "重启服务",
       "credentials": {
         "sshPassword": {
@@ -121,125 +121,125 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        260,
-        -40
+        -980,
+        120
       ],
-      "id": "06a2dbe8-4617-4973-80c8-2789a498d0af",
+      "id": "85112498-e8ef-48c1-9f54-c54b66a54730",
       "name": "If"
     },
     {
       "parameters": {
         "requestMethod": "POST",
-        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/93a8d243-6f8f-4b4c-9ab6-3ac2d9f7acda",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
         "jsonParameters": true,
         "options": {},
         "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署成功\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
       },
-      "id": "9f104972-9eda-4b43-98b3-e41f1f4ac69a",
+      "id": "5d96b11b-d6ae-4028-be14-41e157980683",
       "name": "探活成功通知",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
-        480,
-        -140
+        -760,
+        20
       ]
     },
     {
       "parameters": {
         "requestMethod": "POST",
-        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/93a8d243-6f8f-4b4c-9ab6-3ac2d9f7acda",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
         "jsonParameters": true,
         "options": {},
         "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署失败，请手动检查\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
       },
-      "id": "cbae3212-60d7-4b10-b050-d3ad6541af2d",
+      "id": "43f87f50-9749-42df-8c0c-3f86d91aa1a6",
       "name": "探活失败通知",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
-        480,
-        60
+        -760,
+        220
       ]
     },
     {
       "parameters": {
-        "command": "=host=172.31.160.184;port={{ $('路径转换').item.json.port }};for i in $(seq 1 360);do nc -z -w 2 $host $port && echo open && exit 0;sleep 1;done;echo closed;exit 0;"
+        "command": "=# 判断是否为ZIP包（前端部署）\nIS_ZIP={{ $('路径转换').item.json.isZip }}\n\nif [ \"$IS_ZIP\" = \"True\" ] || [ \"$IS_ZIP\" = \"true\" ]; then\n    echo \"前端部署无需端口探活，直接标记为成功\"\n    echo \"open\"\n    exit 0\nelse\n    echo \"后端JAR部署，开始端口探活...\"\n    host=172.31.160.184\n    port={{ $('路径转换').item.json.port }}\n    for i in $(seq 1 360); do\n        nc -z -w 2 $host $port && echo open && exit 0\n        sleep 1\n    done\n    echo closed\n    exit 0\nfi"
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        100,
-        -40
+        -1140,
+        120
       ],
-      "id": "58587020-a7dd-4312-a56e-6708183ca08b",
+      "id": "37f95a9a-a8c3-4d0e-a250-bb3500430e29",
       "name": "探活"
     },
     {
       "parameters": {
         "requestMethod": "POST",
-        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/93a8d243-6f8f-4b4c-9ab6-3ac2d9f7acda",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
         "jsonParameters": true,
         "options": {},
         "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署中\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
       },
-      "id": "106f73f9-9fef-42d0-aafe-f1f86fb41b8a",
+      "id": "1f8953f2-f874-493f-8e8d-2c86a337b028",
       "name": "飞书通知产研测",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
-        -80,
-        -40
+        -1320,
+        120
       ]
     },
     {
       "parameters": {
         "requestMethod": "POST",
-        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/dae1964d-21be-43e3-b9e0-f74dbf1fb30a",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
         "jsonParameters": true,
         "options": {},
         "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署中\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
       },
-      "id": "7b0df2a9-056c-4025-80bb-062d44128888",
+      "id": "e19c0c8d-52a6-46f0-a3ba-566d63ea5f7d",
       "name": "飞书通知自动部署",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
-        -240,
-        -40
+        -1480,
+        120
       ]
     },
     {
       "parameters": {
         "requestMethod": "POST",
-        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/dae1964d-21be-43e3-b9e0-f74dbf1fb30a",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
         "jsonParameters": true,
         "options": {},
         "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署成功\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
       },
-      "id": "37e3061d-e12e-46d3-9981-7336b1b7c508",
+      "id": "7e665f47-c9c2-4e0b-bebc-5142bb8ecfef",
       "name": "探活成功通知-自动部署",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
-        480,
-        -320
+        -760,
+        -160
       ]
     },
     {
       "parameters": {
         "requestMethod": "POST",
-        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/93a8d243-6f8f-4b4c-9ab6-3ac2d9f7acda",
+        "url": "=https://open.xfchat.iflytek.com/open-apis/bot/v2/hook/986ef4a4-456e-4b4e-b245-526ac66175ed",
         "jsonParameters": true,
         "options": {},
         "bodyParametersJson": "={\n    \"msg_type\": \"interactive\",\n    \"card\":\n    {\n        \"elements\":\n        [\n            {\n                \"tag\": \"div\",\n                \"text\":\n                {\n                    \"content\": \"部署失败，请手动检查\\n\\n**时间:** {{  $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n                    \"tag\": \"lark_md\"\n                }\n            },\n            {\n                \"actions\":\n                [\n                    {\n                        \"tag\": \"button\",\n                        \"text\":\n                        {\n                            \"content\": \"查看详情:玫瑰:\",\n                            \"tag\": \"lark_md\"\n                        },\n                        \"url\": \"http://172.31.160.184:5678/workflow/CCuqWj9nv9ucjsIM/executions\",\n                        \"type\": \"default\",\n                        \"value\":\n                        {}\n                    }\n                ],\n                \"tag\": \"action\"\n            }\n        ],\n        \"header\":\n        {\n            \"title\":\n            {\n                \"content\": \" {{ $('路径转换').item.json.fileName }}\",\n                \"tag\": \"plain_text\"\n            }\n        }\n    }\n}"
       },
-      "id": "00316dd5-dc02-4afd-b6a5-d96e8b8d9044",
+      "id": "fc48ea1c-3697-4e66-b04c-b06b8076fe64",
       "name": "探活失败通知-自动部署",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
-        480,
-        260
+        -760,
+        420
       ]
     }
   ],
@@ -366,7 +366,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "43b9f143-9baa-49cb-a3bd-6e92a5377165",
+  "versionId": "00cec823-94a9-419c-b9e2-aa14fffa0329",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "7267b1d1c6953306c4553ebb6242f052f9cc1942983e463158d66b219426e6e0"
