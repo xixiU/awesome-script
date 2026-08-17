@@ -853,6 +853,11 @@ class FullPage {
     static getPlayerContainer(video) {
         let e = video, p = e.parentNode;
         const { clientWidth: wid, clientHeight: h } = e;
+        // 当 video 尺寸无效（宽或高为 0，常见于加载初期或布局塌陷）时，
+        // 尺寸比较会失真而一路爬到根节点，这里直接返回其父容器兜底，避免误判。
+        if (wid <= 0 || h <= 0) {
+            return (p && p !== by) ? p : e;
+        }
         do {
             e = p;
             p = e.parentNode;
@@ -866,7 +871,13 @@ class FullPage {
     }
     toggle() {
         // assert(this.container);
-        if (!this.container.contains(v)) this.container = FullPage.getPlayerContainer(v);
+        if (!this.container.contains(v)) {
+            // 优先用站点指定的播放器容器（shellCSS，如 YouTube 的 #player），
+            // 避免 getPlayerContainer 在 video 高度为 0 时误爬到根节点，
+            // 导致 gm-fp-innerBox 链式塌陷、画面变黑。
+            const shell = cfg.shellCSS && q(cfg.shellCSS);
+            this.container = (shell && shell.contains(v)) ? shell : FullPage.getPlayerContainer(v);
+        }
         bus.$emit('switchFP', !this._isFull);
         by.classList.toggle('gm-fp-body');
         let e = v;

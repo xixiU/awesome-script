@@ -1271,8 +1271,13 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             const ratio = count / total;
             if (count >= MIN_COUNT && ratio >= MIN_RATIO) {
                 // 清理首尾空白和常见标点，避免 "我真顶不住"、" 我真顶不住 @" 等
-                // 本质相同的模式因为空格/标点差异被当作不同规则
-                const cleaned = sub.trim().replace(/^[@#\s]+|[@#\s]+$/g, '');
+                // 本质相同的模式因为空格/标点差异被当作不同规则。
+                // 同时清掉 @用户名 后缀（@mention 经常变，学它没意义）。
+                let cleaned = sub.trim().replace(/^[@#\s]+|[@#\s]+$/g, '');
+                // 去掉 @用户名 后缀：匹配 @ 后面跟着的连续字母数字下划线
+                cleaned = cleaned.replace(/\s*@[a-zA-Z0-9_]+\s*$/, '');
+                // 再次清理可能残留的尾部空白
+                cleaned = cleaned.trim();
                 if (cleaned.length >= 3) {  // 清理后太短的不要
                     patterns.push({ text: cleaned, count, ratio, source });
                 }
@@ -1403,16 +1408,37 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         });
 
         const merged = Array.from(mergedMap.values());
-        config.set('heuristicPatterns', merged);
-        console.log(`🎓 启发式学习完成：保留 ${oldPatterns.length} 条旧规则，发现 ${newPatterns.length} 条新规则，总计 ${merged.length} 条`, merged);
+
+        // 全局去重：长串包含短串且出现次数接近时，只保留长串。
+        // 这一步清理新旧规则合并后的重复碎片（例如历史里积累的
+        // "她骚的没她好看"、"骚的没她好看"、"的没她好看" 等，只保留最长的）。
+        merged.sort((a, b) => b.text.length - a.text.length || b.count - a.count);
+        const globalFiltered = [];
+        for (const p of merged) {
+            let covered = false;
+            for (const kept of globalFiltered) {
+                // 同 source（都是昵称或都是评论）且长串包含短串
+                if (kept.source === p.source &&
+                    kept.text.length > p.text.length &&
+                    kept.count >= p.count * 0.8 &&
+                    kept.text.includes(p.text)) {
+                    covered = true;
+                    break;
+                }
+            }
+            if (!covered) globalFiltered.push(p);
+        }
+
+        config.set('heuristicPatterns', globalFiltered);
+        console.log(`🎓 启发式学习完成：保留 ${oldPatterns.length} 条旧规则，发现 ${newPatterns.length} 条新规则，去重后总计 ${globalFiltered.length} 条`, globalFiltered);
 
         // 新规则学习后，扫描页面上已经过AI但被判为normal的评论，用新规则追杀
-        if (merged.length > 0 && isOnTweetDetailPage()) {
+        if (globalFiltered.length > 0 && isOnTweetDetailPage()) {
             const commentersMap = getAllCommentersWithText();
             let retroCount = 0;
             for (const [username, data] of commentersMap) {
                 if (blockedUsersSet.has(username)) continue;
-                for (const p of merged) {
+                for (const p of globalFiltered) {
                     if (!p.enabled) continue;
                     let hit = false;
                     if (p.source === 'displayName' && data.displayName && data.displayName.includes(p.text)) hit = true;
