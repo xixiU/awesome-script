@@ -769,7 +769,10 @@
         applySiteConfig();
 
         // 注册键盘事件
+        // 捕获阶段监听（优先级高，能拦截大部分站点）
         window.addEventListener('keydown', handleKeydown, true);
+        // 冒泡阶段监听（备用，应对某些站点在捕获阶段阻止事件传播的情况）
+        window.addEventListener('keydown', handleKeydown, false);
 
         // 轮询等待视频出现
         let checkCount = 0;
