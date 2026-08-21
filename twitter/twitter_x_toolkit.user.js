@@ -1968,6 +1968,9 @@ ${comments.map((c, i) => {
     function updateAIFilterStatus(status, isComplete = false) {
         // 如果通知开关关闭，不显示状态指示器
         if (!config.get('enableNotifications')) {
+            // 清理可能残留的指示器 DOM（用户动态关闭开关时）
+            const oldIndicator = document.getElementById('ai-filter-status');
+            if (oldIndicator) oldIndicator.remove();
             return;
         }
 
