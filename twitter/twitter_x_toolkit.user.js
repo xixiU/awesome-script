@@ -467,6 +467,23 @@
         `);
     }
 
+    // ==================== 隐藏 Twitter 原生 toast 通知 ====================
+    // 用户通过脚本拉黑时，Twitter 会在页面底部显示原生的"Successfully blocked"通知
+    // 当用户关闭脚本通知时，应该同时隐藏 Twitter 的原生通知
+    if (!config.get('enableNotifications')) {
+        GM_addStyle(`
+            /* Twitter 原生 toast 通知（底部中间弹出） */
+            [data-testid="toast"] {
+                display: none !important;
+            }
+            /* 备用选择器：一些变体可能用不同的属性 */
+            #layers > div > div > div > div[role="alert"],
+            #layers > div > div > div > div[role="status"] {
+                display: none !important;
+            }
+        `);
+    }
+
     // 启发式规则管理辅助函数
     function createPatternItem(pattern, type) {
         const item = document.createElement('div');
