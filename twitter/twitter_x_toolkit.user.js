@@ -33,6 +33,13 @@
 
     // AI 过滤相关状态
     let blockedUsersSet = new Set(); // 已拉黑的用户名集合（用于自动隐藏新加载的评论）
+    // 拉黑去重（进程级，故意不随路由清空）：
+    // blockedUsersSet 服务于"隐藏 DOM"，换页必须清空，否则时间线推文被误隐藏；
+    // 而"这个人已经拉黑过了"是账号级事实，跨推文都成立，需要独立的长生命周期记录。
+    // 关键词自动拉黑与 AI 过滤是两条并发流水线，各自维护 processed Set 互不知情，
+    // 同一用户曾被两条线各拉黑一次（UserByScreenName + blocks/create 各发两遍）。
+    const blockOutcome = new Map();  // username -> 'blocked' | 'skipped'（失败不记，留待重试）
+    const blockInFlight = new Map(); // username -> Promise，压制同名并发重复请求
     let commentObserver = null; // MutationObserver 实例
     let commentDebounceTimer = null; // watchForNewComments 内 debounce 计时器（模块级以便路由切换时清理）
 
@@ -62,6 +69,7 @@
             consoleTryBlockAPI: 'Attempting to block user via API: @{username}',
             consoleTryBlockUI: 'Attempting to block user via UI: @{username}',
             consoleBlockSuccess: '✅ Successfully blocked user: @{username}',
+            consoleBlockSkipFollowing: '⏭️ Skipped followed user: @{username}',
             consoleBlockFailed: '❌ Failed to block user @{username}:',
             consoleNotFoundElement: 'Comment element not found for user @{username}',
             consoleNotFoundButton: 'More options button not found for user @{username}',
@@ -151,6 +159,7 @@
             consoleTryBlockAPI: '尝试通过API屏蔽用户: @{username}',
             consoleTryBlockUI: '尝试通过UI屏蔽用户: @{username}',
             consoleBlockSuccess: '✅ 成功屏蔽用户: @{username}',
+            consoleBlockSkipFollowing: '⏭️ 跳过已关注用户: @{username}',
             consoleBlockFailed: '❌ 屏蔽用户 @{username} 失败:',
             consoleNotFoundElement: '未找到用户 @{username} 的评论元素',
             consoleNotFoundButton: '未找到用户 @{username} 的更多选项按钮',
@@ -468,17 +477,13 @@
     }
 
     // ==================== 隐藏 Twitter 原生 toast 通知 ====================
-    // 用户通过脚本拉黑时，Twitter 会在页面底部显示原生的"Successfully blocked"通知
-    // 当用户关闭脚本通知时，应该同时隐藏 Twitter 的原生通知
+    // 走 UI 点击拉黑时 Twitter 会在底部弹原生 "Successfully blocked" toast。
+    // 拉黑主路径已改为 API（不产生 toast），这里只兜底 API 失败降级点击的场景。
+    // 只匹配 [data-testid="toast"]：不要用 #layers 下的 role=alert/status 泛匹配，
+    // 那会连带吞掉限流警告、发推失败等用户真正需要看到的提示。
     if (!config.get('enableNotifications')) {
         GM_addStyle(`
-            /* Twitter 原生 toast 通知（底部中间弹出） */
             [data-testid="toast"] {
-                display: none !important;
-            }
-            /* 备用选择器：一些变体可能用不同的属性 */
-            #layers > div > div > div > div[role="alert"],
-            #layers > div > div > div > div[role="status"] {
                 display: none !important;
             }
         `);
@@ -1464,7 +1469,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                         console.log(`🎯 启发式追杀「${p.text}」@${username}（${data.displayName}）`);
                         blockedUsersSet.add(username);
                         markCommentByCategory(username, 'blacklist');
-                        blockUserByAPI(username);
+                        blockUser(username);
                         retroCount++;
                         break;
                     }
@@ -1922,7 +1927,7 @@ ${comments.map((c, i) => {
 
         // 拉黑操作放后台，不阻塞 UI 标记和后续批次
         if (blacklistSet.size > 0) {
-            Promise.all([...blacklistSet].map(username => blockUserByAPI(username))).catch(() => {});
+            Promise.all([...blacklistSet].map(username => blockUser(username))).catch(() => {});
         }
 
         const blacklistCount = blacklistSet.size;
@@ -2700,29 +2705,6 @@ ${comments.map((c, i) => {
         return Array.from(commentersMap.keys());
     }
 
-    // Block a single user 暂时没用到
-    async function blockUser(username) {
-        try {
-            console.log(t('consoleTryBlock', { username }));
-
-            // Open user page
-            const userUrl = `https://x.com/${username}`;
-            const userTab = window.open(userUrl, '_blank');
-
-            await sleep(3000);
-
-            // Execute block operation in new tab
-            if (userTab && !userTab.closed) {
-                userTab.close();
-            }
-
-            return true;
-        } catch (error) {
-            console.error(t('consoleBlockFailed', { username }), error);
-            return false;
-        }
-    }
-
     // Block user via API (后台拉黑，无UI干扰)
     async function blockUserByAPI(username) {
         try {
@@ -2795,9 +2777,12 @@ ${comments.map((c, i) => {
                 throw new Error('Failed to get user ID');
             }
 
-            // 保护已关注的用户不被误拉黑
+            // 保护已关注的用户不被误拉黑。
+            // 必须返回 'skipped' 而非 false：调用方的 `API || UI` 短路会把 false
+            // 当成"API 挂了"从而降级到 UI 点击，把这层保护直接绕过去。
             if (isFollowing) {
-                return false;
+                console.log(t('consoleBlockSkipFollowing', { username }));
+                return 'skipped';
             }
 
             // 执行拉黑
@@ -2911,6 +2896,56 @@ ${comments.map((c, i) => {
         }
     }
 
+    /**
+     * 统一拉黑入口：所有拉黑请求都必须经过这里，去重逻辑只此一处。
+     *
+     * 收敛掉的三类重复：
+     * 1. 跨流水线重复：关键词自动拉黑与 AI 过滤并发运行，各自维护 processed Set
+     *    互不知情，同一用户会被两条线各拉黑一次（两遍 UserByScreenName + 两遍
+     *    blocks/create）。blockOutcome 是进程级共享结账簿，第二次直接短路。
+     * 2. 同名并发重复：同一轮里 Promise.all 可能对同名并行发起，await 之前谁都没
+     *    来得及写 blockOutcome，光靠"查表"挡不住。blockInFlight 让后来者复用同一
+     *    个 Promise。
+     * 3. 路径重复：以前各调用点自行选 API 或 UI。统一为 API 优先——UI 点击会让
+     *    Twitter 弹原生 toast，后台静默拉黑时那是纯干扰；仅 API 真失败才降级。
+     *
+     * blockOutcome 故意不随路由清空：它记录的是"这个账号已经拉黑过"这一账号级
+     * 事实，跨推文恒成立。而 blockedUsersSet 服务于隐藏 DOM，换页必须清空，
+     * 否则时间线推文会被误隐藏——两者生命周期不同，不能合并。
+     *
+     * @returns {Promise<'blocked'|'skipped'|'duplicate'|'failed'>}
+     *   duplicate 表示此前已处理过，调用方不应重复计数
+     */
+    async function blockUser(username) {
+        const prior = blockOutcome.get(username);
+        if (prior) return 'duplicate';
+
+        const inFlight = blockInFlight.get(username);
+        if (inFlight) {
+            await inFlight;
+            return 'duplicate';
+        }
+
+        const task = (async () => {
+            const apiResult = await blockUserByAPI(username);
+            if (apiResult === 'skipped') return 'skipped';
+            if (apiResult === true) return 'blocked';
+            // API 真失败（网络/限流/结构变更）才降级 UI 点击兜底
+            return (await blockUserByUI(username, true)) ? 'blocked' : 'failed';
+        })();
+
+        blockInFlight.set(username, task);
+        try {
+            const outcome = await task;
+            // 失败不记账，留待下一轮重试；成功和跳过都是终态
+            if (outcome !== 'failed') blockOutcome.set(username, outcome);
+            if (outcome === 'blocked') blockedUsersSet.add(username);
+            return outcome;
+        } finally {
+            blockInFlight.delete(username);
+        }
+    }
+
     // Main handler: block all commenters
     async function handleBlockAllCommenters() {
         if (isBlocking) {
@@ -3000,16 +3035,17 @@ ${comments.map((c, i) => {
             const username = commenters[i];
             updateButtonStatus(`🔄 ${i + 1}/${commenters.length}`, true);
 
-            // 先尝试API后台拉黑，失败则降级到UI操作
-            const success = await blockUserByAPI(username) || await blockUserByUI(username);
+            // 走统一入口：内部 API 优先、失败降级 UI，并负责跨流水线去重
+            const outcome = await blockUser(username);
 
-            if (success) {
+            if (outcome === 'blocked') {
                 blockedCount++;
                 blockedUsers.push(username);
-            } else {
+            } else if (outcome === 'failed') {
                 failedCount++;
                 failedUsers.push(username);
             }
+            // skipped（已关注）/ duplicate（本会话已处理）都不计数
 
             // Wait a while after each block to avoid rate limiting
             await sleep(1000);
@@ -3082,6 +3118,7 @@ ${comments.map((c, i) => {
 
         for (const [username, data] of commentersMap) {
             if (autoBlockProcessed.has(username)) continue; // Skip already processed
+            if (blockOutcome.has(username)) continue;       // 另一条流水线已经处理过
 
             const matchedKeyword = keywords.find(kw => data.text.includes(kw));
             if (matchedKeyword) {
@@ -3093,8 +3130,9 @@ ${comments.map((c, i) => {
 
         let autoBlocked = 0, autoFailed = 0;
         for (const username of toBlock) {
-            const success = await blockUserByUI(username, true); // silent: no scroll
-            if (success) autoBlocked++; else autoFailed++;
+            const outcome = await blockUser(username);
+            if (outcome === 'blocked') autoBlocked++;
+            else if (outcome === 'failed') autoFailed++;
             await sleep(500); // Shorter delay for auto-block
         }
 
@@ -3191,8 +3229,11 @@ ${comments.map((c, i) => {
 
             // 获取当前可见的评论
             const commentersMap = getAllCommentersWithText();
+            // 同时排除已拉黑用户：关键词自动拉黑是并发的另一条流水线，它处理过的人
+            // 只记在 autoBlockProcessed 里，AI 线看不到，会再送一遍 AI 白花 token。
+            // blockOutcome 是两条线共享的结账簿，查它即可跨流水线去重。
             const allComments = Array.from(commentersMap.entries())
-                .filter(([username]) => !aiFilterProcessed.has(username))
+                .filter(([username]) => !aiFilterProcessed.has(username) && !blockOutcome.has(username))
                 .map(([username, data]) => ({
                     username,
                     text: data.text,
@@ -3357,9 +3398,12 @@ ${comments.map((c, i) => {
                 if (cachedBlacklist.size > 0 || cachedSpam.size > 0) {
                     cachedBlacklist.forEach(u => blockedUsersSet.add(u));
                     markCommentsByCategoryBatch(cachedBlacklist, cachedSpam);
-                    // 还能看到该用户评论，多半上次拉黑失败或未生效，补一次（不重复记学习历史）
+                    // 还能看到该用户评论，多半上次拉黑失败或未生效，补一次（不重复记学习历史）。
+                    // 走 blockUser：判定缓存是持久化的（跨会话），而 blockOutcome 是进程级的，
+                    // 所以每次页面加载会补拉黑一次，但本次会话内 MutationObserver 反复触发
+                    // autoAIFilterComments 时不会重复发请求。
                     if (cachedBlacklist.size > 0) {
-                        Promise.all([...cachedBlacklist].map(u => blockUserByAPI(u))).catch(() => { });
+                        Promise.all([...cachedBlacklist].map(u => blockUser(u))).catch(() => { });
                     }
                 }
             }
