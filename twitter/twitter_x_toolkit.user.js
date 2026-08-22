@@ -65,12 +65,11 @@
             consoleSuccess: 'Successful: {count}',
             consoleFailed: 'Failed: {count}',
             consoleTotal: 'Total: {count}',
-            consoleTryBlock: 'Attempting to block user: @{username}',
-            consoleTryBlockAPI: 'Attempting to block user via API: @{username}',
-            consoleTryBlockUI: 'Attempting to block user via UI: @{username}',
-            consoleBlockSuccess: '✅ Successfully blocked user: @{username}',
-            consoleBlockSkipFollowing: '⏭️ Skipped followed user: @{username}',
-            consoleBlockFailed: '❌ Failed to block user @{username}:',
+            consoleTryBlockAPI: 'Attempting to block user via API: @{username}{text}',
+            consoleTryBlockUI: 'Attempting to block user via UI: @{username}{text}',
+            consoleBlockSuccess: '✅ Successfully blocked user: @{username}{text}',
+            consoleBlockSkipFollowing: '⏭️ Skipped followed user: @{username}{text}',
+            consoleBlockFailed: '❌ Failed to block user @{username}{text}:',
             consoleNotFoundElement: 'Comment element not found for user @{username}',
             consoleNotFoundButton: 'More options button not found for user @{username}',
             consoleNotFoundMenuItem: 'Block option not found',
@@ -155,12 +154,11 @@
             consoleSuccess: '成功: {count}',
             consoleFailed: '失败: {count}',
             consoleTotal: '总计: {count}',
-            consoleTryBlock: '尝试屏蔽用户: @{username}',
-            consoleTryBlockAPI: '尝试通过API屏蔽用户: @{username}',
-            consoleTryBlockUI: '尝试通过UI屏蔽用户: @{username}',
-            consoleBlockSuccess: '✅ 成功屏蔽用户: @{username}',
-            consoleBlockSkipFollowing: '⏭️ 跳过已关注用户: @{username}',
-            consoleBlockFailed: '❌ 屏蔽用户 @{username} 失败:',
+            consoleTryBlockAPI: '尝试通过API屏蔽用户: @{username}{text}',
+            consoleTryBlockUI: '尝试通过UI屏蔽用户: @{username}{text}',
+            consoleBlockSuccess: '✅ 成功屏蔽用户: @{username}{text}',
+            consoleBlockSkipFollowing: '⏭️ 跳过已关注用户: @{username}{text}',
+            consoleBlockFailed: '❌ 屏蔽用户 @{username}{text} 失败:',
             consoleNotFoundElement: '未找到用户 @{username} 的评论元素',
             consoleNotFoundButton: '未找到用户 @{username} 的更多选项按钮',
             consoleNotFoundMenuItem: '未找到屏蔽选项',
@@ -1469,7 +1467,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                         console.log(`🎯 启发式追杀「${p.text}」@${username}（${data.displayName}）`);
                         blockedUsersSet.add(username);
                         markCommentByCategory(username, 'blacklist');
-                        blockUser(username);
+                        blockUser(username, data.text);
                         retroCount++;
                         break;
                     }
@@ -1927,7 +1925,7 @@ ${comments.map((c, i) => {
 
         // 拉黑操作放后台，不阻塞 UI 标记和后续批次
         if (blacklistSet.size > 0) {
-            Promise.all([...blacklistSet].map(username => blockUser(username))).catch(() => {});
+            Promise.all([...blacklistSet].map(username => blockUser(username, previewText(username)))).catch(() => {});
         }
 
         const blacklistCount = blacklistSet.size;
@@ -2705,10 +2703,22 @@ ${comments.map((c, i) => {
         return Array.from(commentersMap.keys());
     }
 
+    /**
+     * 把评论内容格式化成日志后缀。
+     * 无文本时返回空串，让 {text} 占位符原地消失，日志退化成原来的单行格式。
+     */
+    function blockLogSuffix(text) {
+        if (!text) return '';
+        const oneLine = String(text).replace(/\s+/g, ' ').trim();
+        if (!oneLine) return '';
+        return `：${oneLine.length > 120 ? oneLine.substring(0, 120) + '…' : oneLine}`;
+    }
+
     // Block user via API (后台拉黑，无UI干扰)
-    async function blockUserByAPI(username) {
+    async function blockUserByAPI(username, commentText = '') {
+        const text = blockLogSuffix(commentText);
         try {
-            console.log(t('consoleTryBlockAPI', { username }));
+            console.log(t('consoleTryBlockAPI', { username, text }));
 
             // 获取CSRF token
             const csrfToken = document.cookie.match(/ct0=([^;]+)/)?.[1];
@@ -2781,7 +2791,7 @@ ${comments.map((c, i) => {
             // 必须返回 'skipped' 而非 false：调用方的 `API || UI` 短路会把 false
             // 当成"API 挂了"从而降级到 UI 点击，把这层保护直接绕过去。
             if (isFollowing) {
-                console.log(t('consoleBlockSkipFollowing', { username }));
+                console.log(t('consoleBlockSkipFollowing', { username, text }));
                 return 'skipped';
             }
 
@@ -2801,23 +2811,24 @@ ${comments.map((c, i) => {
             });
 
             if (blockResponse.ok) {
-                console.log(t('consoleBlockSuccess', { username }));
+                console.log(t('consoleBlockSuccess', { username, text }));
                 return true;
             } else {
                 const errorText = await blockResponse.text();
                 throw new Error(`Block request failed: ${blockResponse.status} ${errorText}`);
             }
         } catch (error) {
-            console.error(t('consoleBlockFailed', { username }), error);
+            console.error(t('consoleBlockFailed', { username, text }), error);
             return false;
         }
     }
 
     // Block user by clicking UI elements
     // silent=true: skip scrolling (for auto-block, avoids disrupting user's scroll position)
-    async function blockUserByUI(username, silent = false) {
+    async function blockUserByUI(username, silent = false, commentText = '') {
+        const text = blockLogSuffix(commentText);
         try {
-            console.log(t('consoleTryBlockUI', { username }));
+            console.log(t('consoleTryBlockUI', { username, text }));
 
             const originalScrollY = window.scrollY;
 
@@ -2882,7 +2893,7 @@ ${comments.map((c, i) => {
             if (confirmButton) {
                 confirmButton.click();
                 await sleep(500);
-                console.log(t('consoleBlockSuccess', { username }));
+                console.log(t('consoleBlockSuccess', { username, text }));
                 restoreScroll();
                 return true;
             } else {
@@ -2891,7 +2902,7 @@ ${comments.map((c, i) => {
                 return false;
             }
         } catch (error) {
-            console.error(t('consoleBlockFailed', { username }), error);
+            console.error(t('consoleBlockFailed', { username, text }), error);
             return false;
         }
     }
@@ -2913,10 +2924,12 @@ ${comments.map((c, i) => {
      * 事实，跨推文恒成立。而 blockedUsersSet 服务于隐藏 DOM，换页必须清空，
      * 否则时间线推文会被误隐藏——两者生命周期不同，不能合并。
      *
+     * @param {string} username
+     * @param {string} [commentText] 触发拉黑的评论内容，仅用于日志追溯
      * @returns {Promise<'blocked'|'skipped'|'duplicate'|'failed'>}
      *   duplicate 表示此前已处理过，调用方不应重复计数
      */
-    async function blockUser(username) {
+    async function blockUser(username, commentText = '') {
         const prior = blockOutcome.get(username);
         if (prior) return 'duplicate';
 
@@ -2927,11 +2940,11 @@ ${comments.map((c, i) => {
         }
 
         const task = (async () => {
-            const apiResult = await blockUserByAPI(username);
+            const apiResult = await blockUserByAPI(username, commentText);
             if (apiResult === 'skipped') return 'skipped';
             if (apiResult === true) return 'blocked';
             // API 真失败（网络/限流/结构变更）才降级 UI 点击兜底
-            return (await blockUserByUI(username, true)) ? 'blocked' : 'failed';
+            return (await blockUserByUI(username, true, commentText)) ? 'blocked' : 'failed';
         })();
 
         blockInFlight.set(username, task);
@@ -3036,7 +3049,7 @@ ${comments.map((c, i) => {
             updateButtonStatus(`🔄 ${i + 1}/${commenters.length}`, true);
 
             // 走统一入口：内部 API 优先、失败降级 UI，并负责跨流水线去重
-            const outcome = await blockUser(username);
+            const outcome = await blockUser(username, commentersMap.get(username)?.text);
 
             if (outcome === 'blocked') {
                 blockedCount++;
@@ -3130,7 +3143,7 @@ ${comments.map((c, i) => {
 
         let autoBlocked = 0, autoFailed = 0;
         for (const username of toBlock) {
-            const outcome = await blockUser(username);
+            const outcome = await blockUser(username, commentersMap.get(username)?.text);
             if (outcome === 'blocked') autoBlocked++;
             else if (outcome === 'failed') autoFailed++;
             await sleep(500); // Shorter delay for auto-block
@@ -3403,7 +3416,8 @@ ${comments.map((c, i) => {
                     // 所以每次页面加载会补拉黑一次，但本次会话内 MutationObserver 反复触发
                     // autoAIFilterComments 时不会重复发请求。
                     if (cachedBlacklist.size > 0) {
-                        Promise.all([...cachedBlacklist].map(u => blockUser(u))).catch(() => { });
+                        const textOf = new Map(comments.map(c => [c.username, c.text]));
+                        Promise.all([...cachedBlacklist].map(u => blockUser(u, textOf.get(u)))).catch(() => { });
                     }
                 }
             }
