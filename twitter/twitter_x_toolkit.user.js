@@ -526,7 +526,11 @@
         if (pattern.source === 'displayName') {
             dimensionLabel = currentLang === 'zh' ? '昵称' : 'Name';
         } else if (pattern.source === 'commentText') {
-            dimensionLabel = currentLang === 'zh' ? '评论' : 'Comment';
+            // 聚类学来的规则走归一化匹配（能穿透插字变形），标注出来便于分辨：
+            // 它的文本是剥掉空格/emoji/@mention 后的形态，看起来会和原评论不完全一样
+            dimensionLabel = pattern.normalized
+                ? (currentLang === 'zh' ? '评论·归一' : 'Comment·norm')
+                : (currentLang === 'zh' ? '评论' : 'Comment');
         }
 
         text.textContent = `"${pattern.text}"`;
@@ -1234,6 +1238,23 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
     // ==================== 启发式学习 ====================
 
+    // 学习触发门槛：攒够这么多条新拉黑记录就学一次。
+    // 原为 20，实测偏高——一次刷推文常只拉 2~5 人，要连刷好几条推文才够一轮，
+    // 期间新出现的垃圾模板一直进不了规则库。降到 10 让规则跟得上垃圾文案的变化。
+    const LEARN_TRIGGER_COUNT = 10;
+
+    // 相似聚类成规则的门槛：历史里有这么多条高度相似的评论，就认为是同一模板。
+    // 子串统计那条路要求同一子串出现 ≥5 次且占比达标，覆盖不到"整句雷同但用词
+    // 位置飘忽"的低频模板；聚类从另一个角度补上，3 条即可成规则。
+    const CLUSTER_MIN_SIZE = 3;
+
+    // 聚类专用的最小长度，比实时判黑用的 SIMILARITY_MIN_LENGTH(10) 更宽松。
+    // 理由：规则 5/6 拿单条评论当场定黑，短文本撞车代价是误杀，必须保守；
+    // 聚类要求 ≥3 条互相高度相似才成规则，本身就是强得多的证据。
+    // 实测门槛卡在 10 会漏掉真实模板——"她太涩了ya 我真顶不住@putrrrien"
+    // 归一化后只剩 9 字（去 @mention 和随机 ASCII 尾缀），恰好差一个字。
+    const CLUSTER_MIN_LENGTH = 7;
+
     /**
      * 记录拉黑历史（用于启发式学习）
      * @param {string} username - 用户名
@@ -1300,14 +1321,14 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         totalRecorded++;
         config.set('totalRecorded', totalRecorded);
 
-        // 每累积 20 条新记录触发一次学习（即使 history 满员也能继续学习）。
+        // 每累积 LEARN_TRIGGER_COUNT 条新记录触发一次学习（即使 history 满员也能继续学习）。
         // 顺带打印进度：不打的话，小批量拉黑（比如一次只拉 2 人）看不到任何学习相关
         // 日志，容易被误判成"学习坏了"，实际只是没到触发点。
         const pendingCount = totalRecorded - lastLearnedAt;
-        if (pendingCount >= 20) {
+        if (pendingCount >= LEARN_TRIGGER_COUNT) {
             pendingLearnCheck = true;
         } else {
-            console.log(`🎓 学习进度：已积累 ${pendingCount}/20 条新记录（历史库 ${history.length} 条），满 20 条触发一次规则学习`);
+            console.log(`🎓 学习进度：已积累 ${pendingCount}/${LEARN_TRIGGER_COUNT} 条新记录（历史库 ${history.length} 条），满 ${LEARN_TRIGGER_COUNT} 条触发一次规则学习`);
         }
 
         historyDirty = true;
@@ -1505,11 +1526,129 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     }
 
     /**
+     * 判断一条启发式规则是否命中某条评论，返回命中的维度名（未命中返回 null）。
+     *
+     * 前置过滤与学习后的回扫追杀原本各写一遍 includes 判断，聚类规则引入 normalized
+     * 标记后两处都要改，漏一处就是静默失效，故收敛到这里。
+     *
+     * normalized 规则的匹配对象是归一化文本：它由聚类在归一化文本上求得，直接比对原文
+     * 永远匹配不上（原文夹着被归一化剥掉的随机 ASCII / emoji）。这也正是它的长处——
+     * 能穿透垃圾团伙的插字变形。
+     */
+    function matchHeuristicPattern(pattern, displayName, commentText) {
+        if (!pattern || !pattern.text) return null;
+
+        if (pattern.source === 'displayName') {
+            return displayName && displayName.includes(pattern.text) ? '昵称' : null;
+        }
+        if (pattern.source === 'commentText' && commentText) {
+            const haystack = pattern.normalized ? normalizeForSimilarity(commentText) : commentText;
+            if (haystack.includes(pattern.text)) return pattern.normalized ? '评论·归一' : '评论';
+        }
+        return null;
+    }
+
+    /**
+     * 求一组字符串的最长公共子串。
+     *
+     * 用第一条作基准枚举其所有子串（由长到短），首个被全组包含的即为答案。
+     * 组内文本已通过相似度筛选（Dice ≥ 0.9），公共部分必然很长，通常第一轮就命中，
+     * 不必上后缀自动机。基准串长度截到 60 字符，防超长评论把枚举量放大。
+     */
+    function longestCommonSubstring(texts) {
+        if (!texts || texts.length === 0) return '';
+        const base = texts[0].slice(0, 60);
+        const others = texts.slice(1);
+
+        for (let len = base.length; len >= 5; len--) {
+            for (let i = 0; i + len <= base.length; i++) {
+                const candidate = base.substr(i, len);
+                if (others.every(t => t.includes(candidate))) return candidate;
+            }
+        }
+        return '';
+    }
+
+    /**
+     * 从拉黑历史里聚类出低频模板，补齐子串统计漏掉的规则。
+     *
+     * 为什么需要它：子串统计（extractCommonSubstrings）要求同一子串出现 ≥5 次且占比达标。
+     * 垃圾团伙换文案的速度往前跑，一套新模板往往只刷了 3~4 条就被拉黑，永远达不到门槛，
+     * 于是同样的文案下次还得靠 AI 花 token 判一遍。
+     *
+     * 做法：按 bigram Dice 相似度（复用规则 5/6 的同一套工具，阈值一致）把历史评论
+     * 贪心聚类，成员数 ≥ CLUSTER_MIN_SIZE 的组取最长公共子串成规则。
+     *
+     * @param {Array<{commentText: string}>} history
+     * @param {Array<{text: string, source: string}>} existingPatterns 已有规则，用于跳过重复
+     * @returns {Array<{text: string, count: number, ratio: number, source: string}>}
+     */
+    function learnFromSimilarClusters(history, existingPatterns = []) {
+        // 只取够长的评论：短文本（"来了""第一"）撞车概率高，聚出来的规则会误伤
+        const items = [];
+        for (const h of history) {
+            const norm = normalizeForSimilarity(h.commentText);
+            if (norm.length < CLUSTER_MIN_LENGTH) continue;
+            if (new Set(norm).size < SIMILARITY_MIN_UNIQUE) continue; // 防"哈哈哈哈…"
+            items.push({ raw: h.commentText, norm, grams: charBigrams(norm) });
+        }
+        if (items.length < CLUSTER_MIN_SIZE) return [];
+
+        // 贪心聚类：每条归入第一个与其代表相似度达标的簇，否则自成新簇。
+        // 贪心足够——组内相似度阈值高达 0.9，簇边界很清晰，不值得上层次聚类。
+        const clusters = [];
+        for (const item of items) {
+            let placed = false;
+            for (const cluster of clusters) {
+                if (diceSimilarity(item.grams, cluster[0].grams) >= SIMILARITY_THRESHOLD) {
+                    cluster.push(item);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) clusters.push([item]);
+        }
+
+        // 已有规则先转成规范化形式，用于判断某个簇是否已被覆盖
+        const covered = existingPatterns
+            .filter(p => p && p.text && p.source !== 'displayName')
+            .map(p => p.text);
+
+        const total = history.length;
+        const found = [];
+        for (const cluster of clusters) {
+            if (cluster.length < CLUSTER_MIN_SIZE) continue;
+
+            // 公共子串在归一化文本上求：原文里夹杂的 emoji/随机 ASCII 会把公共部分切碎
+            const common = longestCommonSubstring(cluster.map(c => c.norm));
+            const text = normalizePatternText(common);
+            if (!text) continue;
+
+            // 已有规则能命中这个模板就不重复造。注意方向：只要任一现成规则是
+            // text 的子串，它就已经能抓到该模板的所有变体
+            if (covered.some(c => text.includes(c))) continue;
+            if (found.some(f => text.includes(f.text))) continue;
+
+            found.push({
+                text,
+                count: cluster.length,
+                ratio: cluster.length / total,
+                source: 'commentText',
+                // 标记该规则须对归一化文本匹配，见前置规则里的 normalized 分支
+                normalized: true
+            });
+            console.log(`🎓 聚类发现新规则「${text}」（${cluster.length} 条相似历史评论，归一化匹配）`);
+        }
+
+        return found;
+    }
+
+    /**
      * 触发启发式学习，更新规则
      */
     function learnHeuristicPatterns() {
         const history = config.get('blockHistory') || [];
-        if (history.length < 10) return; // 至少10条才学习
+        if (history.length < LEARN_TRIGGER_COUNT) return; // 样本太少，统计不可靠
 
         // 中文停用词（评论文本常见无意义词）
         const commentStopWords = [
@@ -1557,10 +1696,20 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             stopWords: allStopWords
         });
 
-        const newPatterns = [...displayNamePatterns, ...commentPatterns];
+        const oldPatterns = config.get('heuristicPatterns') || [];
+
+        // 相似聚类补充：子串统计要求同一子串出现 ≥5 次，覆盖不到"整句雷同但用词位置
+        // 飘忽"的低频模板。这里从另一个角度找——历史里 ≥3 条高度相似的评论视为同一
+        // 模板，取其公共子串成规则。已被现成规则覆盖的组跳过，不重复造。
+        const clusterPatterns = learnFromSimilarClusters(history, [
+            ...oldPatterns,
+            ...(config.get('userCustomPatterns') || []),
+            ...commentPatterns
+        ]);
+
+        const newPatterns = [...displayNamePatterns, ...commentPatterns, ...clusterPatterns];
 
         // 合并规则：保留所有旧规则 + 添加新规则，更新重复规则的统计数据
-        const oldPatterns = config.get('heuristicPatterns') || [];
         const mergedMap = new Map();
 
         // 先添加所有旧规则。存量规则要过一遍 normalizePatternText：库里躺着在 @mention
@@ -1581,12 +1730,15 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             const key = `${np.text}|${np.source}`;
             const existing = mergedMap.get(key);
             if (existing) {
-                // 更新已存在规则的统计数据，保留用户的启用/禁用状态
+                // 更新已存在规则的统计数据，保留用户的启用/禁用状态。
+                // normalized 必须一并透传：丢了它，聚类规则会退化成拿归一化子串比对原文，
+                // 永远匹配不上（原文里夹着被归一化剥掉的随机 ASCII / emoji）。
                 mergedMap.set(key, {
                     text: np.text,
                     count: np.count,
                     ratio: np.ratio,
                     source: np.source,
+                    normalized: np.normalized || existing.normalized,
                     enabled: existing.enabled,
                     createdAt: existing.createdAt
                 });
@@ -1597,6 +1749,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                     count: np.count,
                     ratio: np.ratio,
                     source: np.source,
+                    normalized: np.normalized,
                     enabled: true, // 默认启用
                     createdAt: Date.now()
                 });
@@ -1633,10 +1786,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 if (blockedUsersSet.has(username)) continue;
                 for (const p of globalFiltered) {
                     if (!p.enabled) continue;
-                    let hit = false;
-                    if (p.source === 'displayName' && data.displayName && data.displayName.includes(p.text)) hit = true;
-                    else if (p.source === 'commentText' && data.text && data.text.includes(p.text)) hit = true;
-                    if (hit) {
+                    if (matchHeuristicPattern(p, data.displayName, data.text)) {
                         console.log(`🎯 启发式追杀「${p.text}」@${username}（${data.displayName}）`);
                         blockedUsersSet.add(username);
                         markCommentByCategory(username, 'blacklist');
@@ -3480,21 +3630,8 @@ ${comments.map((c, i) => {
                 // 检查启发式规则（昵称 + 评论）
                 if (!matched && heuristicPatterns.length > 0) {
                     for (const pattern of heuristicPatterns) {
-                        let hit = false;
-                        let dimension = '';
-
-                        // 昵称维度
-                        if (pattern.source === 'displayName' && c.displayName && c.displayName.includes(pattern.text)) {
-                            hit = true;
-                            dimension = '昵称';
-                        }
-                        // 评论维度
-                        else if (pattern.source === 'commentText' && c.text && c.text.includes(pattern.text)) {
-                            hit = true;
-                            dimension = '评论';
-                        }
-
-                        if (hit) {
+                        const dimension = matchHeuristicPattern(pattern, c.displayName, c.text);
+                        if (dimension) {
                             preFilterBlacklist.push(c.username);
                             const source = pattern.count ? `启发式·${dimension}·${(pattern.ratio * 100).toFixed(0)}%` : '手动添加';
                             preFilterReason.set(c.username, `启发式规则「${pattern.text}」`);
@@ -3901,7 +4038,7 @@ ${comments.map((c, i) => {
         const totalRecorded = config.get('totalRecorded') || 0;
         const lastLearnedAt = config.get('lastLearnedAt') || 0;
         const history = config.get('blockHistory') || [];
-        if (history.length >= 20 && totalRecorded - lastLearnedAt >= 20) {
+        if (history.length >= LEARN_TRIGGER_COUNT && totalRecorded - lastLearnedAt >= LEARN_TRIGGER_COUNT) {
             console.log(`🎓 启动补学：积压 ${totalRecorded - lastLearnedAt} 条记录未学习，立即触发`);
             const runCatchup = () => {
                 learnHeuristicPatterns();
