@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.4.9
+// @version      2.5.0
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -421,8 +421,18 @@
                 const relearnBtn = document.createElement('button');
                 relearnBtn.textContent = currentLang === 'zh' ? '🔄 重新学习' : '🔄 Relearn';
                 relearnBtn.style.cssText = 'padding: 6px 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;';
-                relearnBtn.onclick = () => { learnHeuristicPatterns(); location.reload(); };
+                // 原实现带 location.reload()：刷新详情页会丢掉本页已建立的隐藏状态和
+                // 拉黑记账，评论区重新加载后需要整轮重跑。改为原地重渲染列表。
+                relearnBtn.onclick = () => { learnHeuristicPatterns(); refreshPatternLists(); };
                 btnRow.appendChild(relearnBtn);
+
+                // 存量规则里积压的滑窗碎片不必等下一次学习触发（要攒 20 条新记录），
+                // 这里提供一个即时入口：只跑合并去重，不动 blockHistory。
+                const tidyBtn = document.createElement('button');
+                tidyBtn.textContent = currentLang === 'zh' ? '🧹 清理重复规则' : '🧹 Tidy Rules';
+                tidyBtn.style.cssText = 'padding: 6px 12px; background: #8b5cf6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;';
+                tidyBtn.onclick = () => tidyHeuristicPatterns();
+                btnRow.appendChild(tidyBtn);
 
                 section.appendChild(btnRow);
 
@@ -548,6 +558,77 @@
         return item;
     }
 
+    /**
+     * 原地重渲染两个规则列表，替代 location.reload()。
+     *
+     * 规则增删改原本一律 reload。在推文详情页上刷新代价不小：本页已建立的隐藏状态、
+     * blockOutcome 记账、AI 判定进度全部丢失，评论区要整轮重跑一遍。
+     * 列表本身只是 config 的投影，重新遍历一次就够了。
+     */
+    function refreshPatternLists() {
+        const render = (listId, key, type, emptyText) => {
+            const list = document.getElementById(listId);
+            if (!list) return;
+            list.textContent = '';
+            const patterns = config.get(key) || [];
+            if (patterns.length === 0) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'font-size: 12px; color: #9ca3af; padding: 8px 0;';
+                empty.textContent = emptyText;
+                list.appendChild(empty);
+                return;
+            }
+            patterns.forEach(p => list.appendChild(createPatternItem(p, type)));
+        };
+
+        render('heuristic-learned-list', 'heuristicPatterns', 'learned',
+            currentLang === 'zh' ? '暂无规则（至少10条历史后开始学习）' : 'No rules yet');
+        render('heuristic-custom-list', 'userCustomPatterns', 'custom',
+            currentLang === 'zh' ? '暂无规则' : 'No custom rules');
+    }
+
+    /**
+     * 只对存量规则跑一遍规范化 + 合并去重，不读 blockHistory、不重新学习。
+     *
+     * 存在的理由：学习要攒够 20 条新记录才触发，而库里的滑窗碎片（同一句话错位切出的
+     * 一串等长规则）和早期学到的 @账号名脏数据现在就该清掉。给一个即时入口，
+     * 顺带让用户看到清理前后的条数对比。
+     */
+    function tidyHeuristicPatterns() {
+        const before = config.get('heuristicPatterns') || [];
+        if (before.length === 0) {
+            alert(currentLang === 'zh' ? '暂无自动学习的规则' : 'No learned rules');
+            return;
+        }
+
+        const mergedMap = new Map();
+        before.forEach(op => {
+            const text = normalizePatternText(op.text);
+            if (!text) return;
+            const key = `${text}|${op.source}`;
+            const prev = mergedMap.get(key);
+            if (!prev || (op.count || 0) > (prev.count || 0)) {
+                mergedMap.set(key, { ...op, text });
+            }
+        });
+
+        const merged = Array.from(mergedMap.values());
+        merged.sort((a, b) => (b.count || 0) - (a.count || 0) || a.text.length - b.text.length);
+        const kept = [];
+        for (const p of merged) {
+            if (!kept.some(k => isRedundantPattern(k, p))) kept.push(p);
+        }
+
+        config.set('heuristicPatterns', kept);
+        refreshPatternLists();
+
+        const removed = before.length - kept.length;
+        console.log(`🧹 规则清理完成：${before.length} 条 → ${kept.length} 条，移除 ${removed} 条冗余`, kept);
+        alert(currentLang === 'zh'
+            ? `清理完成：${before.length} 条 → ${kept.length} 条，移除 ${removed} 条重复/无效规则`
+            : `Tidied: ${before.length} → ${kept.length}, removed ${removed}`);
+    }
+
     function addCustomPattern() {
         const text = prompt(currentLang === 'zh' ? '请输入要拉黑的关键词（3-8字）：' : 'Enter keyword (3-8 chars):');
         if (!text || text.trim().length < 3) {
@@ -562,7 +643,7 @@
         const patterns = config.get('userCustomPatterns') || [];
         patterns.push({ text: text.trim(), enabled: true, source });
         config.set('userCustomPatterns', patterns);
-        location.reload();
+        refreshPatternLists();
     }
 
     function editCustomPattern(pattern) {
@@ -577,7 +658,7 @@
         pattern.source = source;
         const patterns = config.get('userCustomPatterns') || [];
         config.set('userCustomPatterns', patterns);
-        location.reload();
+        refreshPatternLists();
     }
 
     function deletePattern(pattern, type) {
@@ -585,15 +666,19 @@
         const key = type === 'learned' ? 'heuristicPatterns' : 'userCustomPatterns';
         const patterns = (config.get(key) || []).filter(p => p.text !== pattern.text || p.source !== pattern.source);
         config.set(key, patterns);
-        location.reload();
+        refreshPatternLists();
     }
 
     function clearBlockHistory() {
         if (!confirm(currentLang === 'zh' ? '确定清空所有学习历史和自动规则？手动添加的规则不会被清空。' : 'Clear all history and learned rules?')) return;
         config.set('blockHistory', []);
         config.set('heuristicPatterns', []);
+        // 计数器一并归零，否则 totalRecorded - lastLearnedAt 的差值仍在，
+        // 下次记录会立刻触发一次"空历史学习"，白跑一轮。
+        config.set('totalRecorded', 0);
+        config.set('lastLearnedAt', 0);
+        refreshPatternLists();
         alert(currentLang === 'zh' ? '已清空' : 'Cleared');
-        location.reload();
     }
 
     // Restructure config panel: group checkbox items by feature, 2-column grid per group
@@ -765,6 +850,21 @@
             !url.includes('/home') &&
             !url.includes('/explore') &&
             pathname.match(/^\/[^\/]+$/);
+    }
+
+    /**
+     * 取当前 URL 对应的推文身份（"作者/推文ID"），非详情页返回 null。
+     *
+     * 用来区分"真的换了推文"和"还在同一条推文里换子视图"。点开图片会把 URL 从
+     * /Asahibozi/status/123 变成 /Asahibozi/status/123/photo/2，点开互动列表会变成
+     * /status/123/likes、/retweets、/quotes——这些都只是叠一层模态框，背后的详情页
+     * DOM 和评论区原封不动。若按普通换页处理，会清空 blockedUsersSet 并回滚
+     * data-ai-filtered，把已经隐藏好的评论重新显示出来，而 blockOutcome 记着这些人
+     * 已拉黑，两条流水线都会跳过，没人再去补隐藏。
+     */
+    function getTweetIdentity() {
+        const m = window.location.pathname.match(/^\/([^\/]+)\/status\/(\d+)/);
+        return m ? `${m[1]}/${m[2]}` : null;
     }
 
     // ==================== 内容提取功能 ====================
@@ -1200,9 +1300,14 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         totalRecorded++;
         config.set('totalRecorded', totalRecorded);
 
-        // 每累积 20 条新记录触发一次学习（即使 history 满员也能继续学习）
-        if (totalRecorded - lastLearnedAt >= 20) {
+        // 每累积 20 条新记录触发一次学习（即使 history 满员也能继续学习）。
+        // 顺带打印进度：不打的话，小批量拉黑（比如一次只拉 2 人）看不到任何学习相关
+        // 日志，容易被误判成"学习坏了"，实际只是没到触发点。
+        const pendingCount = totalRecorded - lastLearnedAt;
+        if (pendingCount >= 20) {
             pendingLearnCheck = true;
+        } else {
+            console.log(`🎓 学习进度：已积累 ${pendingCount}/20 条新记录（历史库 ${history.length} 条），满 20 条触发一次规则学习`);
         }
 
         historyDirty = true;
@@ -1210,6 +1315,73 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             historyFlushScheduled = true;
             setTimeout(flushBlockHistory, 0);
         }
+    }
+
+    /**
+     * 判断 p 是否是已保留规则 kept 的冗余变体。
+     *
+     * 调用方必须已按「count 降序、同 count 时长度升序」排好：更泛化、命中更多的规则
+     * 先落地，再由它去吃掉派生变体。子串的命中次数天然 ≥ 母串（含母串的文本必然含子串），
+     * 所以这个排序保证短规则总是先到。
+     *
+     * 两种冗余：
+     * 1. 包含关系（逻辑上绝对冗余）：规则匹配是 text.includes(pattern)，若 kept 是 p 的
+     *    子串，则任何命中 p 的文本必然命中 kept，p 一条也多抓不到。
+     *    这样 "体制内老师" 会吃掉 "体制内老师 sao的"、"体制内老师 玩的就是" 等一串后缀变体。
+     *    注意方向：只丢更长的那个。反过来丢短的会损失泛化能力。
+     * 2. 错位滑窗：同一句话按固定窗口滑动会产出一串等长碎片，互不包含——
+     *    "比她好看的没她骚比她" / "她好看的没她骚比她骚" / "好看的没她骚比她骚的" …
+     *    起始位置差一格，count 完全相同。用「首尾重叠过半 + count 几乎相等」识别：
+     *    二者拼接后重叠部分占到窗口一半以上，说明出自同一模板，只留先到的。
+     */
+    function isRedundantPattern(kept, p) {
+        if (kept.source !== p.source) return false;
+        if (kept.text === p.text) return true;
+
+        // 情况 1：kept 是 p 的子串 → p 永远匹配不到 kept 抓不到的文本
+        if (p.text.includes(kept.text)) return true;
+
+        // 情况 2：等长（或近等长）错位滑窗碎片
+        if (Math.abs(kept.text.length - p.text.length) <= 1 &&
+            Math.min(kept.count, p.count) >= Math.max(kept.count, p.count) * 0.9) {
+            const minLen = Math.min(kept.text.length, p.text.length);
+            const need = Math.ceil(minLen * 0.5);
+            // p 的前缀 == kept 的后缀，或反之，说明二者是同一长句的错位窗口
+            for (let overlap = minLen - 1; overlap >= need; overlap--) {
+                if (kept.text.slice(-overlap) === p.text.slice(0, overlap)) return true;
+                if (p.text.slice(-overlap) === kept.text.slice(0, overlap)) return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 规范化一条规则的 text，与 extractCommonSubstrings 里的清理保持一致。
+     *
+     * 存量规则是在 @mention 清理逻辑完善之前学到的，库里躺着 "她骚的没她好看 @y"、
+     * "骚的没她好看@XXk"、"yvonne12ap" 这类带 @ 尾巴或纯账号名的脏数据。
+     * 合并时统一过一遍这个函数，脏规则才能被正常的包含判定吃掉；
+     * 返回 null 表示该规则清理后已无价值，直接丢弃。
+     */
+    function normalizePatternText(text) {
+        if (!text) return null;
+        let cleaned = String(text).trim().replace(/^[@#\s]+/, '');
+        // 截掉 @ 及其后所有内容：@mention 换一批小号就失效，学它没意义
+        cleaned = cleaned.replace(/\s*@.*$/, '').trim();
+
+        // 长度下限按语种区分。CJK 单字信息量大，截到 3 字（"她好看"、"太涩了"）就成了
+        // 会误伤正常评论的泛化规则，要求至少 5 字；拉丁词组按词计信息量，3 字符可接受。
+        const hasCJK = /[一-鿿぀-ゟ゠-ヿ가-힯]/.test(cleaned);
+        if (cleaned.length < (hasCJK ? 5 : 3)) return null;
+
+        // 纯 ASCII 字母数字串一律丢弃：这是从 @mention 里切出来的具体账号名
+        // （"yvonne12ap"、"niuu52"），学它会误伤所有提到该账号的人，且对方换小号即失效。
+        // 存量脏规则的 @ 可能已在早期清理中被截掉，所以不能只在原串含 @ 时才判。
+        // 真正的拉丁垃圾词组含空格（"only fans"），不会被这条命中。
+        if (/^[a-zA-Z0-9_]+$/.test(cleaned)) return null;
+
+        return cleaned;
     }
 
     /**
@@ -1293,12 +1465,11 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 // 清理首尾空白和常见标点，避免 "我真顶不住"、" 我真顶不住 @" 等
                 // 本质相同的模式因为空格/标点差异被当作不同规则。
                 // 同时清掉 @用户名 后缀（@mention 经常变，学它没意义）。
-                let cleaned = sub.trim().replace(/^[@#\s]+|[@#\s]+$/g, '');
-                // 去掉 @用户名 后缀：匹配 @ 后面跟着的连续字母数字下划线
-                cleaned = cleaned.replace(/\s*@[a-zA-Z0-9_]+\s*$/, '');
-                // 再次清理可能残留的尾部空白
-                cleaned = cleaned.trim();
-                if (cleaned.length >= 3) {  // 清理后太短的不要
+                // 清理与存量规则共用同一套门槛（截 @mention、CJK 最少 5 字、
+                // 拒绝裸账号名），避免"新学的"和"库里旧的"两套标准对不上，
+                // 导致脏规则在合并时躲过包含判定。
+                const cleaned = normalizePatternText(sub);
+                if (cleaned) {
                     patterns.push({ text: cleaned, count, ratio, source });
                 }
             }
@@ -1314,17 +1485,15 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         }
         const uniquePatterns = Array.from(deduped.values());
 
-        // 去重：如果长串包含短串且出现次数接近，只保留长串。
+        // 去重：丢弃冗余变体，只保留最泛化的那条（判定见 isRedundantPattern）。
         // 原实现是 patterns.filter + patterns.some 的全量 O(n²) 对比，候选上千条时
-        // 会卡住主线程。改为按长度降序遍历，每条只与"已保留的更长串"比较。
-        uniquePatterns.sort((a, b) => b.text.length - a.text.length || b.count - a.count);
+        // 会卡住主线程。改为排好序后单向遍历，每条只与"已保留的"比较。
+        uniquePatterns.sort((a, b) => b.count - a.count || a.text.length - b.text.length);
         const filtered = [];
         for (const p of uniquePatterns) {
             let covered = false;
             for (const kept of filtered) {
-                if (kept.text.length > p.text.length &&
-                    kept.count >= p.count * 0.9 &&
-                    kept.text.includes(p.text)) {
+                if (isRedundantPattern(kept, p)) {
                     covered = true;
                     break;
                 }
@@ -1394,10 +1563,17 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const oldPatterns = config.get('heuristicPatterns') || [];
         const mergedMap = new Map();
 
-        // 先添加所有旧规则
+        // 先添加所有旧规则。存量规则要过一遍 normalizePatternText：库里躺着在 @mention
+        // 清理完善前学到的脏数据（带 @ 尾巴、纯账号名），不规范化就没法被包含判定吃掉。
+        // 规范化后可能与其他规则撞车，取 count 更大的那条。
         oldPatterns.forEach(op => {
-            const key = `${op.text}|${op.source}`;
-            mergedMap.set(key, op);
+            const text = normalizePatternText(op.text);
+            if (!text) return; // 清理后无价值，直接淘汰
+            const key = `${text}|${op.source}`;
+            const prev = mergedMap.get(key);
+            if (!prev || (op.count || 0) > (prev.count || 0)) {
+                mergedMap.set(key, { ...op, text });
+            }
         });
 
         // 再添加或更新新规则
@@ -1429,19 +1605,16 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         const merged = Array.from(mergedMap.values());
 
-        // 全局去重：长串包含短串且出现次数接近时，只保留长串。
-        // 这一步清理新旧规则合并后的重复碎片（例如历史里积累的
-        // "她骚的没她好看"、"骚的没她好看"、"的没她好看" 等，只保留最长的）。
-        merged.sort((a, b) => b.text.length - a.text.length || b.count - a.count);
+        // 全局去重：清理新旧规则合并后的重复碎片。
+        // 排序键是关键：count 降序让命中最多、最泛化的规则先落地，再由它吃掉派生变体；
+        // 同 count 时取更短的——短规则覆盖面更广（"体制内老师" 能抓到所有变体，
+        // "体制内老师 sao的" 只能抓一种）。原实现按长度降序，恰好留下了最窄的那批。
+        merged.sort((a, b) => b.count - a.count || a.text.length - b.text.length);
         const globalFiltered = [];
         for (const p of merged) {
             let covered = false;
             for (const kept of globalFiltered) {
-                // 同 source（都是昵称或都是评论）且长串包含短串
-                if (kept.source === p.source &&
-                    kept.text.length > p.text.length &&
-                    kept.count >= p.count * 0.8 &&
-                    kept.text.includes(p.text)) {
+                if (isRedundantPattern(kept, p)) {
                     covered = true;
                     break;
                 }
@@ -3503,6 +3676,46 @@ ${comments.map((c, i) => {
     }
 
     /**
+     * 重新对页面上所有已拉黑用户的评论施加隐藏。
+     *
+     * 用于同推文子视图切换（点开图片/互动列表）后补隐藏。这类切换会让 Twitter 挂上
+     * 新的 article 节点，而 blockOutcome 已记账、两条流水线都会跳过这些用户，
+     * 若不主动补一遍，已拉黑的人会重新出现在模态框的评论区里。
+     *
+     * 判定依据用 blockOutcome 而非 blockedUsersSet：后者服务于隐藏 DOM 且换页即清空，
+     * 前者是账号级事实的长生命周期记录，跨子视图仍然成立。
+     */
+    function reapplyBlockedHiding() {
+        if (!isOnTweetDetailPage()) return;
+
+        const blocked = new Set();
+        for (const [username, outcome] of blockOutcome) {
+            if (outcome === 'blocked') blocked.add(username);
+        }
+        blockedUsersSet.forEach(u => blocked.add(u));
+        if (blocked.size === 0) return;
+
+        let hidden = 0;
+        document.querySelectorAll('article[data-testid="tweet"]').forEach(article => {
+            if (article.hasAttribute('data-ai-filtered')) return;
+            const userNameArea = article.querySelector('[data-testid="User-Name"]');
+            if (!userNameArea) return;
+            const link = userNameArea.querySelector('a[role="link"][href^="/"]');
+            if (!link) return;
+            const username = link.getAttribute('href').slice(1);
+            if (!username || username.includes('/')) return;
+
+            if (blocked.has(username)) {
+                article.setAttribute('data-ai-filtered', 'blacklist');
+                article.style.display = 'none';
+                hidden++;
+            }
+        });
+
+        if (hidden > 0) console.log(`🚫 子视图切换后补隐藏 ${hidden} 条已拉黑用户的评论`);
+    }
+
+    /**
      * 监听新评论并自动过滤
      * 解决两个问题：
      * 1. 新加载的评论如果是已拉黑用户，立即隐藏
@@ -3526,40 +3739,10 @@ ${comments.map((c, i) => {
             // 只在推文详情页运行，避免在时间线误触发
             if (!isOnTweetDetailPage()) return;
 
-            // 立即检查新评论是否是已拉黑用户，如果是则立即隐藏
-            const articles = document.querySelectorAll('article[data-testid="tweet"]');
-            articles.forEach(article => {
-                // 跳过已处理的评论
-                if (article.hasAttribute('data-ai-filtered')) return;
-
-                // 提取用户名（只从 User-Name 区域，避免把评论正文中的 @mention 误认为评论者）
-                const userNameArea = article.querySelector('[data-testid="User-Name"]');
-                let username = null;
-                if (userNameArea) {
-                    const userLinks = userNameArea.querySelectorAll('a[href^="/"][role="link"]');
-                    for (const link of userLinks) {
-                        const href = link.getAttribute('href');
-                        if (href && href.match(/^\/[^\/]+$/)) {
-                            const user = href.substring(1);
-                            if (user &&
-                                user !== 'home' &&
-                                user !== 'explore' &&
-                                user !== 'notifications' &&
-                                user !== 'messages') {
-                                username = user;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // 如果是已拉黑用户，立即隐藏
-                if (username && blockedUsersSet.has(username)) {
-                    article.style.display = 'none';
-                    article.setAttribute('data-ai-filtered', 'blacklist');
-                    console.log(`🚫 自动隐藏已拉黑用户的新评论: @${username}`);
-                }
-            });
+            // 立即检查新评论是否是已拉黑用户，如果是则立即隐藏。
+            // 与子视图切换共用同一实现，判定依据都是 blockOutcome ∪ blockedUsersSet，
+            // 避免这里只查 blockedUsersSet 而漏掉另一条流水线拉黑的人。
+            reapplyBlockedHiding();
 
             // 延迟执行 AI 过滤，避免频繁触发
             if (commentDebounceTimer) clearTimeout(commentDebounceTimer);
@@ -3741,10 +3924,22 @@ ${comments.map((c, i) => {
 
     // Listen for route changes (SPA)
     let lastUrl = location.href;
+    let lastTweetIdentity = getTweetIdentity();
     new MutationObserver(() => {
         const url = location.href;
         if (url !== lastUrl) {
             lastUrl = url;
+
+            // 同一条推文内切子视图（/photo/N、/likes、/retweets、/quotes）不算换页：
+            // 背后的详情页 DOM 没变，走全量重置会把已隐藏的评论重新显示出来，
+            // 且因 blockOutcome 已记账，两条流水线都会跳过，不会再补隐藏。
+            // 这里只重跑一次隐藏兜底，把模态框新挂上来的 article 也一并处理。
+            const identity = getTweetIdentity();
+            if (identity && identity === lastTweetIdentity) {
+                reapplyBlockedHiding();
+                return;
+            }
+            lastTweetIdentity = identity;
             // Preserve toolbar position before removing (to avoid jumping between pages with different viewport sizes)
             const oldToolbar = document.getElementById('x-toolkit-toolbar');
             if (oldToolbar) {
