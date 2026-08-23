@@ -521,26 +521,20 @@
         const text = document.createElement('span');
         text.style.cssText = 'flex: 1; font-size: 13px; color: #374151;';
 
-        // 显示维度标签
-        let dimensionLabel = '';
-        if (pattern.source === 'displayName') {
-            dimensionLabel = currentLang === 'zh' ? '昵称' : 'Name';
-        } else if (pattern.source === 'commentText') {
-            // 聚类学来的规则走归一化匹配（能穿透插字变形），标注出来便于分辨：
-            // 它的文本是剥掉空格/emoji/@mention 后的形态，看起来会和原评论不完全一样
-            dimensionLabel = pattern.normalized
-                ? (currentLang === 'zh' ? '评论·归一' : 'Comment·norm')
-                : (currentLang === 'zh' ? '评论' : 'Comment');
+        // 规则不再分昵称/评论维度（统一对两者各匹配一次），这里只标注归一化匹配：
+        // 聚类学来的规则文本是剥掉空格/emoji/@mention 后的形态，看起来会和原评论
+        // 不完全一样，不标出来容易被当成学错了
+        const tags = [];
+        if (pattern.normalized) tags.push(currentLang === 'zh' ? '归一' : 'norm');
+        if (pattern.count) {
+            tags.push(currentLang === 'zh'
+                ? `${pattern.count}次, ${(pattern.ratio * 100).toFixed(0)}%`
+                : `${pattern.count}x, ${(pattern.ratio * 100).toFixed(0)}%`);
         }
 
         text.textContent = `"${pattern.text}"`;
-        if (dimensionLabel) {
-            text.textContent += ` (${dimensionLabel}`;
-        }
-        if (pattern.count) {
-            text.textContent += dimensionLabel ? `, ${pattern.count}次, ${(pattern.ratio * 100).toFixed(0)}%)` : ` (${pattern.count}次, ${(pattern.ratio * 100).toFixed(0)}%)`;
-        } else if (dimensionLabel) {
-            text.textContent += ')';
+        if (tags.length > 0) {
+            text.textContent += ` (${tags.join(', ')})`;
         }
 
         item.appendChild(text);
@@ -605,14 +599,14 @@
             return;
         }
 
+        // key 只用 text：规则不再分维度，存量库里同一句文案的昵称版与评论版会合成一条
         const mergedMap = new Map();
         before.forEach(op => {
             const text = normalizePatternText(op.text);
             if (!text) return;
-            const key = `${text}|${op.source}`;
-            const prev = mergedMap.get(key);
+            const prev = mergedMap.get(text);
             if (!prev || (op.count || 0) > (prev.count || 0)) {
-                mergedMap.set(key, { ...op, text });
+                mergedMap.set(text, stripLegacySource({ ...op, text }));
             }
         });
 
@@ -633,19 +627,18 @@
             : `Tidied: ${before.length} → ${kept.length}, removed ${removed}`);
     }
 
+    // 不再询问匹配维度：一条规则对昵称和评论各试一次，命中任一即算。
+    // 原先要用户在添加时先猜这句文案会出现在昵称还是评论里，猜错了规则就白加。
     function addCustomPattern() {
-        const text = prompt(currentLang === 'zh' ? '请输入要拉黑的关键词（3-8字）：' : 'Enter keyword (3-8 chars):');
+        const text = prompt(currentLang === 'zh'
+            ? '请输入要拉黑的关键词（至少3字，昵称和评论都会匹配）：'
+            : 'Enter keyword (3+ chars, matched against both name and comment):');
         if (!text || text.trim().length < 3) {
             alert(currentLang === 'zh' ? '关键词至少3个字符' : 'At least 3 characters');
             return;
         }
-        const source = confirm(currentLang === 'zh'
-            ? '匹配维度：\n确定 = 昵称匹配\n取消 = 评论匹配'
-            : 'Match dimension:\nOK = displayName\nCancel = comment')
-            ? 'displayName'
-            : 'commentText';
         const patterns = config.get('userCustomPatterns') || [];
-        patterns.push({ text: text.trim(), enabled: true, source });
+        patterns.push({ text: text.trim(), enabled: true });
         config.set('userCustomPatterns', patterns);
         refreshPatternLists();
     }
@@ -654,12 +647,6 @@
         const text = prompt(currentLang === 'zh' ? '修改关键词：' : 'Edit keyword:', pattern.text);
         if (!text || text.trim().length < 3) return;
         pattern.text = text.trim();
-        const source = confirm(currentLang === 'zh'
-            ? '匹配维度：\n确定 = 昵称匹配\n取消 = 评论匹配'
-            : 'Match dimension:\nOK = displayName\nCancel = comment')
-            ? 'displayName'
-            : 'commentText';
-        pattern.source = source;
         const patterns = config.get('userCustomPatterns') || [];
         config.set('userCustomPatterns', patterns);
         refreshPatternLists();
@@ -668,7 +655,7 @@
     function deletePattern(pattern, type) {
         if (!confirm(currentLang === 'zh' ? `确定删除规则「${pattern.text}」？` : `Delete rule "${pattern.text}"?`)) return;
         const key = type === 'learned' ? 'heuristicPatterns' : 'userCustomPatterns';
-        const patterns = (config.get(key) || []).filter(p => p.text !== pattern.text || p.source !== pattern.source);
+        const patterns = (config.get(key) || []).filter(p => p.text !== pattern.text);
         config.set(key, patterns);
         refreshPatternLists();
     }
@@ -1356,7 +1343,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
      *    二者拼接后重叠部分占到窗口一半以上，说明出自同一模板，只留先到的。
      */
     function isRedundantPattern(kept, p) {
-        if (kept.source !== p.source) return false;
+        // 不再按维度分组比较：规则统一对昵称和评论各试一次，
+        // 同一句文案从两个维度学到时本就该合成一条
         if (kept.text === p.text) return true;
 
         // 情况 1：kept 是 p 的子串 → p 永远匹配不到 kept 抓不到的文本
@@ -1375,6 +1363,18 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         }
 
         return false;
+    }
+
+    /**
+     * 摘掉存量规则上遗留的 source 字段。
+     *
+     * 规则曾按 displayName / commentText 分维度存储，现已统一为"对昵称和评论各匹配一次"。
+     * 老字段留着不会影响匹配（matchHeuristicPattern 不再读它），但会让存储里堆着一个
+     * 永远不被使用的键，也容易误导后续维护者以为维度还生效。
+     */
+    function stripLegacySource(pattern) {
+        const { source, ...rest } = pattern;
+        return rest;
     }
 
     /**
@@ -1409,7 +1409,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
      * 从拉黑历史中提取常见子串/单词模式
      * @param {string[]} texts - 文本列表
      * @param {Object} options - 配置选项
-     * @returns {Array<{text: string, count: number, ratio: number, source: string}>}
+     * @returns {Array<{text: string, count: number, ratio: number}>}
      */
     function extractCommonSubstrings(texts, options = {}) {
         const {
@@ -1417,7 +1417,6 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             maxLen = 8,
             minRatio = 0.15,
             minCount = 5,
-            source = 'displayName',
             stopWords = []
         } = options;
 
@@ -1491,7 +1490,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 // 导致脏规则在合并时躲过包含判定。
                 const cleaned = normalizePatternText(sub);
                 if (cleaned) {
-                    patterns.push({ text: cleaned, count, ratio, source });
+                    patterns.push({ text: cleaned, count, ratio });
                 }
             }
         }
@@ -1526,26 +1525,25 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     }
 
     /**
-     * 判断一条启发式规则是否命中某条评论，返回命中的维度名（未命中返回 null）。
+     * 判断一条启发式规则是否命中，命中返回 true。
      *
-     * 前置过滤与学习后的回扫追杀原本各写一遍 includes 判断，聚类规则引入 normalized
-     * 标记后两处都要改，漏一处就是静默失效，故收敛到这里。
+     * 规则不再区分昵称/评论维度：同一句垃圾文案既可能出现在昵称里也可能出现在评论里，
+     * 分维度存储只是让同一份文本在库里存两遍，还得靠用户在添加时猜该选哪个维度。
+     * 现在一条规则对昵称和评论各试一次，命中任一即算。
      *
      * normalized 规则的匹配对象是归一化文本：它由聚类在归一化文本上求得，直接比对原文
      * 永远匹配不上（原文夹着被归一化剥掉的随机 ASCII / emoji）。这也正是它的长处——
      * 能穿透垃圾团伙的插字变形。
      */
     function matchHeuristicPattern(pattern, displayName, commentText) {
-        if (!pattern || !pattern.text) return null;
+        if (!pattern || !pattern.text) return false;
 
-        if (pattern.source === 'displayName') {
-            return displayName && displayName.includes(pattern.text) ? '昵称' : null;
+        for (const raw of [displayName, commentText]) {
+            if (!raw) continue;
+            const haystack = pattern.normalized ? normalizeForSimilarity(raw) : raw;
+            if (haystack.includes(pattern.text)) return true;
         }
-        if (pattern.source === 'commentText' && commentText) {
-            const haystack = pattern.normalized ? normalizeForSimilarity(commentText) : commentText;
-            if (haystack.includes(pattern.text)) return pattern.normalized ? '评论·归一' : '评论';
-        }
-        return null;
+        return false;
     }
 
     /**
@@ -1580,8 +1578,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
      * 贪心聚类，成员数 ≥ CLUSTER_MIN_SIZE 的组取最长公共子串成规则。
      *
      * @param {Array<{commentText: string}>} history
-     * @param {Array<{text: string, source: string}>} existingPatterns 已有规则，用于跳过重复
-     * @returns {Array<{text: string, count: number, ratio: number, source: string}>}
+     * @param {Array<{text: string}>} existingPatterns 已有规则，用于跳过重复
+     * @returns {Array<{text: string, count: number, ratio: number, normalized: boolean}>}
      */
     function learnFromSimilarClusters(history, existingPatterns = []) {
         // 只取够长的评论：短文本（"来了""第一"）撞车概率高，聚出来的规则会误伤
@@ -1609,10 +1607,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             if (!placed) clusters.push([item]);
         }
 
-        // 已有规则先转成规范化形式，用于判断某个簇是否已被覆盖
-        const covered = existingPatterns
-            .filter(p => p && p.text && p.source !== 'displayName')
-            .map(p => p.text);
+        // 已有规则的文本，用于判断某个簇是否已被覆盖
+        const covered = existingPatterns.filter(p => p && p.text).map(p => p.text);
 
         const total = history.length;
         const found = [];
@@ -1633,8 +1629,7 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
                 text,
                 count: cluster.length,
                 ratio: cluster.length / total,
-                source: 'commentText',
-                // 标记该规则须对归一化文本匹配，见前置规则里的 normalized 分支
+                // 标记该规则须对归一化文本匹配，见 matchHeuristicPattern
                 normalized: true
             });
             console.log(`🎓 聚类发现新规则「${text}」（${cluster.length} 条相似历史评论，归一化匹配）`);
@@ -1674,25 +1669,23 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
         const allStopWords = [...commentStopWords, ...englishStopWords];
 
-        // 从昵称学习（5-8字，≥20%）
+        // 昵称与评论仍分开提取——两者的文本特征不同，阈值也不同（昵称短、重复度高，
+        // 占比门槛可以更严）。但产出的规则不带维度标记：匹配时对昵称和评论各试一次。
         const displayNames = history.map(h => h.displayName).filter(n => n);
         const displayNamePatterns = extractCommonSubstrings(displayNames, {
             minLen: 5,
             maxLen: 8,
             minRatio: 0.20,
             minCount: 5,
-            source: 'displayName',
             stopWords: allStopWords
         });
 
-        // 从评论学习（5-10字，≥10%，过滤停用词）-- 降低阈值让小批次垃圾也能被学到
         const commentTexts = history.map(h => h.commentText).filter(t => t);
         const commentPatterns = extractCommonSubstrings(commentTexts, {
             minLen: 5,
             maxLen: 10,
             minRatio: 0.10,  // 从 0.15 降至 0.10：100 条里出现 10 次即可
             minCount: 5,
-            source: 'commentText',
             stopWords: allStopWords
         });
 
@@ -1715,40 +1708,37 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         // 先添加所有旧规则。存量规则要过一遍 normalizePatternText：库里躺着在 @mention
         // 清理完善前学到的脏数据（带 @ 尾巴、纯账号名），不规范化就没法被包含判定吃掉。
         // 规范化后可能与其他规则撞车，取 count 更大的那条。
+        // key 只用 text：规则不再分维度，同一句文案从昵称和评论两条路学到时自然合成一条
         oldPatterns.forEach(op => {
             const text = normalizePatternText(op.text);
             if (!text) return; // 清理后无价值，直接淘汰
-            const key = `${text}|${op.source}`;
-            const prev = mergedMap.get(key);
+            const prev = mergedMap.get(text);
             if (!prev || (op.count || 0) > (prev.count || 0)) {
-                mergedMap.set(key, { ...op, text });
+                mergedMap.set(text, stripLegacySource({ ...op, text }));
             }
         });
 
         // 再添加或更新新规则
         newPatterns.forEach(np => {
-            const key = `${np.text}|${np.source}`;
-            const existing = mergedMap.get(key);
+            const existing = mergedMap.get(np.text);
             if (existing) {
                 // 更新已存在规则的统计数据，保留用户的启用/禁用状态。
                 // normalized 必须一并透传：丢了它，聚类规则会退化成拿归一化子串比对原文，
                 // 永远匹配不上（原文里夹着被归一化剥掉的随机 ASCII / emoji）。
-                mergedMap.set(key, {
+                mergedMap.set(np.text, {
                     text: np.text,
-                    count: np.count,
-                    ratio: np.ratio,
-                    source: np.source,
+                    count: Math.max(np.count || 0, existing.count || 0),
+                    ratio: Math.max(np.ratio || 0, existing.ratio || 0),
                     normalized: np.normalized || existing.normalized,
                     enabled: existing.enabled,
                     createdAt: existing.createdAt
                 });
             } else {
                 // 添加新规则
-                mergedMap.set(key, {
+                mergedMap.set(np.text, {
                     text: np.text,
                     count: np.count,
                     ratio: np.ratio,
-                    source: np.source,
                     normalized: np.normalized,
                     enabled: true, // 默认启用
                     createdAt: Date.now()
@@ -3630,10 +3620,9 @@ ${comments.map((c, i) => {
                 // 检查启发式规则（昵称 + 评论）
                 if (!matched && heuristicPatterns.length > 0) {
                     for (const pattern of heuristicPatterns) {
-                        const dimension = matchHeuristicPattern(pattern, c.displayName, c.text);
-                        if (dimension) {
+                        if (matchHeuristicPattern(pattern, c.displayName, c.text)) {
                             preFilterBlacklist.push(c.username);
-                            const source = pattern.count ? `启发式·${dimension}·${(pattern.ratio * 100).toFixed(0)}%` : '手动添加';
+                            const source = pattern.count ? `启发式·${(pattern.ratio * 100).toFixed(0)}%` : '手动添加';
                             preFilterReason.set(c.username, `启发式规则「${pattern.text}」`);
                             console.log(`🎯 前置命中（启发式规则「${pattern.text}」，${source}）@${c.username}（${c.displayName}）`);
                             recordBlockHistory(c.username, c.displayName, c.text); // ✅ 记录学习（包含评论）
