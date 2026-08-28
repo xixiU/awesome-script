@@ -57,14 +57,16 @@
 
 ## 更新记录
 
-### v2.1.6 (2026-08-28)
-- 🐛 修复: 部分自研播放器网站加减速快捷键只能生效一次、按多次不变。根因是站点会在外部修改 playbackRate 后强制拉回内部记录值；新增 setPlaybackRate 守卫，在 video 实例上锁定期望速率，抵御站点拉回。
-- 🐛 修复: 部分网站上加速快捷键不响应。原因是站点在捕获阶段拦截了键盘事件，仅捕获阶段监听会被绕过；新增冒泡阶段监听作为兜底，双重保险。
-- 🐛 修复: YouTube 等站点加速后，视频实际按新速率播放但倍速菜单仍显示"正常"/未同步。根因是这类播放器的菜单文案取自内部状态，而不是 video.playbackRate；新增站点 UI 同步器：
+### v2.1.7 (2026-08-28)
+- 🐛 修复: 部分网站上加速快捷键不响应。根因是站点在捕获阶段拦截了键盘事件，仅捕获阶段监听会被绕过；新增冒泡阶段监听作为兜底，双重保险。
+- 🐛 修复: YouTube 等站点加速后，视频实际按新速率播放但倍速菜单仍显示"正常"/未同步。根因是这类播放器的菜单文案取自内部状态而非 video.playbackRate；新增站点 UI 同步器：
   - YouTube: 调用 `movie_player.setPlaybackRate` 更新内部状态（受官方档位限制，超过 2 倍时菜单显示 2，但实际速率仍由 guard 锁定为期望值）
-  - 通用兜底: 探测 `window.__PLAYER__ / PLAYER / player`、`video._player / player / __player` 等常见播放器实例，尝试其 setPlaybackRate/playbackRate API，覆盖腾讯、B 站、xgplayer/dplayer/artplayer 等常见播放器
+  - 通用兜底: 探测 `window.__PLAYER__ / PLAYER / player`、`video._player / player / __player` 等常见播放器实例，尝试其 setPlaybackRate/playbackRate API，覆盖腾讯、B 站、xgplayer/dplayer/artplayer 等常见 H5 播放器
   - 事件兜底: 额外派发一次 `ratechange` 事件，应对通过事件驱动 UI 更新且 stopPropagation 了原生派发的场景
-- 📦 油猴脚本与 Chrome 扩展版本同步。
+- 📦 油猴脚本与 Chrome 扩展版本同步升级至 2.1.7。
+
+### v2.1.6 (2026-07-18)
+- 🐛 修复: 部分网站（如自研播放器）加减速快捷键只能生效一次、按多次不变的问题。根因是这类播放器会在外部修改 playbackRate 后强制拉回内部记录值；新增 setPlaybackRate 守卫，在 video 实例上锁定期望速率，抵御站点拉回。油猴与扩展版同步适配。
 
 ### v2.1.5 (2026-07-11)
 - ✨ 新增: 反失焦暂停——去除部分网站在鼠标移出窗口/切换标签时自动暂停视频的限制（伪装页面始终可见 + 拦截 visibilitychange/blur/pagehide 等失焦事件监听）
