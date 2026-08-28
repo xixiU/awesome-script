@@ -662,6 +662,20 @@ const inRange = (n, min, max) => Math.max(min, n) == Math.min(n, max);
 // - 站点写入的任何其它值都会被改回期望值
 // 期望值本身仍走原生 setter 生效，且触发 ratechange 让站点 UI 同步。
 const RATE_DESC = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
+// 站点自定义 UI 同步器：某些播放器（如 YouTube）的速度菜单显示的是内部状态，
+// 直接改 video.playbackRate 只能改实际速率但不能同步 UI。这里在设速后调用站点适配，
+// 让菜单文案与实际速率保持一致（受站点 API 支持的档位限制，超出档位会显示上限值）。
+const siteRateUISync = (video, rate) => {
+    try {
+        const main = getMainDomain(location.host);
+        if (main === 'youtube') {
+            // YouTube API 支持 setPlaybackRate；官方档位为 0.25~2，超出时 UI 会 clamp 到 2，
+            // 但会更新内部状态，菜单不再显示"正常"。
+            const yp = d.getElementById('movie_player') || q('#movie_player');
+            if (yp && typeof yp.setPlaybackRate === 'function') yp.setPlaybackRate(rate);
+        }
+    } catch (e) { /* 静默失败，不影响主流程 */ }
+};
 const setPlaybackRate = (video, rate) => {
     rate = +rate.toFixed(2);
     if (!video) return;
@@ -685,6 +699,8 @@ const setPlaybackRate = (video, rate) => {
     video._gmDesiredRate = rate;
     if (RATE_DESC && RATE_DESC.set) RATE_DESC.set.call(video, rate);
     else video.playbackRate = rate;
+    // 同步站点自身 UI（YouTube 等）
+    siteRateUISync(video, rate);
 };
 
 const adjustRate = n => {

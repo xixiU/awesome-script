@@ -71,6 +71,17 @@
     // 导致"倍速只能按一次、按多次不变"。这里在 video 实例上安装守卫 getter/setter：
     // 脚本设定的期望值记录在 _gmDesiredRate，站点写入的其它值都会被改回期望值。
     const RATE_DESC = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
+    // 站点自定义 UI 同步器：某些播放器（如 YouTube）的速度菜单显示的是内部状态，
+    // 直接改 video.playbackRate 只能改实际速率但不能同步 UI。这里在设速后调用站点适配，
+    // 让菜单文案与实际速率保持一致（受站点 API 支持的档位限制，超出档位会显示上限值）。
+    function siteRateUISync(video, rate) {
+        try {
+            if (u === 'youtube') {
+                const yp = d.getElementById('movie_player') || q('#movie_player');
+                if (yp && typeof yp.setPlaybackRate === 'function') yp.setPlaybackRate(rate);
+            }
+        } catch (e) { /* 静默失败，不影响主流程 */ }
+    }
     function setPlaybackRate(video, rate) {
         if (!video) return;
         rate = +rate.toFixed(2);
@@ -92,6 +103,8 @@
         video._gmDesiredRate = rate;
         if (RATE_DESC && RATE_DESC.set) RATE_DESC.set.call(video, rate);
         else video.playbackRate = rate;
+        // 同步站点自身 UI（YouTube 等）
+        siteRateUISync(video, rate);
     }
 
     // 配置对象
