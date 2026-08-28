@@ -665,15 +665,35 @@ const RATE_DESC = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'p
 // 站点自定义 UI 同步器：某些播放器（如 YouTube）的速度菜单显示的是内部状态，
 // 直接改 video.playbackRate 只能改实际速率但不能同步 UI。这里在设速后调用站点适配，
 // 让菜单文案与实际速率保持一致（受站点 API 支持的档位限制，超出档位会显示上限值）。
+// 通用：尝试调用播放器实例上的速率 API，成功返回 true
+const _callPlayerAPI = (inst, rate) => {
+    if (!inst) return false;
+    try {
+        if (typeof inst.setPlaybackRate === 'function') { inst.setPlaybackRate(rate); return true; }
+        // xgplayer 等用 playbackRate 属性；有的播放器只有 getter，写入静默失败即可
+        if ('playbackRate' in inst) { inst.playbackRate = rate; return true; }
+    } catch (e) { /* ignore */ }
+    return false;
+};
 const siteRateUISync = (video, rate) => {
     try {
         const main = getMainDomain(location.host);
+        // 1. 站点专属 API 优先
         if (main === 'youtube') {
-            // YouTube API 支持 setPlaybackRate；官方档位为 0.25~2，超出时 UI 会 clamp 到 2，
-            // 但会更新内部状态，菜单不再显示"正常"。
             const yp = d.getElementById('movie_player') || q('#movie_player');
-            if (yp && typeof yp.setPlaybackRate === 'function') yp.setPlaybackRate(rate);
+            if (_callPlayerAPI(yp, rate)) return;
         }
+        // 2. 常见 window 全局播放器实例（腾讯 __PLAYER__、B 站 player、部分自研播放器 PLAYER 等）
+        if (_callPlayerAPI(w.__PLAYER__, rate)) return;
+        if (_callPlayerAPI(w.PLAYER, rate)) return;
+        if (_callPlayerAPI(w.player, rate)) return;
+        // 3. 通用兜底：探测挂在 video 元素上的 player 实例（xgplayer/dplayer/artplayer 常见）
+        if (_callPlayerAPI(video._player, rate)) return;
+        if (_callPlayerAPI(video.player, rate)) return;
+        if (_callPlayerAPI(video.__player, rate)) return;
+        // 4. 兜底派发 ratechange：应对通过事件驱动 UI 更新的播放器（xgplayer/dplayer 等）
+        // 原生 setter 已派发一次，此处补一次以覆盖被 stopPropagation 拦截的场景
+        video.dispatchEvent(new Event('ratechange'));
     } catch (e) { /* 静默失败，不影响主流程 */ }
 };
 const setPlaybackRate = (video, rate) => {

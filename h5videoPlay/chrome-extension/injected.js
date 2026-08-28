@@ -74,12 +74,32 @@
     // 站点自定义 UI 同步器：某些播放器（如 YouTube）的速度菜单显示的是内部状态，
     // 直接改 video.playbackRate 只能改实际速率但不能同步 UI。这里在设速后调用站点适配，
     // 让菜单文案与实际速率保持一致（受站点 API 支持的档位限制，超出档位会显示上限值）。
+    function _callPlayerAPI(inst, rate) {
+        if (!inst) return false;
+        try {
+            if (typeof inst.setPlaybackRate === 'function') { inst.setPlaybackRate(rate); return true; }
+            if ('playbackRate' in inst) { inst.playbackRate = rate; return true; }
+        } catch (e) { /* ignore */ }
+        return false;
+    }
     function siteRateUISync(video, rate) {
         try {
+            // 1. 站点专属 API 优先
             if (u === 'youtube') {
                 const yp = d.getElementById('movie_player') || q('#movie_player');
-                if (yp && typeof yp.setPlaybackRate === 'function') yp.setPlaybackRate(rate);
+                if (_callPlayerAPI(yp, rate)) return;
             }
+            // 2. 常见 window 全局播放器实例（腾讯 __PLAYER__、B 站 player 等）
+            const w = window;
+            if (_callPlayerAPI(w.__PLAYER__, rate)) return;
+            if (_callPlayerAPI(w.PLAYER, rate)) return;
+            if (_callPlayerAPI(w.player, rate)) return;
+            // 3. 通用兜底：探测挂在 video 元素上的 player 实例（xgplayer/dplayer/artplayer）
+            if (_callPlayerAPI(video._player, rate)) return;
+            if (_callPlayerAPI(video.player, rate)) return;
+            if (_callPlayerAPI(video.__player, rate)) return;
+            // 4. 兜底派发 ratechange：应对通过事件驱动 UI 更新的播放器
+            video.dispatchEvent(new Event('ratechange'));
         } catch (e) { /* 静默失败，不影响主流程 */ }
     }
     function setPlaybackRate(video, rate) {
