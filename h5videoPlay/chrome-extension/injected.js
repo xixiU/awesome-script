@@ -118,6 +118,7 @@
                         RATE_DESC.set.call(this, target);
                     }
                 });
+                installRateChangeBlocker(video);
             } catch (e) { /* ignore，退回普通赋值 */ }
         }
         video._gmDesiredRate = rate;
@@ -125,6 +126,22 @@
         else video.playbackRate = rate;
         // 同步站点自身 UI（YouTube 等）
         siteRateUISync(video, rate);
+    }
+
+    // 拦截 ratechange 钳制：部分播放器只接受离散档位（如 {0.5,1,1.5,2}，上限 2.0），
+    // 会在自己的 ratechange 处理里把"非法"速率（脚本 +0.1 步进产生的 1.1/1.6/2.1 等）
+    // 打回最近的合法档位，表现为"按键有反应但速率被立刻拉回、无法真正倍速"。
+    // 修复：捕获阶段监听 ratechange，当实际速率已等于期望值时 stopImmediatePropagation，
+    // 阻止站点的钳制回调执行，从而支持任意倍速。
+    function installRateChangeBlocker(video) {
+        if (video._gmRateBlocker) return;
+        Object.defineProperty(video, '_gmRateBlocker', { value: true, writable: false, enumerable: false });
+        video.addEventListener('ratechange', function (e) {
+            const desired = this._gmDesiredRate;
+            if (desired == null || desired === 1) return; // 常速交还站点自主控制
+            const cur = RATE_DESC && RATE_DESC.get ? RATE_DESC.get.call(this) : this.playbackRate;
+            if (Math.abs(cur - desired) < 0.01) e.stopImmediatePropagation();
+        }, true);
     }
 
     // 配置对象

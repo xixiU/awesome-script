@@ -6,7 +6,7 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.1.7
+// @version    2.1.8
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -714,6 +714,7 @@ const setPlaybackRate = (video, rate) => {
                     RATE_DESC.set.call(this, target);
                 }
             });
+            installRateChangeBlocker(video);
         } catch (e) { /* ignore，退回普通赋值 */ }
     }
     video._gmDesiredRate = rate;
@@ -721,6 +722,23 @@ const setPlaybackRate = (video, rate) => {
     else video.playbackRate = rate;
     // 同步站点自身 UI（YouTube 等）
     siteRateUISync(video, rate);
+};
+
+// 拦截 ratechange 钳制：部分播放器只接受离散档位（如 {0.5,1,1.5,2}，上限 2.0），
+// 会在自己的 ratechange 处理里把"非法"速率（脚本 +0.1 步进产生的 1.1/1.6/2.1 等）
+// 打回最近的合法档位，表现为"按 C/X 有反应但速率被立刻拉回、无法真正倍速"。
+// 修复：在捕获阶段监听 ratechange，当实际速率已等于脚本期望值时调用
+// stopImmediatePropagation，阻止站点的钳制回调执行，从而支持任意倍速。
+const installRateChangeBlocker = video => {
+    if (video._gmRateBlocker) return;
+    Object.defineProperty(video, '_gmRateBlocker', { value: true, writable: false, enumerable: false });
+    video.addEventListener('ratechange', function (e) {
+        const desired = this._gmDesiredRate;
+        if (desired == null || desired === 1) return; // 常速交还站点自主控制
+        const cur = RATE_DESC && RATE_DESC.get ? RATE_DESC.get.call(this) : this.playbackRate;
+        // 实际速率已是期望值 => 这是脚本设速引发的事件，拦截站点后续钳制处理
+        if (Math.abs(cur - desired) < 0.01) e.stopImmediatePropagation();
+    }, true);
 };
 
 const adjustRate = n => {
