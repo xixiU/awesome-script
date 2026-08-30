@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Dify网页智能总结
 // @namespace    http://tampermonkey.net/
-// @version      1.6.0
+// @version      1.6.1
 // @description  使用统一配置管理的多模型AI智能总结网页内容，支持OpenAI/Anthropic/Ollama/Chrome Gemini/Dify，支持全文总结和选中文本总结
 // @author       xixiu
 // @match        *://*/*
@@ -1488,9 +1488,147 @@
         }
     }
 
+    // ==================== Reddit 帖子适配器 ====================
+    // Reddit 在帖子 URL 后加 .json 即返回「帖子 + 完整评论树」的 JSON，
+    // 嵌套回复直接内联在 replies 字段里，一次请求即可拿到大样本，无需逐条翻页。
+    //   接口: https://www.reddit.com/r/{sub}/comments/{id}/{slug}.json?limit=500&sort=top
+    // 同源 fetch 自动带 cookie，未登录也可读。
+    class RedditAdapter extends SiteAdapter {
+        constructor() {
+            super();
+            this.FETCH_LIMIT = 500;        // 单次请求评论上限（含嵌套）
+            this.MAX_BODY_LEN = 2000;      // 单条评论/正文送 AI 的长度上限
+        }
+
+        get name() { return 'Reddit'; }
+        get promptType() { return 'discussion'; }
+
+        // 命中帖子详情页：reddit.com/r/{sub}/comments/{id}/...
+        match(loc) {
+            return /(^|\.)reddit\.com$/.test(loc.hostname) &&
+                /^\/r\/[^/]+\/comments\/[^/]+/.test(loc.pathname);
+        }
+
+        // 同源 GET JSON
+        async fetchJSON(url) {
+            const r = await fetch(url, {
+                headers: { 'Accept': 'application/json' },
+                credentials: 'include'
+            });
+            if (!r.ok) throw new Error(`Reddit 接口 ${r.status}: ${url}`);
+            return r.json();
+        }
+
+        // 解码 HTML 实体（Reddit 的 body/selftext 是转义过的 markdown 源码）
+        decodeEntities(str) {
+            if (!str) return '';
+            const ta = document.createElement('textarea');
+            ta.innerHTML = str;
+            return ta.value;
+        }
+
+        // 递归解析评论树，保留层级
+        parseComments(children) {
+            const out = [];
+            for (const c of (children || [])) {
+                if (c.kind !== 't1') continue; // 跳过 'more'（折叠的未加载评论）
+                const d = c.data;
+                const node = {
+                    author: d.author || '[已删除]',
+                    score: typeof d.score === 'number' ? d.score : 0,
+                    body: this.decodeEntities((d.body || '').trim()),
+                    depth: d.depth || 0,
+                    children: []
+                };
+                if (d.replies && d.replies.data && Array.isArray(d.replies.data.children)) {
+                    node.children = this.parseComments(d.replies.data.children);
+                }
+                if (node.body) out.push(node);
+            }
+            return out;
+        }
+
+        // 递归统计评论总数
+        countComments(nodes) {
+            let n = 0;
+            for (const c of nodes) { n += 1 + this.countComments(c.children); }
+            return n;
+        }
+
+        async extract(onProgress = () => { }) {
+            const base = window.location.origin + window.location.pathname.replace(/\/$/, '');
+            const url = `${base}.json?limit=${this.FETCH_LIMIT}&sort=top`;
+
+            onProgress('正在抓取 Reddit 帖子与评论...');
+            const data = await this.fetchJSON(url);
+            if (!Array.isArray(data) || data.length < 2) throw new Error('Reddit 返回格式异常');
+
+            const post = data[0] && data[0].data && data[0].data.children[0] && data[0].data.children[0].data;
+            if (!post) throw new Error('未解析到帖子内容');
+
+            // 顶层评论按得分从高到低
+            const rawComments = (data[1].data.children || []);
+            const comments = this.parseComments(rawComments);
+            comments.sort((a, b) => b.score - a.score);
+            const capturedComments = this.countComments(comments);
+
+            onProgress(`数据抓取完成，评论 ${capturedComments} 条`);
+
+            if (capturedComments === 0 && !(post.selftext || '').trim()) {
+                throw new Error('未抓取到评论或正文');
+            }
+
+            return {
+                title: this.decodeEntities(post.title || document.title),
+                subreddit: post.subreddit || '',
+                author: post.author || '[已删除]',
+                score: post.score || 0,
+                upvoteRatio: typeof post.upvote_ratio === 'number' ? post.upvote_ratio : null,
+                numComments: post.num_comments || 0,
+                postText: this.decodeEntities((post.selftext || '').trim()),
+                linkUrl: post.url_overridden_by_dest || '',
+                capturedComments,
+                url: window.location.href,
+                comments
+            };
+        }
+
+        // 拼成带得分标注的文本，缩进表示回复层级
+        formatForLLM(data) {
+            const lines = [];
+            lines.push(`Reddit 讨论：${data.title}`);
+            const meta = [`版块 r/${data.subreddit}`, `发帖人 u/${data.author}`, `帖子得分 ${data.score}`];
+            if (data.upvoteRatio !== null) meta.push(`赞同率 ${Math.round(data.upvoteRatio * 100)}%`);
+            meta.push(`评论总数 ${data.numComments}`);
+            lines.push(`（${meta.join(' | ')}）`);
+            if (data.linkUrl) lines.push(`外部链接：${data.linkUrl}`);
+            if (data.postText) {
+                lines.push('');
+                lines.push('帖子正文：');
+                lines.push(data.postText.slice(0, this.MAX_BODY_LEN));
+            }
+            lines.push('');
+            lines.push(`（本次抓取 ${data.capturedComments} 条评论，按得分从高到低排列，缩进表示回复层级，得分即净赞同数，是定量分析的关键依据）`);
+            lines.push('');
+            lines.push('【评论】');
+
+            const walk = (nodes, indent) => {
+                for (const c of nodes) {
+                    const pad = '  '.repeat(indent);
+                    const body = c.body.length > this.MAX_BODY_LEN ? c.body.slice(0, this.MAX_BODY_LEN) + '...' : c.body;
+                    lines.push(`${pad}[得分${c.score}] u/${c.author}：${body.replace(/\n+/g, ' ')}`);
+                    if (c.children.length) walk(c.children, indent + 1);
+                }
+            };
+            walk(data.comments, 0);
+            return lines.join('\n');
+        }
+    }
+
     // 全局注册表实例（各适配器定义后 register 进来）
     const siteAdapterRegistry = new SiteAdapterRegistry();
     siteAdapterRegistry.register(new ZhihuQAAdapter());
+    siteAdapterRegistry.register(new RedditAdapter());
 
     // ==================== 统一的AI调用接口 ====================
     class UnifiedAPI {
@@ -1513,7 +1651,7 @@
 
             // 构建总结提示词（含AI生成概率检测）
             // promptType='discussion' 用于知乎问答等多方讨论型内容，输出定性+定量分析
-            const articlePrompt = `你是一个专业的内容总结助手，同时具备AI生成内容识别能力。
+            const articlePrompt = `你是一个专业的内容总结与分析助手，尤其擅长资讯、财经、时政、深度报道类内容，同时具备AI生成内容识别能力。
 每次回复必须严格按以下格式输出，第一行为AI生成概率分数，第二行为分隔线，之后为总结正文：
 AI_SCORE: [0-100的整数]
 ---
@@ -1521,15 +1659,20 @@ AI_SCORE: [0-100的整数]
 
 AI_SCORE说明：100表示确定是AI生成，0表示确定是人工写作，判断依据包括结构工整度、用词正式程度、个人情感表达、AI惯用表达等。
 
-总结正文要求：
-1. 提取核心观点和关键信息
-2. 使用清晰的结构组织内容
-3. 保持客观准确
-4. 无论原文使用何种语言，都使用中文总结
-5. 输出markdown格式的内容
-6. 基于文章观点，在单独章节给出相关的建议或者预测
-7. 如涉及人物、事件等给出必要的背景信息，以及信源来源；
-8. 最后要有阅读原文跳转链接`;
+核心原则（非常重要）：
+- 你的目标是让读者「不读原文也能掌握原文的核心信息」，而不是把原文压成一两句空话。资讯/财经类内容过度精简等于没总结。
+- 详略由信息密度决定：信息密集的报道要充分展开，把关键事实、数据、结论讲清楚；水分多的内容才可以短。绝不遗漏核心事实、关键数字、重要引述和最终结果。
+- 只基于原文，不编造。原文没有的数据或结论不要杜撰；原文明确的事实要如实保留。
+
+总结正文按以下结构输出（使用中文、markdown 格式；没有对应内容的小节可省略）：
+1. **一句话结论**：用一句话点明这篇内容最核心的事实/观点/结论。
+2. **关键要点**：用 3-8 条列出核心事实与信息，务必保留具体的数字、金额、时间、比例、涉事主体、关键引述等硬信息，不要用「有所增长」「表示关注」这类模糊说法替代具体数据。
+3. **事件经过 / 脉络**（如为事件类资讯）：按时间或逻辑顺序梳理起因、经过、结果，交代清楚 who / what / when / where / why / how。
+4. **多方立场 / 争议**（如存在不同声音）：分别概括各方观点及依据。
+5. **分析与研判**：基于原文进行针对性输出——资讯类给出事件影响与后续可能走向的预测；财经类给出对相关行业/公司/资产的影响、风险提示与值得关注的信号；并在合理范围内给出对读者的建议或指导。此部分需明确区分「原文事实」与「你的推断」。
+6. **背景信息**：涉及的人物、机构、事件、专有名词给出必要背景与信源来源，方便读者理解。
+7. 无论原文使用何种语言，一律用中文总结。
+8. 最后附上阅读原文的跳转链接。`;
 
             const discussionPrompt = `你是一个专业的舆论分析助手，擅长对多方讨论进行定性与定量分析。
 每次回复必须严格按以下格式输出，第一行为AI生成概率分数，第二行为分隔线，之后为分析正文：
@@ -1573,7 +1716,7 @@ ${newsContent}`;
                     prompt: userPrompt,
                     system: finalSystemPrompt,
                     temperature: 0.7,
-                    maxTokens: 4096
+                    maxTokens: 8192
                 });
 
                 return result;
@@ -2364,6 +2507,9 @@ ${newsContent}`;
                 if (extractedData && extractedData.capturedAnswers !== undefined) {
                     // 知乎问答等有结构化数据的适配器,显示详细统计
                     onProgress(`数据抓取完成，回答 ${extractedData.capturedAnswers} 个 / 评论 ${extractedData.capturedComments} 条，AI 分析中...`);
+                } else if (extractedData && extractedData.capturedComments !== undefined) {
+                    // Reddit 等仅有评论的适配器
+                    onProgress(`数据抓取完成，评论 ${extractedData.capturedComments} 条，AI 分析中...`);
                 } else {
                     onProgress('数据抓取完成，AI 分析中...');
                 }
@@ -2520,6 +2666,8 @@ ${newsContent}`;
                 titleElement.textContent = '📝 AI总结结果（选中文本）';
             } else if (this.currentSummaryMode === 'adapter' && this.currentAdapterName === 'ZhihuQA') {
                 titleElement.textContent = '📝 知乎问答分析（多方观点）';
+            } else if (this.currentSummaryMode === 'adapter' && this.currentAdapterName === 'Reddit') {
+                titleElement.textContent = '📝 Reddit 讨论分析（多方观点）';
             } else if (this.currentSummaryMode === 'adapter') {
                 titleElement.textContent = '📝 AI总结结果（站点适配）';
             } else {
@@ -2635,6 +2783,8 @@ ${newsContent}`;
             // 如果是知乎问答,在 AI 总结下方追加结构化原始数据
             if (this.currentAdapterName === 'ZhihuQA' && this.lastExtractedData) {
                 this.renderZhihuRawData(contentDiv, this.lastExtractedData);
+            } else if (this.currentAdapterName === 'Reddit' && this.lastExtractedData) {
+                this.renderRedditRawData(contentDiv, this.lastExtractedData);
             }
 
             // 重置滚动位置到顶部，确保内容完整显示
@@ -2766,6 +2916,75 @@ ${newsContent}`;
 
             rawDataSection.appendChild(dataContainer);
             container.appendChild(rawDataSection);
+        }
+
+        // 渲染 Reddit 讨论的结构化原始数据
+        renderRedditRawData(container, data) {
+            const rawDataSection = document.createElement('details');
+            rawDataSection.style.cssText = 'margin-top:24px;border-top:2px solid #e5e7eb;padding-top:16px;';
+
+            const summary = document.createElement('summary');
+            summary.style.cssText = 'cursor:pointer;font-weight:600;font-size:15px;color:#374151;margin-bottom:12px;user-select:none;';
+            summary.textContent = `📊 原始数据 (${data.capturedComments} 条评论)`;
+            rawDataSection.appendChild(summary);
+
+            const dataContainer = document.createElement('div');
+            dataContainer.style.cssText = 'font-size:13px;line-height:1.6;';
+
+            // 帖子信息
+            const postBox = document.createElement('div');
+            postBox.style.cssText = 'background:#f9fafb;border-radius:8px;padding:12px;margin-bottom:16px;';
+            const ratioText = data.upvoteRatio !== null ? ` · 赞同率 ${Math.round(data.upvoteRatio * 100)}%` : '';
+            const linkHtml = data.linkUrl
+                ? `<div style="margin-top:6px;"><a href="${data.linkUrl}" target="_blank" style="color:#3b82f6;font-size:12px;word-break:break-all;">🔗 ${data.linkUrl}</a></div>`
+                : '';
+            const postTextHtml = data.postText
+                ? `<div style="color:#374151;font-size:12px;margin-top:8px;white-space:pre-wrap;max-height:160px;overflow-y:auto;">${this.escapeHtml(data.postText.slice(0, 1000))}${data.postText.length > 1000 ? '...' : ''}</div>`
+                : '';
+            postBox.innerHTML = `
+                <div style="font-weight:600;color:#1f2937;margin-bottom:4px;">${this.escapeHtml(data.title)}</div>
+                <div style="color:#9ca3af;font-size:11px;">r/${this.escapeHtml(data.subreddit)} · u/${this.escapeHtml(data.author)} · 👍 ${data.score}${ratioText} · 💬 ${data.numComments}</div>
+                ${linkHtml}
+                ${postTextHtml}
+            `;
+            dataContainer.appendChild(postBox);
+
+            // 评论树容器
+            const commentsWrap = document.createElement('div');
+            data.comments.forEach(c => commentsWrap.appendChild(this.buildRedditCommentNode(c)));
+            dataContainer.appendChild(commentsWrap);
+
+            rawDataSection.appendChild(dataContainer);
+            container.appendChild(rawDataSection);
+        }
+
+        // 递归构建 Reddit 评论节点（缩进表示层级）
+        buildRedditCommentNode(c, depth = 0) {
+            const wrap = document.createElement('div');
+            const leftBorder = depth > 0 ? 'border-left:2px solid #e5e7eb;padding-left:10px;margin-left:6px;' : '';
+            wrap.style.cssText = `margin-top:8px;${leftBorder}`;
+
+            const item = document.createElement('div');
+            item.style.cssText = 'font-size:12px;';
+            item.innerHTML = `
+                <div style="color:#6b7280;margin-bottom:2px;">
+                    <span style="color:#3b82f6;font-weight:500;">u/${this.escapeHtml(c.author)}</span>
+                    <span style="color:#9ca3af;font-size:11px;margin-left:6px;">👍 ${c.score}</span>
+                </div>
+                <div style="color:#374151;white-space:pre-wrap;">${this.escapeHtml(c.body.slice(0, 500))}${c.body.length > 500 ? '...' : ''}</div>
+            `;
+            wrap.appendChild(item);
+
+            // 子评论递归
+            c.children.forEach(child => wrap.appendChild(this.buildRedditCommentNode(child, depth + 1)));
+            return wrap;
+        }
+
+        // HTML 转义，防止评论内容破坏结构
+        escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str == null ? '' : String(str);
+            return div.innerHTML;
         }
 
         showErrorPanel(errorMessage) {
