@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Dify网页智能总结
+// @name         网页智能总结
 // @namespace    http://tampermonkey.net/
 // @version      1.6.1
 // @description  使用统一配置管理的多模型AI智能总结网页内容，支持OpenAI/Anthropic/Ollama/Chrome Gemini/Dify，支持全文总结和选中文本总结
