@@ -6,7 +6,7 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.1.8
+// @version    2.1.9
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -654,6 +654,26 @@ const getMainDomain = host => {
     return a[i];
 };
 const inRange = (n, min, max) => Math.max(min, n) == Math.min(n, max);
+
+// 判定 GIF 动图：部分平台把 GIF 用无声 <video> 实现，它不是用户认知里的
+// “视频”，不应被选为倍速/快进等快捷键的操作目标（否则在只有 GIF 的页面按
+// C/X 也会弹速度提示、偷改 GIF 速率）。多重特征叠加，降低误判真正短视频的风险：
+//   1) URL 走平台 GIF 专属路径（tweet_video 等）——最强信号，单独命中即算
+//   2) 通用启发式：无音轨 + 极短时长(<10s) + 无原生 controls + (loop 或 autoplay)
+const _hasAudioTrack = el => {
+    if (el.mozHasAudio) return true;
+    if (el.webkitAudioDecodedByteCount > 0) return true;
+    if (el.audioTracks) return el.audioTracks.length > 0;
+    return true; // 拿不到信息时保守当作“有音轨”，避免误伤
+};
+const isGifVideo = el => {
+    if (!el || el.tagName !== 'VIDEO') return false;
+    const src = el.currentSrc || el.src || '';
+    if (/tweet_video(_thumb)?\//.test(src)) return true;
+    const dur = el.duration;
+    const shortEnough = dur && isFinite(dur) && dur > 0 && dur < 10;
+    return shortEnough && !_hasAudioTrack(el) && !el.controls && (el.loop || el.autoplay);
+};
 
 // 设置播放速率并锁定，抵御部分站点（如 pornhub）的 ratechange 拉回逻辑。
 // 这些站点会在外部修改 playbackRate 后约 300ms 内把它强制改回内部记录值，
@@ -1319,7 +1339,8 @@ const app = {
         // 支持视频和音频元素
         this.vList = d.getElementsByTagName('video');
         this.aList = d.getElementsByTagName('audio');
-        const fn = e => cfg.cssMV ? e.matches(cfg.cssMV) : e.offsetWidth > 9;
+        // 排除 GIF 动图（无声 <video> 实现的 GIF），避免其被选为快捷键操作目标
+        const fn = e => (cfg.cssMV ? e.matches(cfg.cssMV) : e.offsetWidth > 9) && !isGifVideo(e);
         const fnAudio = e => e.offsetWidth > 1; // 音频元素检测
         this.findMV = find.bind(this.vList, fn);
         this.findAudio = find.bind(this.aList, fnAudio);

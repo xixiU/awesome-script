@@ -643,20 +643,59 @@
     }
 
     // ===== 查找视频或音频 =====
+    // 只接受“真正可用”的媒体元素，避免把页面里隐藏的埋点/广告/预加载
+    // <video>/<audio>（0 尺寸、无 src）误当成播放目标——那会导致在没有实际
+    // 播放元素的页面上按 C/X 也能改到一个不可见元素的 playbackRate 并弹提示。
+    // 判定“正在被用户使用”的兜底：有有效 src 且已开始播放（未暂停或 currentTime>0）。
+    const isUsableMedia = el => {
+        if (!el) return false;
+        if (el.offsetWidth > 9 || el.offsetHeight > 9) return true; // 可见即可用
+        const hasSrc = !!(el.currentSrc || el.src || el.querySelector('source[src]'));
+        return hasSrc && (!el.paused || el.currentTime > 0); // 不可见但确实在播放
+    };
+
+    // 判定 GIF 动图：很多平台（如 Twitter/X）把 GIF 用无声 <video> 实现，
+    // 它不是用户认知里的“视频”，不应响应倍速/快进等快捷键。
+    // 多重特征叠加，降低把真正短视频误判的风险：
+    //   1) URL 走平台 GIF 专属路径（tweet_video 等）——最强信号，单独命中即算
+    //   2) 通用启发式：无音轨 + 极短时长(<10s) + 无原生 controls + (loop 或 autoplay)
+    const hasAudioTrack = el => {
+        // 各浏览器暴露方式不同，任一为真即认为有音轨；都拿不到则保守当作“有”
+        if (el.mozHasAudio) return true;
+        if (el.webkitAudioDecodedByteCount > 0) return true;
+        if (el.audioTracks) return el.audioTracks.length > 0;
+        return true;
+    };
+    const isGifVideo = el => {
+        if (!el || el.tagName !== 'VIDEO') return false;
+        const src = el.currentSrc || el.src || '';
+        if (/tweet_video(_thumb)?\//.test(src)) return true; // 平台 GIF 专属路径
+        const dur = el.duration;
+        const shortEnough = dur && isFinite(dur) && dur > 0 && dur < 10;
+        return shortEnough && !hasAudioTrack(el) && !el.controls && (el.loop || el.autoplay);
+    };
+
     function findVideo() {
-        // 优先查找视频
+        // 优先查找可见视频（排除 GIF 动图）
         const videos = d.getElementsByTagName('video');
         for (const el of videos) {
-            if (el.offsetWidth > 9) return el;
+            if (el.offsetWidth > 9 && !isGifVideo(el)) return el;
         }
-        if (videos[0]) return videos[0];
+        // 其次：不可见但确实在播放的视频（如画中画、纯音频播放的 video）
+        for (const el of videos) {
+            if (isUsableMedia(el) && !isGifVideo(el)) return el;
+        }
 
-        // 如果没找到视频,查找音频
+        // 没有可用视频再找音频
         const audios = d.getElementsByTagName('audio');
         for (const el of audios) {
             if (el.offsetWidth > 1 || el.offsetHeight > 1) return el;
         }
-        return audios[0] || null;
+        for (const el of audios) {
+            if (isUsableMedia(el)) return el;
+        }
+        // 找不到任何“可用”媒体时返回 null——绝不盲目返回第一个隐藏/GIF 元素
+        return null;
     }
 
     // ===== ShadowRoot hook =====
