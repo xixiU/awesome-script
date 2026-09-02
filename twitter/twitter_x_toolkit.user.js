@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.5.0
+// @version      2.5.0.lasted
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -2334,6 +2334,7 @@ ${comments.map((c, i) => {
     // 这样用户调整窗口大小、切换屏幕都不会让工具栏跑到中间
     const TOOLBAR_BTN_SIZE = 40;
     const TOOLBAR_DEFAULT_MARGIN = 20;
+    const TOOLBAR_ESTIMATED_HEIGHT = 200; // 工具栏展开后的预估总高度（含多个按钮+间隙）
 
     // 一次性清理旧版（v2.4.3 及之前）的绝对像素位置 key，避免遗留坐标污染新逻辑
     if (GM_getValue('toolbar_position_x', null) !== null || GM_getValue('toolbar_position_y', null) !== null) {
@@ -2359,9 +2360,9 @@ ${comments.map((c, i) => {
         if (anchorY === 'bottom') y = h - btn - dy;
         else if (anchorY === 'center') y = (h - btn) / 2 + dy;
         else y = dy;
-        // 视口边界保护
+        // 视口边界保护（工具栏展开后高度约 TOOLBAR_ESTIMATED_HEIGHT）
         x = Math.max(0, Math.min(x, Math.max(0, w - btn)));
-        y = Math.max(0, Math.min(y, Math.max(0, h - btn)));
+        y = Math.max(0, Math.min(y, Math.max(0, h - TOOLBAR_ESTIMATED_HEIGHT)));
         return { x, y };
     }
 
