@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.5.0.lasted
+// @version      2.5.1
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -30,6 +30,29 @@
     let blockedUsers = [];
     let failedUsers = [];
     let isSummarizing = false;
+
+    // 统计数据（持久化存储）
+    const STATS_KEY = 'blockStatistics';
+    function getStats() {
+        const defaults = { totalBlocked: 0, totalScanned: 0, lastUpdated: Date.now() };
+        try {
+            const raw = GM_getValue(STATS_KEY, null);
+            return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
+        } catch (_) {
+            return defaults;
+        }
+    }
+    function updateStats(blockedDelta = 0, scannedDelta = 0) {
+        const stats = getStats();
+        stats.totalBlocked += blockedDelta;
+        stats.totalScanned += scannedDelta;
+        stats.lastUpdated = Date.now();
+        try {
+            GM_setValue(STATS_KEY, JSON.stringify(stats));
+        } catch (e) {
+            console.error('统计数据保存失败:', e);
+        }
+    }
 
     // AI 过滤相关状态
     let blockedUsersSet = new Set(); // 已拉黑的用户名集合（用于自动隐藏新加载的评论）
@@ -351,9 +374,10 @@
                 const historyInfo = document.createElement('div');
                 historyInfo.style.cssText = 'font-size: 12px; color: #6b7280; margin-bottom: 12px;';
                 const history = config.get('blockHistory') || [];
-                historyInfo.textContent = currentLang === 'zh'
-                    ? `已拉黑 ${history.length} 条历史记录`
-                    : `${history.length} blocked records`;
+                const stats = getStats();
+                historyInfo.innerHTML = currentLang === 'zh'
+                    ? `📊 统计：累计拉黑 <strong style="color:#ef4444">${stats.totalBlocked}</strong> 人，扫描 <strong style="color:#3b82f6">${stats.totalScanned}</strong> 条评论<br>📚 学习历史：${history.length} 条记录`
+                    : `📊 Stats: <strong style="color:#ef4444">${stats.totalBlocked}</strong> blocked, <strong style="color:#3b82f6">${stats.totalScanned}</strong> scanned<br>📚 History: ${history.length} records`;
                 section.appendChild(historyInfo);
 
                 // 自动发现的规则
@@ -433,6 +457,19 @@
                 tidyBtn.style.cssText = 'padding: 6px 12px; background: #8b5cf6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;';
                 tidyBtn.onclick = () => tidyHeuristicPatterns();
                 btnRow.appendChild(tidyBtn);
+
+                const resetStatsBtn = document.createElement('button');
+                resetStatsBtn.textContent = currentLang === 'zh' ? '📊 重置统计' : '📊 Reset Stats';
+                resetStatsBtn.style.cssText = 'padding: 6px 12px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;';
+                resetStatsBtn.onclick = () => {
+                    if (confirm(currentLang === 'zh' ? '确定要重置所有统计数据吗？' : 'Reset all statistics?')) {
+                        updateStats(-getStats().totalBlocked, -getStats().totalScanned);
+                        alert(currentLang === 'zh' ? '统计数据已重置' : 'Statistics reset');
+                        // 刷新配置面板以显示更新后的统计
+                        config.show();
+                    }
+                };
+                btnRow.appendChild(resetStatsBtn);
 
                 section.appendChild(btnRow);
 
@@ -1046,12 +1083,13 @@
 ${content.comments.slice(0, 100).map((c, i) => `${i + 1}. @${c.author}: ${c.text}`).join('\n')}
 
 请总结：
-1. 原推文的核心观点
-2. 评论的主要反馈和观点分布
-3. 讨论的热点话题
-4. 整体舆论倾向
+1. **评论统计**：总评论数 ${content.comments.length} 条
+2. 原推文的核心观点
+3. 评论的主要反馈和观点分布
+4. 讨论的热点话题
+5. 整体舆论倾向
 
-请使用markdown格式输出，包含清晰的结构。`;
+请使用markdown格式输出，包含清晰的结构，并在开头明确标注评论总数。`;
         } else if (content.type === 'user_tweets') {
             prompt = `请对以下用户的推文进行智能总结：
 
@@ -1060,12 +1098,13 @@ ${content.comments.slice(0, 100).map((c, i) => `${i + 1}. @${c.author}: ${c.text
 ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
 请总结：
-1. 该用户的主要关注话题
-2. 发言风格和态度特点
-3. 核心观点和立场
-4. 最近的活跃主题
+1. **推文统计**：总推文数 ${content.tweets.length} 条
+2. 该用户的主要关注话题
+3. 发言风格和态度特点
+4. 核心观点和立场
+5. 最近的活跃主题
 
-请使用markdown格式输出，包含清晰的结构。`;
+请使用markdown格式输出，包含清晰的结构，并在开头明确标注推文总数。`;
         }
 
         return config.callLLM({ prompt, temperature: 0.7, maxTokens: 16384 });
@@ -1227,13 +1266,14 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
 
     // 学习触发门槛：攒够这么多条新拉黑记录就学一次。
     // 原为 20，实测偏高——一次刷推文常只拉 2~5 人，要连刷好几条推文才够一轮，
-    // 期间新出现的垃圾模板一直进不了规则库。降到 10 让规则跟得上垃圾文案的变化。
-    const LEARN_TRIGGER_COUNT = 10;
+    // 期间新出现的垃圾模板一直进不了规则库。降到 5 让规则跟得上垃圾文案的变化，
+    // 更快形成有效防护。
+    const LEARN_TRIGGER_COUNT = 5;
 
     // 相似聚类成规则的门槛：历史里有这么多条高度相似的评论，就认为是同一模板。
     // 子串统计那条路要求同一子串出现 ≥5 次且占比达标，覆盖不到"整句雷同但用词
-    // 位置飘忽"的低频模板；聚类从另一个角度补上，3 条即可成规则。
-    const CLUSTER_MIN_SIZE = 3;
+    // 位置飘忽"的低频模板；聚类从另一个角度补上，降至 2 条即可成规则（更敏感）。
+    const CLUSTER_MIN_SIZE = 2;
 
     // 聚类专用的最小长度，比实时判黑用的 SIMILARITY_MIN_LENGTH(10) 更宽松。
     // 理由：规则 5/6 拿单条评论当场定黑，短文本撞车代价是误杀，必须保守；
@@ -1415,8 +1455,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const {
             minLen = 5,
             maxLen = 8,
-            minRatio = 0.15,
-            minCount = 5,
+            minRatio = 0.08,  // 从 0.15 降至 0.08：100 条里出现 8 次即可，更敏感
+            minCount = 3,      // 从 5 降至 3：降低绝对次数门槛
             stopWords = []
         } = options;
 
@@ -1675,8 +1715,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const displayNamePatterns = extractCommonSubstrings(displayNames, {
             minLen: 5,
             maxLen: 8,
-            minRatio: 0.20,
-            minCount: 5,
+            minRatio: 0.12,  // 从 0.20 降至 0.12：昵称模板也适当放宽
+            minCount: 3,     // 从 5 降至 3
             stopWords: allStopWords
         });
 
@@ -1684,8 +1724,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const commentPatterns = extractCommonSubstrings(commentTexts, {
             minLen: 5,
             maxLen: 10,
-            minRatio: 0.10,  // 从 0.15 降至 0.10：100 条里出现 10 次即可
-            minCount: 5,
+            minRatio: 0.06,  // 从 0.10 降至 0.06：100 条里出现 6 次即可，更智能
+            minCount: 3,     // 从 5 降至 3
             stopWords: allStopWords
         });
 
@@ -3256,9 +3296,17 @@ ${comments.map((c, i) => {
         const task = (async () => {
             const apiResult = await blockUserByAPI(username, commentText);
             if (apiResult === 'skipped') return 'skipped';
-            if (apiResult === true) return 'blocked';
+            if (apiResult === true) {
+                updateStats(1, 0); // 成功拉黑，统计+1
+                return 'blocked';
+            }
             // API 真失败（网络/限流/结构变更）才降级 UI 点击兜底
-            return (await blockUserByUI(username, true, commentText)) ? 'blocked' : 'failed';
+            const uiResult = await blockUserByUI(username, true, commentText);
+            if (uiResult) {
+                updateStats(1, 0); // 成功拉黑，统计+1
+                return 'blocked';
+            }
+            return 'failed';
         })();
 
         blockInFlight.set(username, task);
@@ -3572,6 +3620,9 @@ ${comments.map((c, i) => {
                 aiFilterInProgress = false;
                 return;
             }
+
+            // 统计扫描的评论数
+            updateStats(0, allComments.length);
 
             // 前置规则检测：
             //   规则 1 broken-word：英文单词被符号/emoji 硬拆开 >= WORD_SPLIT_THRESHOLD 次
@@ -3982,6 +4033,7 @@ ${comments.map((c, i) => {
         // i18n 文本自带 emoji，不再传 icon 以免重复
         config.registerMenuCommand('buttonText', handleBlockAllCommenters);
         config.registerMenuCommand('aiFilterButtonText', handleManualAIFilter);
+        config.registerMenuCommand('summarizeButtonText', handleAISummarize);
     }
 
     // Initialize
