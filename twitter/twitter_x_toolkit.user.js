@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.5.1
+// @version      2.5.2
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -65,6 +65,7 @@
     const blockInFlight = new Map(); // username -> Promise，压制同名并发重复请求
     let commentObserver = null; // MutationObserver 实例
     let commentDebounceTimer = null; // watchForNewComments 内 debounce 计时器（模块级以便路由切换时清理）
+    let reapplyDebounceTimer = null; // reapplyBlockedHiding 的防抖计时器
 
     // Internationalization (i18n) text dictionary
     const i18n = {
@@ -3912,15 +3913,24 @@ ${comments.map((c, i) => {
             clearTimeout(commentDebounceTimer);
             commentDebounceTimer = null;
         }
+        if (reapplyDebounceTimer) {
+            clearTimeout(reapplyDebounceTimer);
+            reapplyDebounceTimer = null;
+        }
 
         commentObserver = new MutationObserver(() => {
             // 只在推文详情页运行，避免在时间线误触发
             if (!isOnTweetDetailPage()) return;
 
-            // 立即检查新评论是否是已拉黑用户，如果是则立即隐藏。
-            // 与子视图切换共用同一实现，判定依据都是 blockOutcome ∪ blockedUsersSet，
-            // 避免这里只查 blockedUsersSet 而漏掉另一条流水线拉黑的人。
-            reapplyBlockedHiding();
+            // 对 reapplyBlockedHiding 也添加防抖，避免在图文页面因频繁的 DOM 变化
+            // （图片懒加载、媒体播放器渲染等）导致每秒执行几十次 querySelectorAll
+            if (reapplyDebounceTimer) clearTimeout(reapplyDebounceTimer);
+            reapplyDebounceTimer = setTimeout(() => {
+                reapplyDebounceTimer = null;
+                if (isOnTweetDetailPage()) {
+                    reapplyBlockedHiding();
+                }
+            }, 100);
 
             // 延迟执行 AI 过滤，避免频繁触发
             if (commentDebounceTimer) clearTimeout(commentDebounceTimer);
@@ -3932,7 +3942,13 @@ ${comments.map((c, i) => {
             }, 300);
         });
 
-        commentObserver.observe(document.body, {
+        // 优化监听范围：只监听主内容区，而不是整个 body
+        // 图文页面的图片加载、媒体播放器等变化主要在 article 内部
+        // 缩小监听范围可以减少无关 DOM 变化的触发次数
+        const primaryColumn = document.querySelector('[data-testid="primaryColumn"]');
+        const targetNode = primaryColumn || document.body;
+
+        commentObserver.observe(targetNode, {
             childList: true,
             subtree: true
         });
@@ -4147,6 +4163,10 @@ ${comments.map((c, i) => {
             if (commentDebounceTimer) {
                 clearTimeout(commentDebounceTimer);
                 commentDebounceTimer = null;
+            }
+            if (reapplyDebounceTimer) {
+                clearTimeout(reapplyDebounceTimer);
+                reapplyDebounceTimer = null;
             }
             // 清空已拉黑用户集合，避免时间线推文被误隐藏
             blockedUsersSet = new Set();
