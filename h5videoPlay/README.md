@@ -57,6 +57,11 @@
 
 ## 更新记录
 
+### v2.2.2 (2026-09-06)
+- ✨ 优化: Chrome 扩展 popup 面板默认倍速设置改用滑块（slider）UI
+  - 可拖动滑块设置 0.25x ~ 4x 倍速，实时显示当前值
+  - 渐变背景显示进度，交互更直观美观
+
 ### v2.2.1 (2026-09-06)
 - 🐛 修复: Chrome 扩展在启用 Trusted Types 安全策略的网站（如 Google）上报错 "Failed to set the 'innerHTML' property"
   - 倍速控制 UI 创建改用 DOM API 替代 `innerHTML`，兼容严格的内容安全策略
