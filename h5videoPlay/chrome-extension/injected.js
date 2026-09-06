@@ -972,35 +972,56 @@
         `;
         d.head.appendChild(style);
 
-        // 创建UI
+        // 创建UI（使用 DOM API 避免 TrustedHTML 限制）
         speedPanel = d.createElement('div');
         speedPanel.id = 'h5-speed-ui';
-        speedPanel.innerHTML = `
-            <div class="h5-sp-hd">
-                <span class="h5-sp-tit">播放速度</span>
-                <span class="h5-sp-val">1.0x</span>
-            </div>
-            <div class="h5-sp-sl">
-                <div class="h5-sp-pg" style="width:20%">
-                    <div class="h5-sp-th"></div>
-                </div>
-            </div>
-            <div class="h5-sp-ps">
-                <button class="h5-sp-pb" data-speed="0.5">0.5x</button>
-                <button class="h5-sp-pb" data-speed="0.75">0.75x</button>
-                <button class="h5-sp-pb active" data-speed="1">1.0x</button>
-                <button class="h5-sp-pb" data-speed="1.25">1.25x</button>
-                <button class="h5-sp-pb" data-speed="1.5">1.5x</button>
-                <button class="h5-sp-pb" data-speed="2">2.0x</button>
-            </div>
-            <div class="h5-sp-tip">拖动滑块或点击预设 | Q显示/隐藏 | E键±0.1</div>
-        `;
-        d.body.appendChild(speedPanel);
 
-        speedSlider = speedPanel.querySelector('.h5-sp-sl');
-        speedValue = speedPanel.querySelector('.h5-sp-val');
-        const progress = speedPanel.querySelector('.h5-sp-pg');
-        const thumb = speedPanel.querySelector('.h5-sp-th');
+        // 头部
+        const header = d.createElement('div');
+        header.className = 'h5-sp-hd';
+        const title = d.createElement('span');
+        title.className = 'h5-sp-tit';
+        title.textContent = '播放速度';
+        speedValue = d.createElement('span');
+        speedValue.className = 'h5-sp-val';
+        speedValue.textContent = '1.0x';
+        header.appendChild(title);
+        header.appendChild(speedValue);
+
+        // 滑块
+        speedSlider = d.createElement('div');
+        speedSlider.className = 'h5-sp-sl';
+        const progress = d.createElement('div');
+        progress.className = 'h5-sp-pg';
+        progress.style.width = '20%';
+        const thumb = d.createElement('div');
+        thumb.className = 'h5-sp-th';
+        progress.appendChild(thumb);
+        speedSlider.appendChild(progress);
+
+        // 预设按钮
+        const presets = d.createElement('div');
+        presets.className = 'h5-sp-ps';
+        const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+        speeds.forEach(speed => {
+            const btn = d.createElement('button');
+            btn.className = 'h5-sp-pb';
+            if (speed === 1) btn.classList.add('active');
+            btn.dataset.speed = speed;
+            btn.textContent = speed + 'x';
+            presets.appendChild(btn);
+        });
+
+        // 提示
+        const tip = d.createElement('div');
+        tip.className = 'h5-sp-tip';
+        tip.textContent = '拖动滑块或点击预设 | Q显示/隐藏 | E键±0.1';
+
+        speedPanel.appendChild(header);
+        speedPanel.appendChild(speedSlider);
+        speedPanel.appendChild(presets);
+        speedPanel.appendChild(tip);
+        d.body.appendChild(speedPanel);
 
         // 设置速度
         function setSpeed(s) {

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 视频实时字幕翻译服务
-使用 faster-whisper 进行语音识别，支持多语言翻译
+使用 ModelManager 统一管理语音识别模型（支持 MLX Whisper / faster-whisper），支持多语言翻译
 """
 
 import os
@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 
-from faster_whisper import WhisperModel
+from stt_service import STTService
 from deep_translator import GoogleTranslator
 import numpy as np
 
@@ -42,40 +42,36 @@ app.add_middleware(
 )
 
 # 全局变量
-whisper_model: Optional[WhisperModel] = None
+stt_service: Optional[STTService] = None
 translator_cache: Dict[str, GoogleTranslator] = {}
 
 
 class SubtitleService:
     """字幕服务类"""
-    
-    def __init__(self, model_size: str = "distil-large-v3"):
+
+    def __init__(self, config_file: str = "model_config.json"):
         """
         初始化字幕服务
-        
+
         Args:
-            model_size: Whisper模型大小 (tiny, base, small, medium, large)
+            config_file: 模型配置文件路径
         """
-        self.model_size = model_size
-        self.model = None
+        self.config_file = config_file
+        self.stt_service = None
         self.temp_dir = tempfile.gettempdir()
-        
+
     def initialize(self):
-        """初始化 Whisper 模型"""
+        """初始化 STT 服务（使用 ModelManager 加载配置的模型）"""
         try:
-            logger.info(f"正在加载 Whisper 模型: {self.model_size}")
-            # device="auto" 自动选择 CPU/GPU；compute_type="int8" 在 CPU 上更快且省内存，
-            # 同时避免 float16 在不支持的设备上被回退时的告警。
-            self.model = WhisperModel(
-                self.model_size,
-                device="auto",
-                compute_type="int8"
-            )
-            logger.info("Whisper 模型加载成功")
+            logger.info(f"正在初始化 STT 服务，配置文件: {self.config_file}")
+            self.stt_service = STTService(self.config_file)
+            if not self.stt_service.initialize():
+                raise RuntimeError("STT 服务初始化失败")
+            logger.info("STT 服务初始化成功")
         except Exception as e:
-            logger.error(f"模型加载失败: {e}")
+            logger.error(f"STT 服务初始化失败: {e}")
             raise
-    
+
     async def transcribe_audio(
         self,
         audio_file_path: str,
@@ -83,47 +79,60 @@ class SubtitleService:
     ) -> List[Dict]:
         """
         转录音频文件
-        
+
         Args:
             audio_file_path: 音频文件路径
             language: 源语言代码（如 en, zh, ja 等）
-            
+
         Returns:
             字幕列表，每个字幕包含开始时间、结束时间和文本
         """
         try:
-            if not self.model:
-                raise RuntimeError("Whisper 模型未初始化")
-            
+            if not self.stt_service:
+                raise RuntimeError("STT 服务未初始化")
+
             logger.info(f"开始转录音频: {audio_file_path}")
-            
-            # 使用 faster-whisper 进行转录
-            segments, info = self.model.transcribe(
-                audio_file_path,
-                language=language,
-                beam_size=5,
-                vad_filter=True,  # 使用 VAD 过滤
-                vad_parameters=dict(
-                    min_silence_duration_ms=500,
-                    speech_pad_ms=400
-                )
+
+            # 使用 STTService 进行转录（在事件循环中运行同步方法）
+            loop = asyncio.get_event_loop()
+
+            # 读取音频文件
+            import soundfile as sf
+            audio_data, sample_rate = await loop.run_in_executor(
+                None, sf.read, audio_file_path
             )
-            
-            logger.info(f"检测到语言: {info.language} (概率: {info.language_probability:.2f})")
-            
-            # 转换为字幕格式
-            subtitles = []
-            for segment in segments:
-                subtitles.append({
-                    "start": segment.start,
-                    "end": segment.end,
-                    "text": segment.text.strip(),
-                    "language": info.language
-                })
-            
+
+            # STTService.transcribe 需要 numpy array 和采样率
+            if audio_data.ndim > 1:  # 多声道转单声道
+                audio_data = audio_data.mean(axis=1)
+
+            # 调用 STTService
+            result_text, detected_lang = await loop.run_in_executor(
+                None,
+                self.stt_service.transcribe,
+                audio_data.astype(np.float32),
+                sample_rate,
+                language
+            )
+
+            if not result_text:
+                logger.warning("转录结果为空")
+                return []
+
+            logger.info(f"检测到语言: {detected_lang}, 转录文本长度: {len(result_text)}")
+
+            # STTService 返回的是完整文本，这里简单封装为单个字幕段
+            # （如需时间戳分段，需扩展 STTService 接口或使用模型的 word_timestamps 特性）
+            subtitles = [{
+                "start": 0.0,
+                "end": len(audio_data) / sample_rate,
+                "text": result_text.strip(),
+                "language": detected_lang
+            }]
+
             logger.info(f"转录完成，共 {len(subtitles)} 个字幕片段")
             return subtitles
-            
+
         except Exception as e:
             logger.error(f"转录失败: {e}")
             raise
@@ -214,7 +223,7 @@ class SubtitleService:
 # large-v3-turbo（后者层数少+贪心解码，常几乎转写不出内容）。故采用 distil-large-v3。
 # 说明：distil-large-v3 官方标注英语优化，但保留多语言 tokenizer，实测俄语等也可用。
 # 备选：deepdml/faster-whisper-large-v3-turbo-ct2 / large-v3（多语言，但本场景实测更差）。
-subtitle_service = SubtitleService(model_size="distil-large-v3")
+subtitle_service = SubtitleService(config_file="model_config.json")
 
 
 @app.on_event("startup")

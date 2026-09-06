@@ -57,6 +57,14 @@
 
 ## 更新记录
 
+### v2.2.1 (2026-09-06)
+- 🐛 修复: Chrome 扩展在启用 Trusted Types 安全策略的网站（如 Google）上报错 "Failed to set the 'innerHTML' property"
+  - 倍速控制 UI 创建改用 DOM API 替代 `innerHTML`，兼容严格的内容安全策略
+- 🔧 重构: subtitle_backend/server.py 改用 ModelManager 统一管理语音识别模型
+  - 现在与 system_audio_subtitle.py 使用相同架构，统一通过 model_config.json 配置模型
+  - 支持 MLX Whisper (Apple Silicon 优化) / faster-whisper / SiliconFlow API 等多种后端
+  - 当前配置默认使用 `mlx-community/whisper-large-v3-turbo`（效果更好）
+
 ### v2.2.0 (2026-09-06)
 - ✨ 新增: **默认播放速度设置**功能
   - 可自定义视频初始播放速度（默认 1.5 倍，范围 0.1 ~ 16）
