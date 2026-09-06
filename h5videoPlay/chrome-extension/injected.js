@@ -446,7 +446,7 @@
         [90, () => {
             if (!v) return;
             setPlaybackRate(v, (v.playbackRate === 1 || v.playbackRate === 0)
-                ? (+localStorage.mvPlayRate || 1.3) : 1);
+                ? (+localStorage.mvPlayRate || +(localStorage.h5video_defaultRate || 1.5)) : 1);
             showTip('速度 ' + v.playbackRate + 'x');
         }],
         [88, () => adjustRate(-0.1)],
@@ -790,9 +790,11 @@
 
         _fp = new FullPage(shell);
 
-        // 记忆播放速度
+        // 记忆播放速度：优先使用记录的倍速，没有记录时使用默认倍速配置（默认 1.5）
         const savedRate = +localStorage.mvPlayRate;
+        const defaultRate = +(localStorage.h5video_defaultRate || 1.5);
         if (savedRate && savedRate !== 1) setPlaybackRate(v, savedRate);
+        else if (defaultRate !== 1) setPlaybackRate(v, defaultRate);
         v.addEventListener('ratechange', () => {
             if (v.playbackRate && v.playbackRate !== 1) localStorage.mvPlayRate = v.playbackRate;
         });
@@ -919,6 +921,19 @@
     } else {
         main();
     }
+
+    // ===== 从扩展存储初始化默认倍速到 localStorage =====
+    (async function initDefaultRate() {
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
+                const result = await chrome.storage.sync.get({ defaultPlaybackRate: 1.5 });
+                localStorage.h5video_defaultRate = result.defaultPlaybackRate;
+            }
+        } catch (e) {
+            // 如果拿不到 chrome.storage（某些隔离环境），使用已有的 localStorage 值或默认 1.5
+            if (!localStorage.h5video_defaultRate) localStorage.h5video_defaultRate = 1.5;
+        }
+    })();
 
     // ===== 监听来自 content script 的消息（字幕等）=====
     window.addEventListener('message', (event) => {

@@ -6,7 +6,7 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.1.9
+// @version    2.2.0
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -1050,7 +1050,7 @@ async function toggleSystemAudioSubtitle() {
 const actList = new Map();
 actList.set(90, _ => { //按键Z: 切换加速状态
     if (v.playbackRate == 1 || v.playbackRate == 0) {
-        setPlaybackRate(v, +localStorage.mvPlayRate || 1.3);
+        setPlaybackRate(v, +localStorage.mvPlayRate || videoConfigManager.get('defaultPlaybackRate') || 1.5);
     } else {
         setPlaybackRate(v, 1);
     }
@@ -1171,7 +1171,7 @@ const app = {
                 v = e;
                 cfg.btnPlay = cfg.btnNext = cfg.btnFP = cfg.btnFS = _fs = _fp = null;
                 if (!cfg.isLive && videoConfigManager.get('remberRate')) {
-                    setPlaybackRate(v, +localStorage.mvPlayRate || 1);
+                    setPlaybackRate(v, +localStorage.mvPlayRate || videoConfigManager.get('defaultPlaybackRate') || 1.5);
                     v.addEventListener('ratechange', ev => {
                         if (v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
                     });
@@ -1285,7 +1285,7 @@ const app = {
         window.addEventListener('urlchange', async (info) => { //TM event: info.url
             await sleep(990);
             this.checkMV();
-            if (videoConfigManager.get('remberRate')) setPlaybackRate(v, +localStorage.mvPlayRate || 1);
+            if (videoConfigManager.get('remberRate')) setPlaybackRate(v, +localStorage.mvPlayRate || videoConfigManager.get('defaultPlaybackRate') || 1.5);
             bus.$emit('urlchange');
         });
         if (top != self) {
@@ -1302,7 +1302,7 @@ const app = {
         v.addEventListener('canplay', ev => {
             if (cfg.isLive) for (const k of [37, 1061, 39, 1063, 67, 77, 78, 88, 90]) actList.delete(k);
             else {
-                if (videoConfigManager.get('remberRate')) setPlaybackRate(v, +localStorage.mvPlayRate || 1);
+                if (videoConfigManager.get('remberRate')) setPlaybackRate(v, +localStorage.mvPlayRate || videoConfigManager.get('defaultPlaybackRate') || 1.5);
                 v.addEventListener('ratechange', ev => {
                     if (videoConfigManager.get('remberRate') && v.playbackRate && v.playbackRate != 1) localStorage.mvPlayRate = v.playbackRate;
                 });
@@ -1618,6 +1618,7 @@ Reflect.defineProperty(navigator, 'plugins', {
 // ==================== 配置管理器初始化 ====================
 const videoConfigManager = new ConfigManager('HTML5视频工具', {
     remberRate: true,
+    defaultPlaybackRate: 1.5,  // 默认倍速，当没有记录过倍速时使用
     subtitle_targetLang: 'zh-CN'
 }, {
     lang: curLang,
@@ -1644,6 +1645,9 @@ D：上一帧     G：下一帧(youtube.com用E键)
 3. 在悬浮窗口中可选择目标翻译语言
 4. 支持所有视频网站，直接监听系统音频`,
             'rememberRate': '记忆播放速度',
+            'defaultPlaybackRate': '默认播放速度',
+            'defaultPlaybackRateHelp': '设置视频初始播放速度（1.0 = 正常速度）',
+            'defaultPlaybackRateUpdated': '默认播放速度已更新为',
             'subtitleConfig': '字幕翻译配置',
             'restartSubtitle': '重启字幕服务',
             'serverUrl': '后端服务地址',
@@ -1739,7 +1743,28 @@ Native controls are forced on for all H5 videos so the timeline can be clicked o
         // 2. 记忆播放速度菜单（切换型）
         videoConfigManager.createToggleMenu('rememberRate', 'remberRate', true);
 
-        // 3. 字幕翻译配置菜单（仅配置目标语言）
+        // 3. 默认播放速度设置
+        const defaultRateDialog = videoConfigManager.createSimpleDialog([
+            {
+                key: 'defaultPlaybackRate',
+                labelKey: 'defaultPlaybackRate',
+                type: 'text',
+                help: videoConfigManager.t('defaultPlaybackRateHelp')
+            }
+        ], (updates) => {
+            if (updates.defaultPlaybackRate) {
+                const rate = parseFloat(updates.defaultPlaybackRate);
+                if (rate >= 0.1 && rate <= 16) {
+                    videoConfigManager.set('defaultPlaybackRate', rate);
+                    tip(videoConfigManager.t('defaultPlaybackRateUpdated') + ': ' + rate + 'x');
+                } else {
+                    tip('默认倍速需在 0.1 ~ 16 之间');
+                }
+            }
+        });
+        videoConfigManager.registerMenuCommand('defaultPlaybackRate', defaultRateDialog, '🎬');
+
+        // 4. 字幕翻译配置菜单（仅配置目标语言）
         const subtitleConfigDialog = videoConfigManager.createSimpleDialog([
             {
                 key: 'subtitle_targetLang',
