@@ -203,7 +203,7 @@
             left: 50%;
             transform: translate(-50%, -50%);
             width: 90%;
-            max-width: 800px;
+            max-width: 1000px;
             max-height: 80vh;
             background: white;
             border-radius: 12px;
