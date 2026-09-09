@@ -1450,6 +1450,14 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const latinOnly = cleaned.replace(/[^a-zA-Z]/g, '');
         if (!hasCJK && latinOnly.length > 0 && latinOnly.length < 3) return null;
 
+        // 过滤过于通用的中文短语（常见于正常评论中）
+        const genericPhrases = [
+            '这个', '那个', '一个', '如果', '但是', '所以', '因为', '虽然',
+            '不过', '只是', '还是', '或者', '可以', '应该', '可能', '就是',
+            '非常', '真的', '确实', '感觉', '觉得', '看到', '发现', '知道'
+        ];
+        if (hasCJK && genericPhrases.includes(cleaned)) return null;
+
         return cleaned;
     }
 
@@ -1723,17 +1731,17 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         const displayNamePatterns = extractCommonSubstrings(displayNames, {
             minLen: 5,
             maxLen: 8,
-            minRatio: 0.12,  // 从 0.20 降至 0.12：昵称模板也适当放宽
-            minCount: 3,     // 从 5 降至 3
+            minRatio: 0.15,  // 提高到 15%，避免学到过于通用的词
+            minCount: 4,     // 提高到 4 次
             stopWords: allStopWords
         });
 
         const commentTexts = history.map(h => h.commentText).filter(t => t);
         const commentPatterns = extractCommonSubstrings(commentTexts, {
-            minLen: 5,
+            minLen: 6,       // 从 5 提高到 6，避免过短的子串
             maxLen: 10,
-            minRatio: 0.06,  // 从 0.10 降至 0.06：100 条里出现 6 次即可，更智能
-            minCount: 3,     // 从 5 降至 3
+            minRatio: 0.10,  // 提高到 10%，避免低频噪音
+            minCount: 4,     // 提高到 4 次
             stopWords: allStopWords
         });
 
