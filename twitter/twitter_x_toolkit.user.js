@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.5.3
+// @version      2.6.0
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -23,6 +23,53 @@
 
 (function () {
     'use strict';
+
+    // ==================== LRU 缓存实现 ====================
+
+    /**
+     * LRU (Least Recently Used) 缓存，防止内存无限增长
+     * Map 的迭代顺序是插入顺序，删除+重新插入 = 移到末尾
+     */
+    class LRUCache {
+        constructor(capacity) {
+            this.capacity = capacity;
+            this.cache = new Map();
+        }
+
+        get(key) {
+            if (!this.cache.has(key)) return null;
+            // 移到末尾（最近使用）
+            const value = this.cache.get(key);
+            this.cache.delete(key);
+            this.cache.set(key, value);
+            return value;
+        }
+
+        set(key, value) {
+            if (this.cache.has(key)) {
+                this.cache.delete(key);
+            } else if (this.cache.size >= this.capacity) {
+                // 删除最旧的（第一个）
+                const firstKey = this.cache.keys().next().value;
+                this.cache.delete(firstKey);
+            }
+            this.cache.set(key, value);
+        }
+
+        has(key) {
+            return this.cache.has(key);
+        }
+
+        clear() {
+            this.cache.clear();
+        }
+
+        get size() {
+            return this.cache.size;
+        }
+    }
+
+    // ==================== 全局状态与缓存 ====================
 
     let isBlocking = false;
     let blockedCount = 0;
@@ -61,8 +108,8 @@
     // 而"这个人已经拉黑过了"是账号级事实，跨推文都成立，需要独立的长生命周期记录。
     // 关键词自动拉黑与 AI 过滤是两条并发流水线，各自维护 processed Set 互不知情，
     // 同一用户曾被两条线各拉黑一次（UserByScreenName + blocks/create 各发两遍）。
-    const blockOutcome = new Map();  // username -> 'blocked' | 'skipped'（失败不记，留待重试）
-    const blockInFlight = new Map(); // username -> Promise，压制同名并发重复请求
+    const blockOutcome = new LRUCache(2000);  // username -> 'blocked' | 'skipped'，最多缓存 2000 个
+    const blockInFlight = new LRUCache(500);  // username -> Promise，压制同名并发重复请求，最多 500 个
     let commentObserver = null; // MutationObserver 实例
     let commentDebounceTimer = null; // watchForNewComments 内 debounce 计时器（模块级以便路由切换时清理）
     let reapplyDebounceTimer = null; // reapplyBlockedHiding 的防抖计时器
@@ -1246,8 +1293,8 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     }
 
     // 用户信息缓存：username -> { bio, restId, following }（或 null 表示拉取失败）
-    // 缓存粒度是整个会话，避免同一用户重复请求
-    const userInfoCache = new Map();
+    // 缓存粒度是整个会话，避免同一用户重复请求，使用 LRU 防止内存泄漏
+    const userInfoCache = new LRUCache(500);
 
     // 通过 Twitter 内部 GraphQL 接口后台拉取用户简介
     // 复用 blockUserByAPI 已有的鉴权（bearer + ct0 cookie）
@@ -1426,6 +1473,112 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
      * 合并时统一过一遍这个函数，脏规则才能被正常的包含判定吃掉；
      * 返回 null 表示该规则清理后已无价值，直接丢弃。
      */
+    /**
+     * 智能检测两个文本是否是同一模板的变体
+     * 结合相似度计算和模式识别
+     * @param {string} text1
+     * @param {string} text2
+     * @returns {boolean}
+     */
+    function isSameTemplate(text1, text2) {
+        if (!text1 || !text2) return false;
+        if (text1 === text2) return true;
+
+        // 1. 长度差异过大，不可能是同一模板
+        const lenDiff = Math.abs(text1.length - text2.length);
+        if (lenDiff > 3) return false;
+
+        // 2. 计算字符级编辑距离
+        const editDist = levenshteinDistance(text1, text2);
+
+        // 3. 如果只差1-2个字符，且长度相近，很可能是模板变体
+        if (editDist <= 2 && text1.length >= 6) {
+            // 找出不同的位置
+            const diffs = findDifferences(text1, text2);
+
+            // 只有1-2处不同，且都是单字符替换（人称代词或单字母变量）
+            if (diffs.length <= 2) {
+                return diffs.every(diff => {
+                    // 检查是否是人称代词替换
+                    const pronouns = ['我', '你', '他', '她', '它', '俺', '咱'];
+                    if (pronouns.includes(diff.char1) && pronouns.includes(diff.char2)) {
+                        return true;
+                    }
+                    // 检查是否是单字母变量替换（a-z, A-Z）
+                    if (/^[a-zA-Z]$/.test(diff.char1) && /^[a-zA-Z]$/.test(diff.char2)) {
+                        return true;
+                    }
+                    // 检查是否是单字母与人称代词的替换
+                    if ((/^[a-zA-Z]$/.test(diff.char1) && pronouns.includes(diff.char2)) ||
+                        (/^[a-zA-Z]$/.test(diff.char2) && pronouns.includes(diff.char1))) {
+                        return true;
+                    }
+                    return false;
+                });
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 计算两个字符串的 Levenshtein 编辑距离（优化版）
+     * 空间复杂度从 O(m*n) 优化到 O(n)
+     * 提前终止：长度差异过大直接返回
+     */
+    function levenshteinDistance(str1, str2) {
+        const len1 = str1.length;
+        const len2 = str2.length;
+
+        // 提前终止：长度差异超过 3 不可能是模板变体
+        if (Math.abs(len1 - len2) > 3) return Infinity;
+
+        // 优化：只使用两行，交替使用
+        let prevRow = Array(len2 + 1).fill(0).map((_, i) => i);
+        let currRow = Array(len2 + 1).fill(0);
+
+        for (let i = 1; i <= len1; i++) {
+            currRow[0] = i;
+            for (let j = 1; j <= len2; j++) {
+                if (str1[i - 1] === str2[j - 1]) {
+                    currRow[j] = prevRow[j - 1];
+                } else {
+                    currRow[j] = Math.min(
+                        prevRow[j] + 1,      // 删除
+                        currRow[j - 1] + 1,  // 插入
+                        prevRow[j - 1] + 1   // 替换
+                    );
+                }
+            }
+            // 交换行（避免复制）
+            [prevRow, currRow] = [currRow, prevRow];
+        }
+
+        return prevRow[len2];
+    }
+
+    /**
+     * 找出两个字符串不同的位置和字符
+     */
+    function findDifferences(str1, str2) {
+        const diffs = [];
+        const maxLen = Math.max(str1.length, str2.length);
+
+        for (let i = 0; i < maxLen; i++) {
+            const c1 = str1[i] || '';
+            const c2 = str2[i] || '';
+            if (c1 !== c2) {
+                diffs.push({
+                    pos: i,
+                    char1: c1,
+                    char2: c2
+                });
+            }
+        }
+
+        return diffs;
+    }
+
     function normalizePatternText(text) {
         if (!text) return null;
         let cleaned = String(text).trim().replace(/^[@#\s]+/, '');
@@ -1551,14 +1704,88 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             }
         }
 
-        // 合并清理后重复的模式：text 相同的取 count 最大的
+        // 智能合并模板变体（优化版）：
+        // 1. 按原文去重（完全相同的保留计数最高的）
+        // 2. 检测模板变体（如"应该没人比我/她/他/t玩的开了吧"），合并为一条
+        // 3. 性能优化：按长度分组，只比较长度相近的（±3），避免 O(n²) 全量比较
         const deduped = new Map();
+        const processed = new Set();
+
+        // 按长度分组，减少比较次数
+        const groupedByLength = new Map();
         for (const p of patterns) {
-            const existing = deduped.get(p.text);
-            if (!existing || p.count > existing.count) {
-                deduped.set(p.text, p);
+            const len = p.text.length;
+            if (!groupedByLength.has(len)) {
+                groupedByLength.set(len, []);
+            }
+            groupedByLength.get(len).push(p);
+        }
+
+        // 先按计数降序排序，优先处理高频模式
+        patterns.sort((a, b) => b.count - a.count);
+
+        for (const p of patterns) {
+            if (processed.has(p.text)) continue;
+
+            // 只在长度相近的组内查找（±3）
+            let merged = false;
+            for (let lenOffset = -3; lenOffset <= 3; lenOffset++) {
+                const targetLen = p.text.length + lenOffset;
+                const candidates = groupedByLength.get(targetLen) || [];
+
+                for (const candidate of candidates) {
+                    if (candidate.text === p.text) continue;
+                    if (!deduped.has(candidate.text)) continue;
+
+                    if (isSameTemplate(p.text, candidate.text)) {
+                        // 是同一模板的变体，累加计数
+                        const existingPattern = deduped.get(candidate.text);
+                        existingPattern.count += p.count;
+                        existingPattern.ratio = existingPattern.count / total;
+                        processed.add(p.text);
+                        merged = true;
+                        console.log(`🔗 合并模板变体: "${p.text}" -> "${candidate.text}" (累计: ${existingPattern.count})`);
+                        break;
+                    }
+                }
+
+                if (merged) break;
+            }
+
+            if (!merged) {
+                // 新模板，检查后续是否有变体需要合并到它
+                let totalCount = p.count;
+                const variants = [p.text];
+
+                // 只在长度相近的组内查找变体（±3）
+                for (let lenOffset = -3; lenOffset <= 3; lenOffset++) {
+                    const targetLen = p.text.length + lenOffset;
+                    const candidates = groupedByLength.get(targetLen) || [];
+
+                    for (const p2 of candidates) {
+                        if (p2.text === p.text || processed.has(p2.text)) continue;
+
+                        if (isSameTemplate(p.text, p2.text)) {
+                            totalCount += p2.count;
+                            variants.push(p2.text);
+                            processed.add(p2.text);
+                        }
+                    }
+                }
+
+                deduped.set(p.text, {
+                    text: p.text,
+                    count: totalCount,
+                    ratio: totalCount / total
+                });
+                processed.add(p.text);
+
+                if (variants.length > 1) {
+                    console.log(`🎯 发现模板族: "${p.text}" (${variants.length}个变体, 累计: ${totalCount})`);
+                }
             }
         }
+
         const uniquePatterns = Array.from(deduped.values());
 
         // 去重：丢弃冗余变体，只保留最泛化的那条（判定见 isRedundantPattern）。
