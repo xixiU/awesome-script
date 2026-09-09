@@ -906,6 +906,99 @@
         }
     }
 
+    // ==================== 工具函数集合 ====================
+
+    /**
+     * 统一的 DOM 查询器
+     */
+    const DOMQuery = {
+        // 查询所有推文 article
+        getAllTweets: () => DOMQuery.getAllTweets(),
+
+        // 查询主内容区
+        getPrimaryColumn: () => document.querySelector('[data-testid="primaryColumn"]'),
+
+        // 查询侧边栏
+        getSidebarColumn: () => document.querySelector('[data-testid="sidebarColumn"]'),
+
+        // 从 article 中提取用户名
+        getUsernameFromArticle: (article) => {
+            const userNameArea = article.querySelector('[data-testid="User-Name"]');
+            if (!userNameArea) return null;
+            const link = userNameArea.querySelector('a[role="link"][href^="/"]');
+            if (!link) return null;
+            const username = link.getAttribute('href').slice(1);
+            if (!username || username.includes('/')) return null;
+            return username;
+        }
+    };
+
+    /**
+     * 统一的提示函数
+     */
+    const Notify = {
+        // 成功提示
+        success: (messageKey, params) => {
+            showAlert(t(messageKey, params));
+        },
+
+        // 错误提示
+        error: (messageKey, params) => {
+            alert(t(messageKey, params));
+        },
+
+        // 警告提示
+        warn: (messageKey, params) => {
+            alert(t(messageKey, params));
+        },
+
+        // 确认对话框
+        confirm: (messageKey, params) => {
+            return window.confirm(t(messageKey, params));
+        }
+    };
+
+    /**
+     * 装饰器：要求在推文详情页执行
+     */
+    function requireDetailPage(fn, errorMessage = 'alertNotDetailPage') {
+        return function(...args) {
+            if (!isOnTweetDetailPage()) {
+                Notify.error(errorMessage);
+                return;
+            }
+            return fn.apply(this, args);
+        };
+    }
+
+    /**
+     * 装饰器：防止重复执行（带状态检查）
+     */
+    function preventDuplicate(fn, stateGetter, errorMessage = 'alertProcessing') {
+        return function(...args) {
+            if (stateGetter()) {
+                Notify.warn(errorMessage);
+                return;
+            }
+            return fn.apply(this, args);
+        };
+    }
+
+    /**
+     * 装饰器：统一错误处理
+     */
+    function withErrorHandler(fn, errorMessage = 'consoleSummarizeFailed') {
+        return async function(...args) {
+            try {
+                return await fn.apply(this, args);
+            } catch (error) {
+                console.error(`❌ ${errorMessage}:`, error);
+                Notify.error(errorMessage);
+                throw error;
+            }
+        };
+    }
+
     // ==================== 页面类型检测 ====================
 
     // Check if on tweet detail page
@@ -972,7 +1065,7 @@
     function extractTweetContent() {
         try {
             const urlAuthor = getOriginalPosterUsername();
-            const articles = document.querySelectorAll('article[data-testid="tweet"]');
+            const articles = DOMQuery.getAllTweets();
             let targetArticle = null;
 
             // 在回复链中，用 URL 里的 username 定位正确的原推 article
@@ -1036,7 +1129,7 @@
             await sleep(scrollAttempts === 0 ? waitTime : retryWait);
 
             // Extract current visible tweets
-            const articles = document.querySelectorAll('article[data-testid="tweet"]');
+            const articles = DOMQuery.getAllTweets();
             articles.forEach((article, index) => {
                 // Skip the first article if specified (e.g., original tweet in comments)
                 if (skipFirst && index === 0) return;
@@ -2301,7 +2394,7 @@ ${comments.map((c, i) => {
         // 兜底：仅在推文详情页执行隐藏/打标，避免 async 过程中路由切换后误伤时间线推文
         if (!isOnTweetDetailPage()) return;
         // 查找该用户的所有评论
-        const articles = document.querySelectorAll('article[data-testid="tweet"]');
+        const articles = DOMQuery.getAllTweets();
 
         articles.forEach(article => {
             // 只在 User-Name 区域匹配，避免评论正文中的 @mention 误命中
@@ -2418,7 +2511,7 @@ ${comments.map((c, i) => {
         if (!isOnTweetDetailPage()) return;
         if (blacklistSet.size === 0 && spamSet.size === 0) return;
 
-        const articles = document.querySelectorAll('article[data-testid="tweet"]');
+        const articles = DOMQuery.getAllTweets();
         const toHide = [];
         const toMask = [];
 
@@ -3236,7 +3329,7 @@ ${comments.map((c, i) => {
         const originalPoster = excludeOriginal ? getOriginalPosterUsername() : null;
 
         // Comments on X/Twitter are usually in article tags
-        const articles = document.querySelectorAll('article[data-testid="tweet"]');
+        const articles = DOMQuery.getAllTweets();
         articles.forEach(article => {
             // 只在用户名区域（User-Name）内查找，避免把评论正文里的 @mention 当成评论者
             const userNameArea = article.querySelector('[data-testid="User-Name"]');
@@ -3430,7 +3523,7 @@ ${comments.map((c, i) => {
             const originalScrollY = window.scrollY;
 
             // Find the user's comment element
-            const articles = document.querySelectorAll('article[data-testid="tweet"]');
+            const articles = DOMQuery.getAllTweets();
             let targetArticle = null;
 
             for (const article of articles) {
@@ -4109,6 +4202,7 @@ ${comments.map((c, i) => {
     function reapplyBlockedHiding() {
         if (!isOnTweetDetailPage()) return;
 
+        // 收集所有已拉黑的用户
         const blocked = new Set();
         for (const [username, outcome] of blockOutcome) {
             if (outcome === 'blocked') blocked.add(username);
@@ -4116,15 +4210,13 @@ ${comments.map((c, i) => {
         blockedUsersSet.forEach(u => blocked.add(u));
         if (blocked.size === 0) return;
 
+        // 遍历所有推文，隐藏已拉黑用户的评论
         let hidden = 0;
-        document.querySelectorAll('article[data-testid="tweet"]').forEach(article => {
+        DOMQuery.getAllTweets().forEach(article => {
             if (article.hasAttribute('data-ai-filtered')) return;
-            const userNameArea = article.querySelector('[data-testid="User-Name"]');
-            if (!userNameArea) return;
-            const link = userNameArea.querySelector('a[role="link"][href^="/"]');
-            if (!link) return;
-            const username = link.getAttribute('href').slice(1);
-            if (!username || username.includes('/')) return;
+
+            const username = DOMQuery.getUsernameFromArticle(article);
+            if (!username) return;
 
             if (blocked.has(username)) {
                 article.setAttribute('data-ai-filtered', 'blacklist');
