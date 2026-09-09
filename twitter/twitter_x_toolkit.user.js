@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.5.2
+// @version      2.5.3
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -1442,6 +1442,13 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
         // 存量脏规则的 @ 可能已在早期清理中被截掉，所以不能只在原串含 @ 时才判。
         // 真正的拉丁垃圾词组含空格（"only fans"），不会被这条命中。
         if (/^[a-zA-Z0-9_]+$/.test(cleaned)) return null;
+
+        // 过滤纯数字和数字组合（包括带空格的多个数字）
+        if (/^[\d\s]+$/.test(cleaned)) return null;
+
+        // 过滤过短的拉丁文本（少于3个字母）
+        const latinOnly = cleaned.replace(/[^a-zA-Z]/g, '');
+        if (!hasCJK && latinOnly.length > 0 && latinOnly.length < 3) return null;
 
         return cleaned;
     }
