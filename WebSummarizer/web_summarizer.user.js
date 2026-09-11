@@ -1808,6 +1808,8 @@ ${newsContent}`;
     // ==================== UI管理 ====================
     class UIManager {
         constructor() {
+            this.resultCache = new Map(); // 结果缓存：key -> {result, aiScore, timestamp}
+            this.CACHE_DURATION = 30 * 60 * 1000; // 缓存30分钟
             this.init();
         }
 
@@ -1831,6 +1833,52 @@ ${newsContent}`;
 
             // 添加全屏状态监听
             this.initFullscreenDetection();
+        }
+
+        // 生成缓存键：URL + promptType + 内容哈希（前1000字符）
+        generateCacheKey(url, promptType, content) {
+            // 简单哈希函数
+            const hashCode = (str) => {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    const char = str.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash = hash & hash; // Convert to 32bit integer
+                }
+                return hash;
+            };
+            const contentHash = hashCode(content.slice(0, 1000));
+            return `${url}|${promptType}|${contentHash}`;
+        }
+
+        // 获取缓存结果
+        getCachedResult(cacheKey) {
+            const cached = this.resultCache.get(cacheKey);
+            if (!cached) return null;
+
+            // 检查是否过期
+            const now = Date.now();
+            if (now - cached.timestamp > this.CACHE_DURATION) {
+                this.resultCache.delete(cacheKey);
+                return null;
+            }
+
+            return cached;
+        }
+
+        // 保存缓存结果
+        setCachedResult(cacheKey, result, aiScore) {
+            this.resultCache.set(cacheKey, {
+                result,
+                aiScore,
+                timestamp: Date.now()
+            });
+
+            // 限制缓存大小，最多保留20个
+            if (this.resultCache.size > 20) {
+                const firstKey = this.resultCache.keys().next().value;
+                this.resultCache.delete(firstKey);
+            }
         }
 
         createButton() {
@@ -2403,11 +2451,6 @@ ${newsContent}`;
             overlay.className = 'config-overlay';
             overlay.id = 'dify-overlay';
             overlay.addEventListener('click', (e) => {
-                // 如果面板被最小化，点击遮罩层恢复显示
-                if (this.isMinimized) {
-                    this.toggleMinimize();
-                    return;
-                }
                 // 只有点击遮罩层本身才关闭，不影响面板内的点击
                 if (e.target === overlay) {
                     this.hidePanel();
@@ -2424,6 +2467,12 @@ ${newsContent}`;
 
             // 如果面板被最小化，恢复显示而不是重新总结
             if (this.isMinimized) {
+                this.toggleMinimize();
+                return;
+            }
+
+            // 如果面板已显示且有结果，切换最小化状态，不重新总结
+            if (this.panel.classList.contains('show') && this.currentResult) {
                 this.toggleMinimize();
                 return;
             }
@@ -2503,37 +2552,65 @@ ${newsContent}`;
                 this.lastExtractedData = extractedData;  // 知乎问答等适配器的结构化数据
                 this.lastNewsUrl = newsUrl;
 
-                // 更新进度提示:抓取完成,开始调用 AI
-                if (extractedData && extractedData.capturedAnswers !== undefined) {
-                    // 知乎问答等有结构化数据的适配器,显示详细统计
-                    onProgress(`数据抓取完成，回答 ${extractedData.capturedAnswers} 个 / 评论 ${extractedData.capturedComments} 条，AI 分析中...`);
-                } else if (extractedData && extractedData.capturedComments !== undefined) {
-                    // Reddit 等仅有评论的适配器
-                    onProgress(`数据抓取完成，评论 ${extractedData.capturedComments} 条，AI 分析中...`);
+                // 生成缓存键并检查缓存
+                const cacheKey = this.generateCacheKey(newsUrl, promptType, newsContent);
+                const cached = this.getCachedResult(cacheKey);
+
+                let aiScore, content;
+
+                if (cached) {
+                    // 使用缓存结果
+                    console.log('使用缓存结果，缓存时间:', new Date(cached.timestamp).toLocaleString());
+                    aiScore = cached.aiScore;
+                    content = cached.result;
+                    onProgress('使用缓存结果...');
+
+                    // 保存结果
+                    this.currentResult = content;
+
+                    // 显示结果（延迟一下，让用户看到"使用缓存"的提示）
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    this.showResultPanel(content, aiScore);
                 } else {
-                    onProgress('数据抓取完成，AI 分析中...');
+                    // 需要调用AI
+                    // 更新进度提示:抓取完成,开始调用 AI
+                    if (extractedData && extractedData.capturedAnswers !== undefined) {
+                        // 知乎问答等有结构化数据的适配器,显示详细统计
+                        onProgress(`数据抓取完成，回答 ${extractedData.capturedAnswers} 个 / 评论 ${extractedData.capturedComments} 条，AI 分析中...`);
+                    } else if (extractedData && extractedData.capturedComments !== undefined) {
+                        // Reddit 等仅有评论的适配器
+                        onProgress(`数据抓取完成，评论 ${extractedData.capturedComments} 条，AI 分析中...`);
+                    } else {
+                        onProgress('数据抓取完成，AI 分析中...');
+                    }
+
+                    // 根据配置选择 AI 提供商
+                    let rawResult;
+                    const provider = summarizerConfig.get('aiProvider') || 'unified';
+
+                    if (provider === 'dify') {
+                        rawResult = await DifyAPI.summarize(newsUrl, newsContent);
+                    } else {
+                        // 使用统一LLM配置（OpenAI/Anthropic/Ollama/Chrome Gemini）
+                        rawResult = await UnifiedAPI.summarize(newsUrl, newsContent, promptType);
+                    }
+
+                    // 解析合并回复中的AI生成概率与正文内容
+                    // Dify工作流输出格式不可控，aiScore可能为null
+                    const parsed = parseAIScore(rawResult);
+                    aiScore = parsed.aiScore;
+                    content = parsed.content;
+
+                    // 保存到缓存
+                    this.setCachedResult(cacheKey, content, aiScore);
+                    console.log('结果已缓存，缓存键:', cacheKey);
+
+                    // 保存原始结果文本（用于复制，去除分数行）
+                    this.currentResult = content;
+
+                    // 显示结果
+                    this.showResultPanel(content, aiScore);
                 }
-
-                // 根据配置选择 AI 提供商
-                let rawResult;
-                const provider = summarizerConfig.get('aiProvider') || 'unified';
-
-                if (provider === 'dify') {
-                    rawResult = await DifyAPI.summarize(newsUrl, newsContent);
-                } else {
-                    // 使用统一LLM配置（OpenAI/Anthropic/Ollama/Chrome Gemini）
-                    rawResult = await UnifiedAPI.summarize(newsUrl, newsContent, promptType);
-                }
-
-                // 解析合并回复中的AI生成概率与正文内容
-                // Dify工作流输出格式不可控，aiScore可能为null
-                const { aiScore, content } = parseAIScore(rawResult);
-
-                // 保存原始结果文本（用于复制，去除分数行）
-                this.currentResult = content;
-
-                // 显示结果
-                this.showResultPanel(content, aiScore);
 
             } catch (error) {
                 console.error('总结失败:', error);
@@ -3056,12 +3133,13 @@ ${newsContent}`;
             this.isMinimized = !this.isMinimized;
 
             if (this.isMinimized) {
-                // 最小化：隐藏面板但保留遮罩层（半透明，可点击恢复）
+                // 最小化：隐藏面板和遮罩层，用户可以继续浏览原文
                 this.panel.classList.add('minimized');
-                // 遮罩层保持显示，以便点击恢复
+                this.overlay.classList.remove('show');
             } else {
-                // 恢复显示
+                // 恢复显示：显示面板和遮罩层
                 this.panel.classList.remove('minimized');
+                this.overlay.classList.add('show');
             }
         }
 
