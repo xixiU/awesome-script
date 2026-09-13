@@ -6,6 +6,7 @@
 async function loadConfig() {
     const config = await chrome.storage.sync.get({
         defaultPlaybackRate: 1.5,
+        autoTopQuality: true,
         subtitle_serverUrl: 'http://localhost:8765',
         subtitle_targetLang: 'zh-CN',
         subtitle_autoTranslate: true
@@ -18,6 +19,7 @@ async function loadConfig() {
     rateDisplay.textContent = config.defaultPlaybackRate.toFixed(2) + 'x';
     updateSliderBackground(rateSlider);
 
+    document.getElementById('autoTopQuality').checked = config.autoTopQuality;
     document.getElementById('serverUrl').value = config.subtitle_serverUrl;
     document.getElementById('targetLang').value = config.subtitle_targetLang;
     document.getElementById('autoTranslate').checked = config.subtitle_autoTranslate;
@@ -46,8 +48,10 @@ async function saveConfig() {
         return;
     }
 
+    const autoTopQuality = document.getElementById('autoTopQuality').checked;
     const config = {
         defaultPlaybackRate: defaultRate,
+        autoTopQuality: autoTopQuality,
         subtitle_serverUrl: document.getElementById('serverUrl').value,
         subtitle_targetLang: document.getElementById('targetLang').value,
         subtitle_autoTranslate: document.getElementById('autoTranslate').checked
@@ -56,13 +60,17 @@ async function saveConfig() {
     try {
         await chrome.storage.sync.set(config);
 
-        // 同步到 localStorage（供 injected.js 使用）
+        // 同步到 localStorage（供 injected.js 使用，它跑在页面世界拿不到 chrome.storage）
         const tabs = await chrome.tabs.query({});
         tabs.forEach(tab => {
             chrome.scripting.executeScript({
                 target: { tabId: tab.id },
-                func: (rate) => { localStorage.h5video_defaultRate = rate; },
-                args: [defaultRate]
+                func: (rate, noAutoQuality) => {
+                    localStorage.h5video_defaultRate = rate;
+                    if (noAutoQuality) localStorage.h5video_autoQuality_off = '1';
+                    else localStorage.removeItem('h5video_autoQuality_off');
+                },
+                args: [defaultRate, !autoTopQuality]
             }).catch(() => {});
         });
 

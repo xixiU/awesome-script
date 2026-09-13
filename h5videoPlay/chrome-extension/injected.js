@@ -9,45 +9,91 @@
     // ===== 反失焦暂停 =====
     // 部分网站监听 visibilitychange / blur / pagehide 等事件，在页面失焦
     // （鼠标移出窗口、切到其他标签/应用）时强制暂停视频。此保护层伪装页面
-    // 始终可见，并拦截失焦类事件的监听注册。可通过 localStorage 针对站点关闭：
+    // 可见，并拦截失焦类事件的下发。可通过 localStorage 针对站点关闭：
     // localStorage.h5video_antiPause_off = '1'
+    //
+    // 关键：保护必须"延迟武装"(armed)——只有页面真实可见过之后才生效。
+    // 若在后台标签页加载期间就伪装 visible（右键"在新标签页打开视频"的场景），
+    // 播放器会以为能立即起播，但浏览器实际拦截后台标签页的媒体播放；播放器原本
+    // 依赖 visibilitychange 在切到前台时重试起播，该事件又被我们吞掉，结果视频
+    // 永远停在初始状态，必须刷新才能播放（pornhub 多开标签页即此症状）。
     (function () {
         try {
             if (localStorage.getItem('h5video_antiPause_off') === '1') return;
         } catch (e) { /* ignore */ }
 
-        const forceVisible = (obj, prop, value) => {
-            try {
-                Object.defineProperty(obj, prop, { configurable: true, get: () => value });
-            } catch (e) { /* ignore */ }
-        };
-        forceVisible(Document.prototype, 'hidden', false);
-        forceVisible(Document.prototype, 'webkitHidden', false);
-        forceVisible(Document.prototype, 'visibilityState', 'visible');
-        forceVisible(Document.prototype, 'webkitVisibilityState', 'visible');
-        forceVisible(document, 'hidden', false);
-        forceVisible(document, 'visibilityState', 'visible');
+        const rawAdd = EventTarget.prototype.addEventListener;
+        const rawRemove = EventTarget.prototype.removeEventListener;
 
-        const BLOCKED = new Set(['visibilitychange', 'webkitvisibilitychange', 'mozvisibilitychange', 'msvisibilitychange', 'blur', 'pagehide', 'freeze']);
-        const shouldBlock = (target, type) => {
-            const t = typeof type === 'string' ? type.toLowerCase() : '';
-            if (!BLOCKED.has(t)) return false;
-            return target === document || target === window;
+        // 先取原生可见性读取方式，武装前用它返回真实状态
+        const protoDesc = p => {
+            try { return Object.getOwnPropertyDescriptor(Document.prototype, p); } catch (e) { return null; }
         };
-        try {
-            const rawAdd = EventTarget.prototype.addEventListener;
-            EventTarget.prototype.addEventListener = function (type, listener, opts) {
-                if (shouldBlock(this, type)) return;
-                return rawAdd.call(this, type, listener, opts);
+        const hiddenDesc = protoDesc('hidden');
+        const realHidden = () => {
+            try { return hiddenDesc && hiddenDesc.get ? !!hiddenDesc.get.call(document) : false; } catch (e) { return false; }
+        };
+
+        let armed = false; // 保护是否已生效
+
+        // 武装时机：页面真实可见之后。
+        // 后台加载的标签页要等真正切到前台再武装；且必须等站点自己处理完这次
+        // "变可见"事件之后（延后一拍）才置 armed，否则站点赖以起播的那一次
+        // visibilitychange 会被下面的拦截器吞掉。
+        // 注意此监听必须先于拦截器注册（同为 window 捕获阶段，按注册顺序执行），
+        // 否则武装后它自己也收不到事件。
+        const arm = () => { armed = true; };
+        if (!realHidden()) {
+            arm();
+        } else {
+            const onVis = () => {
+                if (realHidden()) return;
+                rawRemove.call(window, 'visibilitychange', onVis, true);
+                setTimeout(arm, 1000); // 给播放器的异步起播留出时间
             };
-        } catch (e) { /* ignore */ }
+            rawAdd.call(window, 'visibilitychange', onVis, true);
+        }
 
-        ['onvisibilitychange', 'onwebkitvisibilitychange', 'onblur', 'onpagehide', 'onfreeze'].forEach(prop => {
+        // 伪装可见性：武装后恒为"可见"，武装前返回真实值
+        const spoof = (obj, prop, whenArmed, whenNot) => {
             try {
-                Object.defineProperty(document, prop, { configurable: true, get: () => null, set: () => {} });
+                Object.defineProperty(obj, prop, {
+                    configurable: true,
+                    get: () => (armed ? whenArmed : whenNot()),
+                });
             } catch (e) { /* ignore */ }
+        };
+        const realVisState = () => (realHidden() ? 'hidden' : 'visible');
+        [Document.prototype, document].forEach(obj => {
+            spoof(obj, 'hidden', false, realHidden);
+            spoof(obj, 'webkitHidden', false, realHidden);
+            spoof(obj, 'visibilityState', 'visible', realVisState);
+            spoof(obj, 'webkitVisibilityState', 'visible', realVisState);
+        });
+
+        // 拦截失焦类事件：在 window 捕获阶段最先接住，武装后 stopImmediatePropagation
+        // 掉，站点的失焦暂停回调就收不到（无论它注册在 document 还是 window，也无论
+        // 用 addEventListener 还是 on* 属性）。
+        //
+        // 这里刻意不去覆盖 EventTarget.prototype.addEventListener：那样全页面每一次
+        // 监听注册都要过我们的函数，栈顶变成本文件，站点注册 unload 之类被
+        // Permissions-Policy 拦下的事件时，警告会被误报到我们身上
+        // （"injected.js (EventTarget.addEventListener) Permissions policy violation:
+        // unload is not allowed in this document"），且白白拖慢所有注册、还容易
+        // 破坏 once / AbortSignal / handleEvent 对象等原生语义。
+        const BLOCKED = ['visibilitychange', 'webkitvisibilitychange', 'mozvisibilitychange', 'msvisibilitychange', 'blur', 'pagehide', 'freeze'];
+        BLOCKED.forEach(type => {
             try {
-                Object.defineProperty(window, prop, { configurable: true, get: () => null, set: () => {} });
+                rawAdd.call(window, type, e => {
+                    if (!armed) return;
+                    // 只拦以 document/window 为目标的（站点的失焦暂停挂在这里）。
+                    // 元素自身的 blur 是无害的 UI 焦点事件，捕获阶段也会经过 window，
+                    // 必须放行，否则输入框失焦等交互会被打断。
+                    const t = e.target;
+                    if (t !== document && t !== window) return;
+                    e.stopImmediatePropagation();
+                    e.stopPropagation();
+                }, true);
             } catch (e) { /* ignore */ }
         });
     })();
@@ -779,6 +825,175 @@
         return e;
     }
 
+    // ===== 自动选择最高清晰度 =====
+    // 设计约束（重要）：
+    // 1. 只在视频初始化时触发一次，绝不定时轮询。清晰度是用户可改的设置，
+    //    定时触发会把用户的手动选择反复覆盖掉。
+    // 2. 必须跳过需要会员/付费才能观看的档位。这类档位点下去通常弹登录/开通引导，
+    //    或直接卡住不播，比停留在低清晰度更糟。判定见 isLockedOption。
+    // 3. 全程静默失败：站点 DOM 结构随时会变，任何一步不匹配就放弃，不影响其它功能。
+    // 通过 localStorage.h5video_autoQuality_off = '1' 可关闭本功能。
+    const AQ_DONE = new WeakSet(); // 已处理过的 video 元素，保证一次性
+
+    // 从文案解析清晰度高度：'1080P'->1080、'4K'->2160、'超清'->按名次给分
+    const NAMED_QUALITY = [
+        [/8k|4320/i, 4320], [/4k|2160|ultra\s*hd/i, 2160], [/1440|2k|quad/i, 1440],
+        [/1080|full\s*hd|fhd|蓝光|超清/i, 1080], [/720|hd\b|高清/i, 720],
+        [/540|清晰/i, 540], [/480|标清|sd\b/i, 480], [/360/i, 360], [/240/i, 240], [/144/i, 144],
+    ];
+    function parseQuality(text) {
+        if (!text) return 0;
+        const s = String(text).trim();
+        // 优先取显式数字（如 "1080p60"、"1920x1080"）
+        const m = s.match(/(\d{3,4})\s*[pP]|[xX×]\s*(\d{3,4})/);
+        if (m) return +(m[1] || m[2]);
+        for (const [re, h] of NAMED_QUALITY) if (re.test(s)) return h;
+        const bare = s.match(/\b(\d{3,4})\b/);
+        return bare ? +bare[1] : 0;
+    }
+
+    // 判定档位是否被会员/付费锁定。宁可漏选高清，也不要点进付费墙。
+    const LOCK_TEXT = /vip|svip|会员|付费|开通|登录|登陆|premium|paid|unlock|解锁|试用|购买|plus\b|尊享|大会员/i;
+    const LOCK_CLASS = /vip|lock|premium|paid|disabled|need|upgrade|badge-pro/i;
+    function isLockedOption(el) {
+        if (!el) return true;
+        try {
+            if (el.getAttribute('aria-disabled') === 'true' || el.disabled) return true;
+            // 元素自身或其内部标记（皇冠角标、VIP badge 等）
+            if (LOCK_CLASS.test(el.className || '')) return true;
+            if (LOCK_TEXT.test(el.textContent || '')) return true;
+            // 常见做法：用子元素 <i class="vip-icon"> / <svg class="icon-crown"> 打标
+            // 注意 i 标志必须写成 [class*="vip" i]，值不加引号会让整个选择器抛错，
+            // 那样 catch 里 return true 会把所有档位都判成锁定，功能直接失效。
+            if (el.querySelector('[class*="vip" i],[class*="lock" i],[class*="crown" i],[class*="premium" i],[class*="diamond" i]')) return true;
+            // data-* 标记
+            for (const a of el.attributes || []) {
+                if (/vip|premium|lock|need-?(login|pay)/i.test(a.name) && a.value && a.value !== 'false' && a.value !== '0') return true;
+            }
+        } catch (e) { return true; }
+        return false;
+    }
+
+    // 通过播放器 JS API 设置（最可靠，不依赖 DOM 结构）
+    // 只处理"能明确拿到档位列表并选最高"的情形；拿不到就返回 false 交给 DOM 兜底。
+    function setQualityViaAPI(video) {
+        // YouTube：用播放器自己的 API 取可用档位并选最高。
+        // getAvailableQualityLevels() 返回如 ['hd1080','hd720',...]（已按高到低排序），
+        // 且只包含当前账号真正能播的档位，天然规避了付费档问题。
+        if (u === 'youtube') {
+            const yp = d.getElementById('movie_player');
+            if (yp && typeof yp.getAvailableQualityLevels === 'function') {
+                const levels = yp.getAvailableQualityLevels();
+                if (levels && levels.length) {
+                    const top = levels[0];
+                    if (typeof yp.setPlaybackQualityRange === 'function') yp.setPlaybackQualityRange(top, top);
+                    else if (typeof yp.setPlaybackQuality === 'function') yp.setPlaybackQuality(top);
+                    console.log('[H5Video] YouTube 已选最高清晰度:', top);
+                    return true;
+                }
+            }
+            return false;
+        }
+        // hls.js：levels 按码率升序，-1 表示自动。挂载点因站点而异，逐个探测。
+        const hls = video._hls || video.hls || window.hls || (window.player && window.player.hls);
+        if (hls && Array.isArray(hls.levels) && hls.levels.length > 1) {
+            let best = -1, bestH = -1;
+            hls.levels.forEach((lv, i) => {
+                const h = lv.height || parseQuality(lv.name || lv.attrs && lv.attrs.RESOLUTION);
+                if (h > bestH) { bestH = h; best = i; }
+            });
+            if (best >= 0) {
+                hls.currentLevel = best;
+                console.log('[H5Video] hls.js 已选最高清晰度:', bestH);
+                return true;
+            }
+        }
+        // dash.js
+        const dash = video._dash || window.dashPlayer;
+        if (dash && typeof dash.setQualityFor === 'function' && typeof dash.getBitrateInfoListFor === 'function') {
+            try {
+                const list = dash.getBitrateInfoListFor('video');
+                if (list && list.length > 1) {
+                    dash.setQualityFor('video', list.length - 1);
+                    console.log('[H5Video] dash.js 已选最高清晰度');
+                    return true;
+                }
+            } catch (e) { /* ignore */ }
+        }
+        return false;
+    }
+    // 站点专属清晰度适配：menu 为需先点开的入口（可空），items 为档位选项
+    const QUALITY_SITES = {
+        // YouTube 不在此表：它在 setQualityViaAPI 里走播放器 API 提前返回
+        pornhub: { items: '.mgp_qualityLi, .qualityLabel li, [data-quality]' },
+        bilibili: { menu: '.bpx-player-ctrl-quality', items: '.bpx-player-ctrl-quality-menu-item' },
+        iqiyi: { menu: '.iqp-btn-definition', items: '.iqp-list-definition li' },
+        youku: { menu: '.kui-quality-trigger', items: '.kui-quality-list li' },
+        mgtv: { menu: 'mango-quality', items: '.definition-list li' },
+        ixigua: { menu: '.xgplayer-definition', items: '.xgplayer-definition-list li' },
+        acfun: { menu: '.quality', items: '.quality-list li' },
+    };
+
+    // DOM 方式：点开清晰度菜单，在候选项里挑"未锁定的最高档"并点击。
+    // 只做一轮，不轮询、不重试——避免和用户的手动选择打架。
+    function setQualityViaDOM(video) {
+        const site = QUALITY_SITES[u];
+        const scope = cfg.mvShell || d;
+        let items = [];
+
+        if (site && site.items) {
+            if (site.menu) {
+                const trigger = q(site.menu, scope) || q(site.menu);
+                if (trigger) doClick(trigger); // 展开菜单，选项才会渲染
+            }
+            items = [...(scope.querySelectorAll(site.items) || [])];
+        }
+
+        // 通用兜底：原生 <video> 多源，直接换 src 会打断播放，故只处理
+        // "站点渲染出的清晰度列表"这一种情况，靠文案特征找候选项。
+        if (!items.length) {
+            const cands = scope.querySelectorAll('[data-quality],[data-definition],[data-resolution]');
+            items = [...cands];
+        }
+        if (items.length < 2) return false;
+
+        let best = null, bestH = 0;
+        for (const it of items) {
+            const h = parseQuality(it.dataset && (it.dataset.quality || it.dataset.definition || it.dataset.resolution) || it.textContent);
+            if (!h || h <= bestH) continue;
+            if (isLockedOption(it)) {
+                console.log('[H5Video] 跳过需会员的清晰度:', h);
+                continue;
+            }
+            best = it; bestH = h;
+        }
+        if (!best) return false;
+        // 已经是最高档就不必点（避免无谓地重载视频流）
+        if (best.getAttribute('aria-checked') === 'true' ||
+            /active|selected|current|checked|on\b/i.test(best.className || '')) {
+            console.log('[H5Video] 已处于最高可用清晰度:', bestH);
+            return true;
+        }
+        doClick(best);
+        console.log('[H5Video] 已切换到最高可用清晰度:', bestH);
+        return true;
+    }
+
+    function autoSelectQuality(video) {
+        if (!video || AQ_DONE.has(video)) return;
+        if (cfg.isLive) return; // 直播的清晰度切换常触发重连，不动
+        try {
+            if (localStorage.getItem('h5video_autoQuality_off') === '1') return;
+        } catch (e) { /* ignore */ }
+        AQ_DONE.add(video); // 无论成功与否都只尝试一次
+        try {
+            if (setQualityViaAPI(video)) return;
+            setQualityViaDOM(video);
+        } catch (e) {
+            console.log('[H5Video] 自动清晰度选择跳过:', e && e.message);
+        }
+    }
+
     // ===== 初始化视频 =====
     function initVideo(el) {
         v = el;
@@ -800,14 +1015,36 @@
         });
 
         // 直播检测：禁用时间相关快捷键
+        // 注意不能只凭首次 canplay 的 duration 判定——MSE/流媒体播放器在这一刻
+        // 常报 Infinity/NaN，之后才填上真实时长。若据此删键，点播视频的方向键
+        // 快进会被永久禁用。所以：站点配置说是直播才立即处理；只靠 duration 时
+        // 必须等它稳定（durationchange 后仍为 Infinity）再判定。
+        const disableLiveKeys = () => {
+            if (cfg.isLive) return;
+            for (const k of [37, 37 + 1024, 39, 39 + 1024, 67, 77, 78, 86, 88, 90]) actList.delete(k);
+            cfg.isLive = true;
+            console.log('[H5Video] 检测到直播，禁用时间相关快捷键');
+        };
         v.addEventListener('canplay', () => {
-            if (v.duration === Infinity || cfg.isLive) {
-                for (const k of [37, 37 + 1024, 39, 39 + 1024, 67, 77, 78, 86, 88, 90]) actList.delete(k);
-                cfg.isLive = true;
-                console.log('[H5Video] 检测到直播，禁用时间相关快捷键');
+            if (cfg.isLive) {
+                disableLiveKeys();
+            } else if (v.duration === Infinity) {
+                // 给播放器留出补齐时长的机会，仍为 Infinity 才当作直播
+                const confirmLive = () => {
+                    if (v.duration === Infinity) disableLiveKeys();
+                };
+                v.addEventListener('durationchange', confirmLive, { once: true });
+                setTimeout(confirmLive, 3000);
             }
             checkUI();
         }, { once: true });
+
+        // 自动选最高清晰度：只在视频就绪后跑一次（不轮询，见 autoSelectQuality 说明）。
+        // 挂 loadedmetadata 而非 canplay：此时播放器的清晰度菜单/levels 通常已建好，
+        // 又还没开始正式播放，切换代价最小。已 ready 的视频直接补一次调用。
+        const kickQuality = () => setTimeout(() => autoSelectQuality(v), 600);
+        if (v.readyState >= 1) kickQuality();
+        else v.addEventListener('loadedmetadata', kickQuality, { once: true });
 
         // 双击全屏（如果启用）
         if (!cfg.disableDBLClick && shell) {
@@ -858,12 +1095,6 @@
 
         // 应用站点配置
         applySiteConfig();
-
-        // 注册键盘事件
-        // 捕获阶段监听（优先级高，能拦截大部分站点）
-        window.addEventListener('keydown', handleKeydown, true);
-        // 冒泡阶段监听（备用，应对某些站点在捕获阶段阻止事件传播的情况）
-        window.addEventListener('keydown', handleKeydown, false);
 
         // 轮询等待视频出现
         let checkCount = 0;
@@ -916,21 +1147,36 @@
         });
     }
 
+    // ===== 键盘监听：必须在 document_start 同步注册 =====
+    // 同一节点同一阶段，监听器按注册顺序执行。若等到 DOMContentLoaded 才注册
+    // （main 里注册），站点自己的 keydown 捕获监听已先挂上，它对自己处理的按键调
+    // stopImmediatePropagation()，我们的 handler 根本不会被调用——表现为方向键
+    // 快进失效（播放器接管了方向键），而 C/X/Z 因站点不处理仍然正常。
+    // 所以这里前置到脚本主体同步执行，抢在站点脚本之前注册。
+    // 捕获阶段监听（优先级高，能拦截大部分站点）
+    window.addEventListener('keydown', handleKeydown, true);
+    // 冒泡阶段监听（备用，应对某些站点在捕获阶段阻止事件传播的情况）
+    window.addEventListener('keydown', handleKeydown, false);
+
     if (d.readyState === 'loading') {
         d.addEventListener('DOMContentLoaded', main);
     } else {
         main();
     }
 
-    // ===== 从扩展存储初始化默认倍速到 localStorage =====
-    (async function initDefaultRate() {
+    // ===== 从扩展存储同步设置到 localStorage =====
+    // 本脚本跑在页面世界，多数情况拿不到 chrome.storage，所以 popup 保存时会主动
+    // 写 localStorage；这里是首次安装/新标签页的兜底同步。
+    (async function initSettings() {
         try {
             if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-                const result = await chrome.storage.sync.get({ defaultPlaybackRate: 1.5 });
-                localStorage.h5video_defaultRate = result.defaultPlaybackRate;
+                const r = await chrome.storage.sync.get({ defaultPlaybackRate: 1.5, autoTopQuality: true });
+                localStorage.h5video_defaultRate = r.defaultPlaybackRate;
+                if (r.autoTopQuality) localStorage.removeItem('h5video_autoQuality_off');
+                else localStorage.h5video_autoQuality_off = '1';
             }
         } catch (e) {
-            // 如果拿不到 chrome.storage（某些隔离环境），使用已有的 localStorage 值或默认 1.5
+            // 拿不到 chrome.storage 时沿用已有的 localStorage 值或默认 1.5
             if (!localStorage.h5video_defaultRate) localStorage.h5video_defaultRate = 1.5;
         }
     })();

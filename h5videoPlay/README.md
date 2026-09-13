@@ -57,6 +57,26 @@
 
 ## 更新记录
 
+### v2.2.3 (2026-09-13)
+- ✨ 新增: **初始自动选择最高清晰度**（油猴版 + 扩展版）
+  - 仅在视频加载时设置一次，**不做定时轮询**，之后用户可自由手动切换而不会被覆盖
+  - **自动跳过需要会员/付费的档位**（识别 VIP/大会员/Premium 文案、皇冠角标、`aria-disabled` 等特征），宁可停在次高清也不点进付费墙
+  - 优先走播放器 JS API（YouTube `getAvailableQualityLevels`、hls.js `levels`、dash.js），拿不到再退回点击站点清晰度菜单
+  - 已适配 pornhub / bilibili / 爱奇艺 / 优酷 / 芒果TV / 西瓜视频 / A站，其余站点走 `data-quality` 等通用特征兜底
+  - 直播不处理（切清晰度常触发重连）；开关：油猴菜单「初始自动选最高清晰度」/ 扩展 popup「播放设置」
+- 🐛 修复: 扩展版在 pornhub 等站点**右键"在新标签页打开视频"多开标签页后，切过去视频不播放、必须刷新**
+  - 根因：「反失焦暂停」保护层在 `document_start` 无条件把 `document.hidden` 伪装为 `false`，并把站点的 `visibilitychange` 监听整个吞掉。后台标签页加载时播放器以为可见而立即起播，但浏览器实际拦截后台标签页播放；播放器赖以重试起播的 `visibilitychange` 又收不到，于是永久卡在初始状态
+  - 修复：保护改为**延迟武装**——页面真实可见之后（且等站点处理完那次"变可见"事件）才生效，武装前可见性属性透传真实值、失焦事件正常下发
+- 🐛 修复: 视频站**方向键快进时好时坏**（但 C/X/Z 倍速正常）
+  - 根因：键盘监听注册太晚（扩展版在 `DOMContentLoaded`、油猴版更晚，要等找到视频之后）。同节点同阶段按注册顺序执行，站点播放器的 `keydown` 捕获监听先挂上并对方向键调 `stopImmediatePropagation()`，我们的 handler 根本不会被调用；C/X/Z 因站点不处理才幸免
+  - 修复：两版均把 `keydown` 注册提到 `document_start` 同步执行，抢在站点脚本之前
+- 🐛 修复: 部分页面控制台报 `Permissions policy violation: unload is not allowed in this document`，且栈顶指向本脚本
+  - 根因：为拦截 7 个失焦事件而覆盖了 `EventTarget.prototype.addEventListener`，导致全页面每次监听注册都经过我们的函数，站点注册 `unload` 触发的警告被误报到我们身上
+  - 修复：改为在 `window` 捕获阶段拦事件，不再覆盖原型方法。同时消除了拖慢所有监听注册、破坏 `once`/`AbortSignal` 原生语义的隐患
+- 🐛 修复: 扩展版点播视频的方向键可能被永久禁用
+  - 根因：直播判定只看首次 `canplay` 时的 `duration === Infinity`，而 MSE/流媒体播放器此刻常报 `Infinity`，之后才补上真实时长
+  - 修复：改为等 `durationchange`（或 3s 超时）后仍为 `Infinity` 才判定为直播
+
 ### v2.2.2 (2026-09-06)
 - ✨ 优化: Chrome 扩展 popup 面板默认倍速设置改用滑块（slider）UI
   - 可拖动滑块设置 0.25x ~ 4x 倍速，实时显示当前值
