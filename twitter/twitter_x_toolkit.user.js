@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.6.0
+// @version      2.6.1
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -66,6 +66,20 @@
 
         get size() {
             return this.cache.size;
+        }
+
+        // 支持 for...of 解构遍历（[key, value]），与 Map 语义一致。
+        // reapplyBlockedHiding 等处依赖此能力遍历全部条目。
+        [Symbol.iterator]() {
+            return this.cache[Symbol.iterator]();
+        }
+
+        entries() {
+            return this.cache.entries();
+        }
+
+        keys() {
+            return this.cache.keys();
         }
     }
 
