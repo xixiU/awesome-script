@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.6.1
+// @version      2.6.2
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -927,7 +927,7 @@
      */
     const DOMQuery = {
         // 查询所有推文 article
-        getAllTweets: () => DOMQuery.getAllTweets(),
+        getAllTweets: () => document.querySelectorAll('article[data-testid="tweet"]'),
 
         // 查询主内容区
         getPrimaryColumn: () => document.querySelector('[data-testid="primaryColumn"]'),
@@ -976,7 +976,7 @@
      * 装饰器：要求在推文详情页执行
      */
     function requireDetailPage(fn, errorMessage = 'alertNotDetailPage') {
-        return function(...args) {
+        return function (...args) {
             if (!isOnTweetDetailPage()) {
                 Notify.error(errorMessage);
                 return;
@@ -989,7 +989,7 @@
      * 装饰器：防止重复执行（带状态检查）
      */
     function preventDuplicate(fn, stateGetter, errorMessage = 'alertProcessing') {
-        return function(...args) {
+        return function (...args) {
             if (stateGetter()) {
                 Notify.warn(errorMessage);
                 return;
@@ -1002,7 +1002,7 @@
      * 装饰器：统一错误处理
      */
     function withErrorHandler(fn, errorMessage = 'consoleSummarizeFailed') {
-        return async function(...args) {
+        return async function (...args) {
             try {
                 return await fn.apply(this, args);
             } catch (error) {
@@ -2628,7 +2628,7 @@ ${comments.map((c, i) => {
 
         // 拉黑操作放后台，不阻塞 UI 标记和后续批次
         if (blacklistSet.size > 0) {
-            Promise.all([...blacklistSet].map(username => blockUser(username, previewText(username)))).catch(() => {});
+            Promise.all([...blacklistSet].map(username => blockUser(username, previewText(username)))).catch(() => { });
         }
 
         const blacklistCount = blacklistSet.size;
@@ -3020,7 +3020,7 @@ ${comments.map((c, i) => {
             if (photoModal) {
                 // 检查是否是图片浏览模态窗口（包含 carousel 或 Previous/Next slide 按钮）
                 const isPhotoViewer = photoModal.querySelector('[role="group"][aria-roledescription="carousel"]') ||
-                                     photoModal.querySelector('button[aria-label*="slide"]');
+                    photoModal.querySelector('button[aria-label*="slide"]');
                 if (isPhotoViewer) {
                     container.style.display = 'none';
                     return;

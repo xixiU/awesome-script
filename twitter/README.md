@@ -307,11 +307,15 @@ A: 无论原文使用何种语言，总结都会使用**中文**输出，并采�
 
 ## 更新日志
 
-### v2.6.1 (2026-09-27)
+### v2.6.2 (2026-09-27)
 
 - 🐛 **修复子视图切换时补隐藏报错**：
   - `reapplyBlockedHiding` 用 `for...of` 遍历 `blockOutcome`，但 `LRUCache` 未实现迭代协议，抛出 `blockOutcome is not iterable`
   - 为 `LRUCache` 补充 `[Symbol.iterator]`、`entries()`、`keys()`，遍历语义与 `Map` 一致
+
+### v2.6.1 (2026-09-17)
+
+- 🐛 **修复自调用导致Maximum call stack size exceeded**：
 
 ### v2.6.0 (2026-09-06)
 
