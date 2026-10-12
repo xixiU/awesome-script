@@ -6,7 +6,7 @@
 // @description 视频截图；切换画中画；缓存视频；万能网页全屏；添加快捷键：快进、快退、暂停/播放、音量、下一集、切换(网页)全屏、上下帧、播放速度。支持视频站点：油管、TED、优.土、QQ、B站、西瓜视频、爱奇艺、A站、PPTV、芒果TV、咪咕视频、新浪、微博、网易[娱乐、云课堂、新闻]、搜狐、风行、百度云视频等；直播：twitch、斗鱼、YY、虎牙、龙珠、战旗。可增加自定义站点
 // @description:en Enable hotkeys for HTML5 playback: video screenshot; enable/disable picture-in-picture; copy cached video; send any video to full screen or browser window size; fast forward, rewind, pause/play, volume, skip to next video, skip to previous or next frame, set playback speed. Video sites supported: YouTube, TED, Youku, QQ.com, bilibili, ixigua, iQiyi, support mainstream video sites in mainland China; Live broadcasts: Twitch, Douyu.com, YY.com, Huya.com. Custom sites can be added
 // @description:it Abilita tasti di scelta rapida per riproduzione HTML5: screenshot del video; abilita/disabilita picture-in-picture; copia il video nella cache; manda qualsiasi video a schermo intero o a dimensione finestra del browser; avanzamento veloce, riavvolgimento, pausa/riproduzione, imposta velocità di riproduzione. Siti video supportati: YouTube, TED, Supporto dei siti video mainstream nella Cina continentale. È possibile aggiungere siti personalizzati
-// @version    2.2.3
+// @version    2.2.4
 // @match    *://*/*
 // @exclude  https://user.qzone.qq.com/*
 // @exclude  https://www.dj92cc.net/dance/play/id/*
@@ -333,6 +333,41 @@
                 } catch (e) { /* ignore */ }
             });
         }
+    } catch (e) { /* ignore */ }
+
+    // 5) SPA 支持：URL 变化时重新武装（针对 YouTube 等单页应用）
+    // YouTube 在切换视频时会重新初始化播放器并注册监听器，
+    // 我们需要在合适的时机重新武装，确保保护生效。
+    try {
+        let spaRearmTimer = null;
+        const rearmOnSPANavigation = () => {
+            // 清除之前的定时器
+            if (spaRearmTimer) clearTimeout(spaRearmTimer);
+
+            // 短暂解除武装，给 SPA 页面初始化留出时间
+            // （避免拦截站点自己需要的 visibilitychange 事件）
+            armed = false;
+
+            // 延迟重新武装：
+            // - 300ms 后初步武装（快速响应）
+            // - 1000ms 后再次确认武装（应对慢速初始化）
+            setTimeout(() => {
+                if (!realHidden()) {
+                    armed = true;
+                }
+            }, 300);
+
+            spaRearmTimer = setTimeout(() => {
+                if (!realHidden()) {
+                    armed = true;
+                }
+            }, 1000);
+        };
+
+        // 监听各种 SPA 路由变化事件
+        window.addEventListener('urlchange', rearmOnSPANavigation);
+        window.addEventListener('pushstate', rearmOnSPANavigation);
+        window.addEventListener('popstate', rearmOnSPANavigation);
     } catch (e) { /* ignore */ }
 })();
 
