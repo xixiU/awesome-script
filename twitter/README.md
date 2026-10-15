@@ -307,6 +307,43 @@ A: 无论原文使用何种语言，总结都会使用**中文**输出，并采�
 
 ## 更新日志
 
+### v2.6.3 (2026-10-15)
+
+- 🐛 **修复 AI 过滤 Stack Overflow 错误**：
+  - **复现步骤**：① 开启 AI 过滤评论 ② 打开任意推文详情页 ③ 控制台持续报错 `Maximum call stack size exceeded`
+  - **根因**：commit `93dae9f` 重构 DOM 查询时，`DOMQuery.getAllTweets` 错误写成自调用：
+    ```javascript
+    const DOMQuery = { getAllTweets: () => DOMQuery.getAllTweets() }  // ❌ 无限递归
+    ```
+  - **修复**：改为正确的 DOM 查询：
+    ```javascript
+    getAllTweets: () => document.querySelectorAll('article[data-testid="tweet"]')  // ✅
+    ```
+  - **影响范围**：所有 AI 过滤功能完全失效，无法扫描评论
+
+- 🎯 **修复启发式规则 False Positive - URL 协议前缀误杀**：
+  - **复现步骤**：① 正常技术交流评论包含链接（如讨论 `venice.ai`）② 被启发式规则 `https:` 拦截 ③ 用户反馈：「这是正常的技术交流，并不是明显的色情」
+  - **根因**：启发式学习从拉黑评论中提取到 `https:` 等 URL 协议前缀，导致**所有包含链接的评论**都被拦截（包括正常的技术讨论、新闻、分享等）
+  - **修复方案（防御纵深）**：
+    1. 新增 `urlStopWords` 停用词：`['http', 'https', 'http:', 'https:', 'www', 'www.']`，在 `learnHeuristicPatterns` 提取阶段过滤
+    2. 运行时过滤：`matchHeuristicPattern` 中添加 `GENERIC_PATTERNS` 检查，即使已学到的通用模式也不会被匹配
+  - **影响范围**：所有包含 URL 的正常评论可能被误杀
+  - **避免二次出现**：启发式学习新增停用词时，必须同时在提取阶段（`stopWords`）和匹配阶段（`GENERIC_PATTERNS`）做双重过滤
+
+- ✨ **新增快速解封功能**：
+  - 新增 `unblockUserByAPI()`：通过 Twitter API 后台取消拉黑
+  - 暴露全局函数 `window.unblockTwitterUser(username)`：控制台执行快速解封
+  - 所有拉黑日志添加解封提示：`💡 误封？执行: unblockTwitterUser("username")`
+  - 脚本加载时输出提示：`💡 快捷解封提示：控制台执行 unblockTwitterUser("username") 可快速取消拉黑`
+  - **使用方法**：
+    ```javascript
+    // 控制台执行
+    unblockTwitterUser("FromSummerF")  // 取消拉黑 @FromSummerF
+    // 或
+    unblockTwitterUser("@FromSummerF") // 支持 @ 前缀
+    ```
+
+
 ### v2.6.2 (2026-09-27)
 
 - 🐛 **修复子视图切换时补隐藏报错**：
@@ -349,42 +386,6 @@ A: 无论原文使用何种语言，总结都会使用**中文**输出，并采�
   - 过滤纯数字规则（如 "123"、"456 789"）
   - 过滤过短的拉丁文本（少于3个字母的英文规则）
   - 避免学习到无意义的数字和简单字母组合
-
-### v2.5.3 (2026-10-15)
-
-- 🐛 **修复 AI 过滤 Stack Overflow 错误**：
-  - **复现步骤**：① 开启 AI 过滤评论 ② 打开任意推文详情页 ③ 控制台持续报错 `Maximum call stack size exceeded`
-  - **根因**：commit `93dae9f` 重构 DOM 查询时，`DOMQuery.getAllTweets` 错误写成自调用：
-    ```javascript
-    const DOMQuery = { getAllTweets: () => DOMQuery.getAllTweets() }  // ❌ 无限递归
-    ```
-  - **修复**：改为正确的 DOM 查询：
-    ```javascript
-    getAllTweets: () => document.querySelectorAll('article[data-testid="tweet"]')  // ✅
-    ```
-  - **影响范围**：所有 AI 过滤功能完全失效，无法扫描评论
-
-- 🎯 **修复启发式规则 False Positive - URL 协议前缀误杀**：
-  - **复现步骤**：① 正常技术交流评论包含链接（如讨论 `venice.ai`）② 被启发式规则 `https:` 拦截 ③ 用户反馈：「这是正常的技术交流，并不是明显的色情」
-  - **根因**：启发式学习从拉黑评论中提取到 `https:` 等 URL 协议前缀，导致**所有包含链接的评论**都被拦截（包括正常的技术讨论、新闻、分享等）
-  - **修复方案（防御纵深）**：
-    1. 新增 `urlStopWords` 停用词：`['http', 'https', 'http:', 'https:', 'www', 'www.']`，在 `learnHeuristicPatterns` 提取阶段过滤
-    2. 运行时过滤：`matchHeuristicPattern` 中添加 `GENERIC_PATTERNS` 检查，即使已学到的通用模式也不会被匹配
-  - **影响范围**：所有包含 URL 的正常评论可能被误杀
-  - **避免二次出现**：启发式学习新增停用词时，必须同时在提取阶段（`stopWords`）和匹配阶段（`GENERIC_PATTERNS`）做双重过滤
-
-- ✨ **新增快速解封功能**：
-  - 新增 `unblockUserByAPI()`：通过 Twitter API 后台取消拉黑
-  - 暴露全局函数 `window.unblockTwitterUser(username)`：控制台执行快速解封
-  - 所有拉黑日志添加解封提示：`💡 误封？执行: unblockTwitterUser("username")`
-  - 脚本加载时输出提示：`💡 快捷解封提示：控制台执行 unblockTwitterUser("username") 可快速取消拉黑`
-  - **使用方法**：
-    ```javascript
-    // 控制台执行
-    unblockTwitterUser("FromSummerF")  // 取消拉黑 @FromSummerF
-    // 或
-    unblockTwitterUser("@FromSummerF") // 支持 @ 前缀
-    ```
 
 ### v2.5.2 (2026-09-06)
 
