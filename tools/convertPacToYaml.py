@@ -3,6 +3,7 @@ import socket
 import struct
 import requests
 import yaml
+import argparse
 from urllib.parse import urlparse
 
 
@@ -14,8 +15,32 @@ def load_pac(source: str) -> str:
             return f.read()
 
 
-def resolve_pac_proxy(pac_text: str):
-    """模拟 PAC 的 init() 函数，解析动态代理地址"""
+def get_local_ip():
+    """获取本机IP地址，带有多重fallback策略"""
+    try:
+        # 方法1：通过hostname获取
+        return socket.gethostbyname(socket.gethostname())
+    except socket.gaierror:
+        try:
+            # 方法2：通过连接外部地址获取本机IP（不会真正发送数据）
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            return local_ip
+        except Exception:
+            # 方法3：默认使用localhost
+            print("警告: 无法自动获取本机IP，使用默认值 127.0.0.1")
+            return "127.0.0.1"
+
+
+def resolve_pac_proxy(pac_text: str, manual_ip: str = None):
+    """模拟 PAC 的 init() 函数，解析动态代理地址
+
+    Args:
+        pac_text: PAC文件内容
+        manual_ip: 手动指定的IP地址，如果为None则自动获取
+    """
     # 提取 id
     id_match = re.search(r'var\s+id\s*=\s*Number\((\d+)\)\.toString\(36\)', pac_text)
     pac_id = base36_encode(int(id_match.group(1))) if id_match else None
@@ -25,7 +50,13 @@ def resolve_pac_proxy(pac_text: str):
     timestamp = ts_match.group(1) if ts_match else "0"
 
     # 获取本机 IP 并转换（模拟 convert_addr + toString(36)）
-    local_ip = socket.gethostbyname(socket.gethostname())
+    if manual_ip:
+        local_ip = manual_ip
+        print(f"使用指定IP: {local_ip}")
+    else:
+        local_ip = get_local_ip()
+        print(f"自动获取IP: {local_ip}")
+
     ip_int = struct.unpack("!I", socket.inet_aton(local_ip))[0]
     ip_b36 = base36_encode(ip_int)
 
@@ -166,11 +197,18 @@ def generate_clash_yaml(rules, proxy_servers):
     }
 
 
-def convert(pac_source, output_file="clash.yaml"):
+def convert(pac_source, output_file="clash.yaml", local_ip=None):
+    """转换PAC文件为Clash配置
+
+    Args:
+        pac_source: PAC文件路径或URL
+        output_file: 输出的YAML文件名
+        local_ip: 手动指定的本机IP，如果为None则自动获取
+    """
     pac_text = load_pac(pac_source)
 
     # 解析动态代理服务器
-    proxy_servers, local_ip = resolve_pac_proxy(pac_text)
+    proxy_servers, local_ip = resolve_pac_proxy(pac_text, local_ip)
 
     # 解析规则
     rules = parse_pac(pac_text)
@@ -189,9 +227,19 @@ def convert(pac_source, output_file="clash.yaml"):
 
 
 if __name__ == "__main__":
-    # 示例：
-    convert("26107698.pac")
+    parser = argparse.ArgumentParser(description='将PAC文件转换为Clash配置文件')
+    parser.add_argument('pac_source', nargs='?', default='26107698.pac', help='PAC文件路径或URL (默认: 26107698.pac)')
+    parser.add_argument('-o', '--output', default='clash.yaml', help='输出文件名 (默认: clash.yaml)')
+    parser.add_argument('-i', '--ip', help='手动指定本机IP地址，如不指定则自动获取')
+
+    args = parser.parse_args()
+
+    convert(args.pac_source, args.output, args.ip)
+
+    # 旧的调用方式（如果直接在代码中调用）：
+    # convert("26107698.pac")
     # convert("https://example.com/proxy.pac")
+    # convert("26107698.pac", local_ip="192.168.1.100")  # 指定IP
 
     # 如果需要手动添加节点到现有配置：
     # add_proxy_to_clash("clash.yaml", {
