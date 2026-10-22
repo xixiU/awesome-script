@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.6.2
+// @version      2.6.3
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -1928,6 +1928,10 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
     function matchHeuristicPattern(pattern, displayName, commentText) {
         if (!pattern || !pattern.text) return false;
 
+        // 过滤过于通用的模式（协议前缀、单个常见词等），防止误杀
+        const GENERIC_PATTERNS = ['http', 'https', 'http:', 'https:', 'www', 'www.'];
+        if (GENERIC_PATTERNS.includes(pattern.text.toLowerCase())) return false;
+
         for (const raw of [displayName, commentText]) {
             if (!raw) continue;
             const haystack = pattern.normalized ? normalizeForSimilarity(raw) : raw;
@@ -2057,7 +2061,12 @@ ${content.tweets.slice(0, 50).map((t, i) => `${i + 1}. ${t.text}`).join('\n\n')}
             'were', 'said', 'did', 'having', 'may', 'should', 'am', 'being'
         ];
 
-        const allStopWords = [...commentStopWords, ...englishStopWords];
+        // URL/协议前缀停用词（防止学到过于通用的模式，如 "https:" 导致所有链接被误杀）
+        const urlStopWords = [
+            'http', 'https', 'http:', 'https:', 'www', 'www.'
+        ];
+
+        const allStopWords = [...commentStopWords, ...englishStopWords, ...urlStopWords];
 
         // 昵称与评论仍分开提取——两者的文本特征不同，阈值也不同（昵称短、重复度高，
         // 占比门槛可以更严）。但产出的规则不带维度标记：匹配时对昵称和评论各试一次。
@@ -3528,6 +3537,113 @@ ${comments.map((c, i) => {
         }
     }
 
+    /**
+     * 通过 API 取消拉黑用户
+     * @param {string} username - 要取消拉黑的用户名
+     * @returns {Promise<boolean>} 成功返回 true，失败返回 false
+     */
+    async function unblockUserByAPI(username) {
+        try {
+            console.log(`🔓 尝试取消拉黑: @${username}`);
+
+            // 获取CSRF token
+            const csrfToken = document.cookie.match(/ct0=([^;]+)/)?.[1];
+            if (!csrfToken) {
+                throw new Error('Failed to get CSRF token');
+            }
+
+            // 优先从缓存中获取 userId
+            let userId = null;
+            const cached = userInfoCache.get(username);
+            if (cached && cached.restId) {
+                userId = cached.restId;
+            } else {
+                // 缓存未命中，调用 UserByScreenName
+                const userInfoResponse = await fetch(`https://x.com/i/api/graphql/G3KGOASz96M-Qu0nwmGXNg/UserByScreenName?variables=${encodeURIComponent(JSON.stringify({
+                    screen_name: username,
+                    withSafetyModeUserFields: true
+                }))}&features=${encodeURIComponent(JSON.stringify({
+                    hidden_profile_subscriptions_enabled: true,
+                    rweb_tipjar_consumption_enabled: true,
+                    responsive_web_graphql_exclude_directive_enabled: true,
+                    verified_phone_label_enabled: false,
+                    subscriptions_verification_info_is_identity_verified_enabled: true,
+                    subscriptions_verification_info_verified_since_enabled: true,
+                    highlights_tweets_tab_ui_enabled: true,
+                    responsive_web_twitter_article_notes_tab_enabled: true,
+                    subscriptions_feature_can_gift_premium: true,
+                    creator_subscriptions_tweet_preview_api_enabled: true,
+                    responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+                    responsive_web_graphql_timeline_navigation_enabled: true
+                }))}`, {
+                    method: 'GET',
+                    headers: {
+                        'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+                        'x-csrf-token': csrfToken,
+                        'x-twitter-auth-type': 'OAuth2Session',
+                        'x-twitter-active-user': 'yes',
+                        'x-twitter-client-language': 'en'
+                    },
+                    credentials: 'include'
+                });
+
+                if (!userInfoResponse.ok) {
+                    throw new Error(`Failed to get user info: ${userInfoResponse.status}`);
+                }
+
+                const userInfoData = await userInfoResponse.json();
+                userId = userInfoData.data?.user?.result?.rest_id;
+
+                if (userId) {
+                    userInfoCache.set(username, {
+                        bio: userInfoData.data.user.result?.legacy?.description || '',
+                        restId: userId,
+                        following: !!userInfoData.data.user.result?.legacy?.following
+                    });
+                }
+            }
+
+            if (!userId) {
+                throw new Error('Failed to get user ID');
+            }
+
+            // 调用取消拉黑 API
+            const unblockResponse = await fetch('https://x.com/i/api/1.1/blocks/destroy.json', {
+                method: 'POST',
+                headers: {
+                    'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+                    'content-type': 'application/x-www-form-urlencoded',
+                    'x-csrf-token': csrfToken,
+                    'x-twitter-auth-type': 'OAuth2Session',
+                    'x-twitter-active-user': 'yes',
+                    'x-twitter-client-language': 'en'
+                },
+                credentials: 'include',
+                body: `user_id=${userId}`
+            });
+
+            if (!unblockResponse.ok) {
+                throw new Error(`API returned ${unblockResponse.status}`);
+            }
+
+            console.log(`✅ 成功取消拉黑: @${username}`);
+
+            // 从本地状态中移除
+            blockOutcome.delete(username);
+            blockedUsersSet.delete(username);
+
+            // 从拉黑历史中移除（可选：保留历史但标记为已解封，或直接删除）
+            const history = config.get('blockHistory') || [];
+            const newHistory = history.filter(h => h.username !== username);
+            config.set('blockHistory', newHistory);
+
+            return true;
+        } catch (error) {
+            console.error(`❌ 取消拉黑失败 @${username}:`, error);
+            return false;
+        }
+    }
+
     // Block user by clicking UI elements
     // silent=true: skip scrolling (for auto-block, avoids disrupting user's scroll position)
     async function blockUserByUI(username, silent = false, commentText = '') {
@@ -4004,6 +4120,7 @@ ${comments.map((c, i) => {
                         : `机器人装饰字符 ≥${WORD_SPLIT_THRESHOLD}`;
                     preFilterReason.set(c.username, ruleLabel);
                     console.log(`🎯 前置命中（${ruleLabel}）@${c.username}: ${c.text.substring(0, 80)}`);
+                    console.log(`   💡 误封？执行: unblockTwitterUser("${c.username}")`);
                     recordBlockHistory(c.username, c.displayName, c.text); // ✅ 记录学习
                     matched = true;
                 }
@@ -4015,6 +4132,7 @@ ${comments.map((c, i) => {
                         preFilterBlacklist.push(c.username);
                         preFilterReason.set(c.username, `昵称关键词「${matchedKeyword}」`);
                         console.log(`🎯 前置命中（昵称关键词「${matchedKeyword}」）@${c.username}（${c.displayName}）`);
+                        console.log(`   💡 误封？执行: unblockTwitterUser("${c.username}")`);
                         recordBlockHistory(c.username, c.displayName, c.text); // ✅ 记录学习
                         matched = true;
                     }
@@ -4028,6 +4146,7 @@ ${comments.map((c, i) => {
                             const source = pattern.count ? `启发式·${(pattern.ratio * 100).toFixed(0)}%` : '手动添加';
                             preFilterReason.set(c.username, `启发式规则「${pattern.text}」`);
                             console.log(`🎯 前置命中（启发式规则「${pattern.text}」，${source}）@${c.username}（${c.displayName}）`);
+                            console.log(`   💡 误封？执行: unblockTwitterUser("${c.username}")`);
                             recordBlockHistory(c.username, c.displayName, c.text); // ✅ 记录学习（包含评论）
                             matched = true;
                             break;
@@ -4041,6 +4160,7 @@ ${comments.map((c, i) => {
                     preFilterBlacklist.push(c.username);
                     preFilterReason.set(c.username, `批量相似评论（${hit.sim}% ≈ @${hit.peer}）`);
                     console.log(`🎯 前置命中（批量相似评论，相似度 ${hit.sim}%，同伙 @${hit.peer}）@${c.username}: ${c.text.substring(0, 80)}`);
+                    console.log(`   💡 误封？执行: unblockTwitterUser("${c.username}")`);
                     // 学习记录由 processAIFilterResults 统一完成
                     matched = true;
                 }
@@ -4052,6 +4172,7 @@ ${comments.map((c, i) => {
                         preFilterBlacklist.push(c.username);
                         preFilterReason.set(c.username, `历史相似评论（${histHit.sim}%）`);
                         console.log(`🎯 前置命中（历史相似评论，相似度 ${histHit.sim}%）@${c.username}: ${c.text.substring(0, 60)}\n    ↳ 历史样本（${histHit.peerName}）: ${histHit.peerText.substring(0, 60)}`);
+                        console.log(`   💡 误封？执行: unblockTwitterUser("${c.username}")`);
                         matched = true;
                     }
                 }
@@ -4070,6 +4191,7 @@ ${comments.map((c, i) => {
                 preFilterBlacklist.push(username);
                 preFilterReason.set(username, `批量相似评论（追溯，${hit.sim}%）`);
                 console.log(`🎯 前置命中（批量相似评论·追溯，相似度 ${hit.sim}%，同伙 @${hit.peer}）@${username}: ${hit.text.substring(0, 80)}`);
+                console.log(`   💡 误封？执行: unblockTwitterUser("${username}")`);
             }
 
             // 先处理前置命中的黑名单（直接拉黑，不走 AI）
@@ -4532,6 +4654,20 @@ ${comments.map((c, i) => {
             setTimeout(init, 500);
         }
     }).observe(document.body, { subtree: true, childList: true });
+
+    // 暴露取消拉黑函数到全局，方便控制台快速解封误封账号
+    window.unblockTwitterUser = async (username) => {
+        const name = username.replace(/^@/, '');
+        const success = await unblockUserByAPI(name);
+        if (success) {
+            console.log(`✅ 已解封 @${name}，刷新页面后生效`);
+        } else {
+            console.error(`❌ 解封 @${name} 失败，请查看上方错误信息`);
+        }
+        return success;
+    };
+
+    console.log('💡 快捷解封提示：控制台执行 unblockTwitterUser("username") 可快速取消拉黑');
 
 })();
 
