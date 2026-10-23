@@ -307,6 +307,28 @@ A: 无论原文使用何种语言，总结都会使用**中文**输出，并采�
 
 ## 更新日志
 
+### v2.6.4
+
+- 🐛 **修复「刷推时推文凭空消失」（严重，会导致误拉黑）**：
+  - **复现步骤**：① 开启 AI 过滤评论 ② 在 `https://x.com/home` 时间线上**点开任意一张图片** ③ 关闭图片继续刷 ④ 时间线上的推文间歇性整条消失，且此后再也看不到某些账号的内容
+  - **根因（三层叠加）**：
+    1. `isOnTweetDetailPage()` 用 `url.includes('/status/')` 判定详情页。但在时间线点开图片时，X 只是**叠一层图片模态框**，却会把 URL 改成 `/{author}/status/{id}/photo/1` —— 背后的 DOM 仍然是时间线。于是整条过滤流水线在主页被激活。
+    2. `getAllCommentersWithText()` 无条件收走页面上所有 `article[data-testid="tweet"]`，**把时间线推文当成"评论"**送进六层前置规则和 AI。规则 6（历史相似度 ≥92%，单条即可判黑、不需要同伙在场）在时间线上尤其容易命中。
+    3. 命中后不仅 `display:none` 隐藏，还真的调用 `blocks/create.json` **把推文作者永久拉黑**。隐藏能靠换页清理，拉黑是账号级的，之后 X 自己就把这个人从时间线抹掉了 —— 这是"某些账号再也看不到"的原因。
+  - **修复方案（防御纵深，四层）**：
+    1. **页面判定改状态机**：URL 里有 `/status/` 不再等于详情页。子视图（`/photo/N`、`/likes`、`/retweets`、`/quotes`）只在「切换前就已经在同一条推文的详情页里」时才算详情页；首屏直接落在子视图 URL（新标签页打开图片链接）时 X 会在模态框背后真的渲染详情页，可以信任。其余一律视为非详情页。
+    2. **新增 `isCommentArticle()` 正向识别**：用 article 自身时间戳链接 `<a href="/{author}/status/{id}"><time>` 里的推文 id 与 URL 中的 id 比对 —— 相同是推文本体，不同才是评论。**认不出来一律当推文**，宁可漏过不可误伤。已接入 `getAllCommentersWithText`、`markCommentByCategory`、`markCommentsByCategoryBatch`、`reapplyBlockedHiding` 全部读写入口。
+    3. **拉黑前最后一道闸门**：`blockUser()` 入口校验 `isOnTweetDetailPage()`，不在详情页直接拒绝并告警，不发请求。因为拉黑无法通过 DOM 回滚挽回。
+    4. **全局兜底清扫 `sweepStrayFiltering()`**：不依赖任何上游判断是否正确。非详情页上任何带 `data-ai-filtered` 的 article 一律复原；详情页上凡被判为推文本体的也一律复原。由独立 MutationObserver 持续驱动（500ms 防抖 + 无标记节点时跳过全量遍历）。
+  - **顺带修复 rAF 跨帧写入**：`markCommentsByCategoryBatch` 把样式写入放在 `requestAnimationFrame` 里，却只在函数入口检查页面类型。若这一帧内发生路由切换，`display:none` 会写到被 SPA 复用的节点上，而清理逻辑已经跑过，没人再回滚 —— 该推文就一直消失着。现在 rAF 回调内重新校验页面与 article 类型。
+  - **同步修正**：`getTweetIdentity`、`getOriginalPosterUsername`、`getTweetIdFromUrl` 全部改走状态机，不再直接从 `pathname` 取值，避免在子视图下把时间线推文的作者当成"楼主"、把判定缓存写到错误的 tweetId 下。
+  - **影响范围**：开启 AI 过滤或关键词自动拉黑后，在时间线/个人页/搜索页看图都会触发；被误拉黑的账号需手动解封（`unblockTwitterUser("username")`）
+  - **避免二次出现**：
+    - 判断"是否在推文详情页"**必须**走 `isOnTweetDetailPage()`，**禁止**直接写 `url.includes('/status/')` 或自行正则匹配 pathname —— X 会在非详情页场景下改写 URL 成 `/status/...` 形式
+    - 任何「隐藏 / 遮罩 / 拉黑」逻辑在作用于某个 article 前**必须**先过 `isCommentArticle()`，推文不过滤是产品约定
+    - 异步或跨帧（`await`、`setTimeout`、`requestAnimationFrame`）落地 DOM 副作用前**必须**重新校验页面类型，入口处检查过不算
+  - **验证**：23 项逻辑用例覆盖主页点图、详情页内点图、详情页间跳转、首屏直开子视图、个人页点图、搜索/通知页，全部通过
+
 ### v2.6.3 (2026-10-15)
 
 - 🐛 **修复 AI 过滤 Stack Overflow 错误**：

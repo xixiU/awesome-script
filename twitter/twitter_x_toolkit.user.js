@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter X Toolkit
 // @name:zh-CN   推特X工具箱
-// @version      2.6.3
+// @version      2.6.4
 // @description  A powerful toolkit for Twitter/X: Block commenters, AI summarization, AI comment filtering, and more features to come
 // @description:zh-CN  推特X多功能工具箱：一键屏蔽评论者、AI智能总结、AI评论过滤等，未来将持续扩展更多功能
 // @author       xixiU
@@ -1015,10 +1015,59 @@
 
     // ==================== 页面类型检测 ====================
 
+    /**
+     * 解析 /{author}/status/{id}[/子视图] 形式的路径。
+     * @returns {{identity: string, id: string, subview: boolean}|null}
+     */
+    function parseTweetPath(pathname) {
+        const m = pathname.match(/^\/([^\/]+)\/status\/(\d+)(\/.*)?$/);
+        if (!m) return null;
+        const rest = m[3] || '';
+        return {
+            identity: `${m[1]}/${m[2]}`,
+            id: m[2],
+            subview: rest !== '' && rest !== '/'
+        };
+    }
+
+    /**
+     * 详情页上下文。null 表示"当前背后不是推文详情页"。
+     *
+     * 【重要 bug 防回归】URL 里有 /status/ 不等于当前在详情页。
+     * 在时间线（/home、个人页、搜索页）点开一张图，X 只是叠一层图片模态框，
+     * 却会把 URL 改成 /{author}/status/{id}/photo/1 —— 背后的 DOM 仍然是时间线。
+     * 旧实现用 url.includes('/status/') 判定，于是在主页看图时整条过滤流水线被激活，
+     * 把时间线推文当成"评论"送进六层前置规则和 AI，命中的直接 display:none 并真的
+     * 调 blocks/create.json 拉黑作者。用户表现为"刷推时一条推文凭空消失"——
+     * 隐藏可以靠换页清理，拉黑是账号级永久生效，之后 X 自己就把这个人从时间线抹掉了。
+     *
+     * 判定改为状态机：子视图（/photo/N、/likes、/retweets、/quotes 等）只在
+     * 「切换前就已经在同一条推文的详情页里」时才算详情页；首屏直接落在子视图 URL
+     * （新标签页打开图片链接）时 X 会在模态框背后真的渲染详情页，可以信任。
+     * 其余一律视为非详情页——宁可少过滤，不可误伤推文。
+     */
+    let detailCtx = null; // { url: string, identity: string|null }
+
+    function resolveDetailIdentity(prevIdentity) {
+        const info = parseTweetPath(window.location.pathname);
+        if (!info) return null;
+        if (!info.subview) return info.identity;
+        // 首屏（prevIdentity === undefined）直接落在子视图 URL：信任
+        if (prevIdentity === undefined) return info.identity;
+        // 从同一条推文的详情页进来的子视图：背后 DOM 没变，仍是详情页
+        if (prevIdentity === info.identity) return info.identity;
+        // 其余情况（典型：时间线点图）背后是时间线，不是详情页
+        return null;
+    }
+
     // Check if on tweet detail page
     function isOnTweetDetailPage() {
-        const url = window.location.href;
-        return url.includes('/status/');
+        const href = window.location.href;
+        if (!detailCtx || detailCtx.url !== href) {
+            const prev = detailCtx ? detailCtx.identity : undefined;
+            detailCtx = { url: href, identity: resolveDetailIdentity(prev) };
+        }
+        return detailCtx.identity !== null;
     }
 
     // Check if on user profile page
@@ -1046,8 +1095,40 @@
      * 已拉黑，两条流水线都会跳过，没人再去补隐藏。
      */
     function getTweetIdentity() {
-        const m = window.location.pathname.match(/^\/([^\/]+)\/status\/(\d+)/);
-        return m ? `${m[1]}/${m[2]}` : null;
+        // 复用 isOnTweetDetailPage 的状态机结果：时间线点图产生的 /status/{id}/photo/N
+        // 不是详情页，必须返回 null，否则路由监听器会把它当成"同推文换子视图"而跳过
+        // 全量重置，让上一页的隐藏标记和拉黑集合泄漏到时间线上。
+        isOnTweetDetailPage();
+        return detailCtx ? detailCtx.identity : null;
+    }
+
+    /**
+     * 判断一个 article 是「评论」还是「推文本体」。
+     *
+     * 【重要 bug 防回归】过滤流水线只允许作用于评论。推文不过滤，这是产品约定。
+     * 旧实现没有这层判断，只要 isOnTweetDetailPage() 为真就把页面上所有
+     * article[data-testid="tweet"] 一律当评论处理，于是详情页顶部的主推文、
+     * "你可能感兴趣"/相关推文模块里的条目都可能被隐藏甚至作者被拉黑。
+     *
+     * 识别依据：每条 article 的时间戳是一个指向自身的链接
+     * <a href="/{author}/status/{tweetId}"><time>…</time></a>。
+     * 该 id 与 URL 中的推文 id 相同 → 是主推文本体；不同 → 是评论。
+     * 拿不到 id（DOM 结构变更、推文还在渲染）→ 一律当推文，宁可漏过不可误伤。
+     *
+     * @returns {boolean} true 仅当确认是评论
+     */
+    function isCommentArticle(article) {
+        if (!article) return false;
+        isOnTweetDetailPage(); // 刷新状态机，保证用的是当前 URL 的判定结果
+        const mainId = detailCtx && detailCtx.identity ? detailCtx.identity.split('/')[1] : null;
+        if (!mainId) return false; // 非详情页：没有"评论"概念
+
+        const timeLink = article.querySelector('a[href*="/status/"] time');
+        const href = timeLink && timeLink.closest('a') ? timeLink.closest('a').getAttribute('href') : null;
+        const m = href ? href.match(/\/status\/(\d+)/) : null;
+        if (!m) return false; // 认不出来 → 当推文，不动它
+
+        return m[1] !== mainId;
     }
 
     // ==================== 内容提取功能 ====================
@@ -2421,6 +2502,8 @@ ${comments.map((c, i) => {
         const articles = DOMQuery.getAllTweets();
 
         articles.forEach(article => {
+            // 推文本体（含详情页主推文、相关推文模块）一律不动
+            if (!isCommentArticle(article)) return;
             // 只在 User-Name 区域匹配，避免评论正文中的 @mention 误命中
             const userNameArea = article.querySelector('[data-testid="User-Name"]');
             if (!userNameArea) return;
@@ -2541,6 +2624,8 @@ ${comments.map((c, i) => {
 
         articles.forEach(article => {
             if (article.hasAttribute('data-ai-filtered')) return;
+            // 推文本体一律不动
+            if (!isCommentArticle(article)) return;
             const userNameArea = article.querySelector('[data-testid="User-Name"]');
             if (!userNameArea) return;
 
@@ -2557,12 +2642,18 @@ ${comments.map((c, i) => {
         if (toHide.length === 0 && toMask.length === 0) return;
 
         requestAnimationFrame(() => {
+            // 【重要 bug 防回归】rAF 回调与收集阶段隔了一帧，这一帧内可能发生路由切换。
+            // 旧实现只在函数入口检查页面类型，切换后样式会写到被 SPA 复用的节点上，
+            // 而路由监听器的清理逻辑已经跑过，没人再回滚——推文就一直消失着。
+            if (!isOnTweetDetailPage()) return;
             toHide.forEach(article => {
+                if (!isCommentArticle(article)) return;
                 article.setAttribute('data-ai-filtered', 'blacklist');
                 article.setAttribute('data-blacklist-reason', '');
                 article.style.display = 'none';
             });
             toMask.forEach(article => {
+                if (!isCommentArticle(article)) return;
                 article.setAttribute('data-ai-filtered', 'spam');
                 applySpamOverlay(article, '');
             });
@@ -3338,23 +3429,37 @@ ${comments.map((c, i) => {
     // URL format: /{username}/status/{id}
     function getOriginalPosterUsername() {
         try {
-            const match = location.pathname.match(/^\/([^\/]+)\/status\/\d+/);
-            if (match) return match[1];
+            // 走状态机：非详情页（含时间线点图产生的 /status/{id}/photo/N）返回 null，
+            // 不要直接从 pathname 取，否则会把时间线上某条推文的作者当成"楼主"。
+            const identity = getTweetIdentity();
+            if (identity) return identity.split('/')[0];
         } catch (error) {
             console.error('Failed to get original poster username:', error);
         }
         return null;
     }
 
-    // Get all commenters with their comment text
+    /**
+     * 收集当前页面上的评论者及其评论文本。
+     *
+     * 【重要 bug 防回归】这是关键词自动拉黑与 AI 过滤两条流水线共同的数据源，
+     * 必须只返回「评论」。旧实现把页面上所有 article 一律收走，在误判为详情页时
+     * （时间线点开图片使 URL 变成 /status/{id}/photo/N）会把时间线推文当评论
+     * 送进规则与 AI，导致推文被隐藏、作者被永久拉黑。这里用 isCommentArticle
+     * 做正向识别，非详情页直接返回空，认不出来的 article 当推文跳过。
+     */
     function getAllCommentersWithText() {
         const commentersMap = new Map(); // username -> { text, displayName, avatarUrl }
+        if (!isOnTweetDetailPage()) return commentersMap;
+
         const excludeOriginal = config.get('excludeOriginalPoster');
         const originalPoster = excludeOriginal ? getOriginalPosterUsername() : null;
 
         // Comments on X/Twitter are usually in article tags
         const articles = DOMQuery.getAllTweets();
         articles.forEach(article => {
+            // 推文本体（详情页主推文、相关推文模块）不参与过滤
+            if (!isCommentArticle(article)) return;
             // 只在用户名区域（User-Name）内查找，避免把评论正文里的 @mention 当成评论者
             const userNameArea = article.querySelector('[data-testid="User-Name"]');
             let username = null;
@@ -3751,6 +3856,16 @@ ${comments.map((c, i) => {
      *   duplicate 表示此前已处理过，调用方不应重复计数
      */
     async function blockUser(username, commentText = '') {
+        // 【重要 bug 防回归】最后一道闸门：拉黑是账号级、永久生效的操作，
+        // 一旦误发，X 会从此把该用户的所有内容从时间线抹掉，表现为"推文凭空消失"，
+        // 且脚本侧的 display 回滚完全无法挽回。所有自动拉黑都必须发生在推文详情页，
+        // 不在详情页说明上游判断出了问题，直接拒绝而不是照着发请求。
+        // 手动拉黑入口（handleBlockAllCommenters）本身已有 requireDetailPage 守卫。
+        if (!isOnTweetDetailPage()) {
+            console.warn(`🛑 已拦截非详情页的拉黑请求：@${username}（上游判断异常，未发出请求）`);
+            return 'skipped';
+        }
+
         const prior = blockOutcome.get(username);
         if (prior) return 'duplicate';
 
@@ -4040,8 +4155,9 @@ ${comments.map((c, i) => {
     }
 
     function getTweetIdFromUrl() {
-        const m = location.pathname.match(/\/status\/(\d+)/);
-        return m ? m[1] : null;
+        // 走状态机：非详情页返回 null，避免判定缓存写到错误的 tweetId 下
+        const identity = getTweetIdentity();
+        return identity ? identity.split('/')[1] : null;
     }
 
     /**
@@ -4348,9 +4464,14 @@ ${comments.map((c, i) => {
         if (blocked.size === 0) return;
 
         // 遍历所有推文，隐藏已拉黑用户的评论
+        //
+        // 【重要 bug 防回归】blockOutcome 是跨推文的长生命周期记录，这里只要作者在其中
+        // 就会无条件 display:none。旧实现没有"是不是评论"这层判断，一旦页面类型误判
+        // （时间线点图），凡是此前拉黑过的人在时间线上的推文会被整条抹掉。
         let hidden = 0;
         DOMQuery.getAllTweets().forEach(article => {
             if (article.hasAttribute('data-ai-filtered')) return;
+            if (!isCommentArticle(article)) return;
 
             const username = DOMQuery.getUsernameFromArticle(article);
             if (!username) return;
@@ -4509,6 +4630,66 @@ ${comments.map((c, i) => {
         });
     }
 
+    // ==================== DOM 副作用回滚与兜底 ====================
+
+    /**
+     * 回滚一条 article 上所有由本脚本施加的隐藏/遮罩副作用。
+     */
+    function revertArticleFiltering(article) {
+        article.removeAttribute('data-ai-filtered');
+        article.removeAttribute('data-blacklist-reason');
+        if (article.style.display === 'none') article.style.display = '';
+        if (article.style.position === 'relative') article.style.position = '';
+        article.querySelectorAll('.ai-spam-overlay').forEach(o => o.remove());
+    }
+
+    /**
+     * 兜底清扫：把不该带过滤标记的 article 恢复原状。
+     *
+     * 【重要 bug 防回归】这是"推文凭空消失"的最后一道防线，不依赖任何上游判断是否正确。
+     * Twitter 是 SPA 且会复用 article 节点，上一页打的 display:none 可能跟着节点进入
+     * 新页面；异步流水线也可能在路由切换的缝隙里把标记写到时间线推文上。
+     * 规则很简单：非详情页上任何带标记的 article 一律复原；详情页上凡是
+     * isCommentArticle() 判为推文本体的，也一律复原。
+     *
+     * @returns {number} 复原的条数
+     */
+    function sweepStrayFiltering() {
+        const onDetail = isOnTweetDetailPage();
+        let reverted = 0;
+        document.querySelectorAll('article[data-ai-filtered]').forEach(article => {
+            if (onDetail && isCommentArticle(article)) return; // 详情页里的评论，标记合法
+            revertArticleFiltering(article);
+            reverted++;
+        });
+        if (reverted > 0) {
+            console.log(`♻️ 兜底清扫：恢复 ${reverted} 条被误标记的推文`);
+        }
+        return reverted;
+    }
+
+    // 兜底清扫的防抖计时器
+    let sweepDebounceTimer = null;
+    let sweepObserver = null;
+
+    /**
+     * 启动全局兜底清扫监听。只启动一次，与路由无关，始终在线。
+     * 用防抖 + 仅在存在标记节点时才扫描，避免成为性能负担。
+     */
+    function startStraySweeper() {
+        if (sweepObserver) return;
+        sweepObserver = new MutationObserver(() => {
+            if (sweepDebounceTimer) return; // 已有待执行任务，不重复排期
+            sweepDebounceTimer = setTimeout(() => {
+                sweepDebounceTimer = null;
+                // 快速门槛：页面上没有任何标记节点时直接返回，不做全量遍历
+                if (!document.querySelector('article[data-ai-filtered]')) return;
+                sweepStrayFiltering();
+            }, 500);
+        });
+        sweepObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
     // ==================== 初始化 ====================
 
     // 手动屏蔽 / 手动 AI 过滤已从工具栏移除，改为油猴菜单入口（低频操作，
@@ -4537,16 +4718,10 @@ ${comments.map((c, i) => {
             createResultPanel();
         }
 
-        // 非详情页一律回滚残留的 data-ai-filtered DOM 副作用，防止从详情页切回时间线后污染
-        if (!isOnTweetDetailPage()) {
-            document.querySelectorAll('article[data-ai-filtered]').forEach(article => {
-                article.removeAttribute('data-ai-filtered');
-                article.removeAttribute('data-blacklist-reason');
-                if (article.style.display === 'none') article.style.display = '';
-                if (article.style.position === 'relative') article.style.position = '';
-                article.querySelectorAll('.ai-spam-overlay').forEach(o => o.remove());
-            });
-        }
+        // 回滚残留的 data-ai-filtered DOM 副作用（非详情页全清，详情页清掉误标的推文本体）
+        sweepStrayFiltering();
+        // 启动全局兜底清扫（只启动一次，与路由无关）
+        startStraySweeper();
 
         // Auto block if enabled and on tweet detail page
         if (config.get('autoBlock') && isOnTweetDetailPage()) {
@@ -4643,13 +4818,7 @@ ${comments.map((c, i) => {
             blockedUsersSet = new Set();
             // 清理上一页留下的 data-ai-filtered 副作用：Twitter SPA 会复用部分 article DOM，
             // 上一次详情页打的隐藏/遮罩会跟着节点进入新页面，必须主动回滚
-            document.querySelectorAll('article[data-ai-filtered]').forEach(article => {
-                article.removeAttribute('data-ai-filtered');
-                article.removeAttribute('data-blacklist-reason');
-                if (article.style.display === 'none') article.style.display = '';
-                if (article.style.position === 'relative') article.style.position = '';
-                article.querySelectorAll('.ai-spam-overlay').forEach(o => o.remove());
-            });
+            document.querySelectorAll('article[data-ai-filtered]').forEach(revertArticleFiltering);
             // Reinitialize
             setTimeout(init, 500);
         }
